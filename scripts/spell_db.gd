@@ -1,13 +1,13 @@
 class_name SpellDB
-## База заклинаний из assets/spells/spells_db.json (собрана из spells.txt +
-## castSpell-свитков item_db + projectiles.reg). Даёт сферу, урон, ману,
-## снаряд-анимацию и иконку по имени заклинания ("Fire_Ball").
+## Spell database from assets/spells/spells_db.json (assembled from spells.txt +
+## castSpell scrolls in item_db + projectiles.reg). Provides sphere, damage, mana,
+## projectile animation and icon by spell name ("Fire_Ball").
 
 const DB_PATH := "res://assets/spells/spells_db.json"
 
 static var _db: Dictionary = {}
 static var _loaded := false
-static var _by_lower := {}   # имя заклинания (lowercase) -> настоящее имя
+static var _by_lower := {}   # spell name (lowercase) -> real name
 
 static func ensure_loaded() -> void:
 	if _loaded:
@@ -23,14 +23,14 @@ static func ensure_loaded() -> void:
 		_db = parsed
 	ModLoader.overlay("spells", _db)
 
-## Данные заклинания по имени ("Fire_Ball") или {}.
+## Spell data by name ("Fire_Ball") or {}.
 static func get_spell(name: String) -> Dictionary:
 	ensure_loaded()
 	return _db.get(name, {})
 
-## Книга стихии ("Book Fire") -> имя сферы ("Fire"). "" если не книга.
-## Список сфер — в данных (assets/config/content_rules.json, "spells.spheres"):
-## мод может добавить новую школу магии, и свитки/книги подхватят её сами.
+## Element book ("Book Fire") -> sphere name ("Fire"). "" if not a book.
+## The sphere list lives in data (assets/config/content_rules.json, "spells.spheres"):
+## a mod can add a new magic school, and scrolls/books pick it up automatically.
 static func sphere_of_book(book_name: String) -> String:
 	var n := str(book_name).to_lower()
 	if n.begins_with("book "):
@@ -39,14 +39,14 @@ static func sphere_of_book(book_name: String) -> String:
 			return sphere
 	return ""
 
-## Какие книги стихий есть (для словаря предметов).
+## Which element books exist (for the item dictionary).
 static func book_item_names() -> Array:
 	var out: Array = []
 	for sphere in ContentRules.list("spells.spheres"):
 		out.append("Book " + str(sphere))
 	return out
 
-## Заклинания сферы ("Fire") в порядке базы.
+## Spells of a sphere ("Fire") in database order.
 static func spells_of_sphere(sphere: String) -> Array:
 	ensure_loaded()
 	var out: Array = []
@@ -56,27 +56,27 @@ static func spells_of_sphere(sphere: String) -> Array:
 	out.sort()
 	return out
 
-## Урон снаряда из базы (база до бонусов).
+## Projectile damage from the database (base before bonuses).
 static func damage(name: String) -> int:
 	return int(get_spell(name).get("damage", 0))
 
-## Стоимость маны.
+## Mana cost.
 static func mana_cost(name: String) -> int:
 	return int(get_spell(name).get("mana_cost", 0))
 
-## Дальность (пиксели; 0 = на себя/без дальности).
+## Range (pixels; 0 = self/no range).
 static func range_of(name: String) -> float:
 	return float(get_spell(name).get("range", 0))
 
-## Радиус области (0 = одиночная цель).
+## Area radius (0 = single target).
 static func area_of(name: String) -> float:
 	return float(get_spell(name).get("area", 0))
 
-## Вид: attack/area/heal/buff/wall/self/debuff/raise.
+## Kind: attack/area/heal/buff/wall/self/debuff/raise.
 static func kind_of(name: String) -> String:
 	return str(get_spell(name).get("kind", "buff"))
 
-## Все имена заклинаний базы (по алфавиту) — для тест-режима и валидации.
+## All spell names in the database (alphabetical) — for test mode and validation.
 static func all_spell_names() -> Array:
 	ensure_loaded()
 	var out: Array = []
@@ -85,23 +85,23 @@ static func all_spell_names() -> Array:
 	out.sort()
 	return out
 
-## Кулдаун заклинания в секундах (был единый 0.8 с в коде).
+## Spell cooldown in seconds (there used to be a single 0.8 s in code).
 static func cooldown_of(name: String) -> float:
 	return float(get_spell(name).get("cooldown", 0.8))
 
-## Время подготовки каста в секундах (0 = мгновенный).
+## Cast wind-up time in seconds (0 = instant).
 static func cast_time_of(name: String) -> float:
 	return float(get_spell(name).get("cast_time", 0.0))
 
-## Скорость снаряда в px/с (0 = без снаряда).
+## Projectile speed in px/s (0 = no projectile).
 static func projectile_speed_of(name: String) -> float:
 	return float(get_spell(name).get("projectile_speed", 0.0))
 
-## Куда можно целиться: enemy/ally/point/self.
+## Who can be targeted: enemy/ally/point/self.
 static func target_of(name: String) -> String:
 	return str(get_spell(name).get("target", "enemy"))
 
-## Множитель силы заклинания (нюк 1.0, лечилка > 1).
+## Spell power multiplier (nuke 1.0, heal > 1).
 static func power_coef_of(name: String) -> float:
 	return float(get_spell(name).get("power_coef", 1.0))
 
@@ -114,7 +114,7 @@ static func crit_mult_of(name: String) -> float:
 static func min_damage_of(name: String) -> int:
 	return int(get_spell(name).get("min_damage", 1))
 
-## Режим стены: "damage" (огонь — жжёт) или "block" (земля — преграда).
+## Wall mode: "damage" (fire — burns) or "block" (earth — barrier).
 static func wall_mode_of(name: String) -> String:
 	return str(get_spell(name).get("wall_mode", "damage"))
 
@@ -124,20 +124,20 @@ static func wall_width_of(name: String) -> float:
 static func wall_life_of(name: String) -> float:
 	return float(get_spell(name).get("wall_life", 6.0))
 
-## Эффекты заклинания: [{"type": "slow", "mult": 0.55, "duration": 12}, ...].
+## Spell effects: [{"type": "slow", "mult": 0.55, "duration": 12}, ...].
 static func effects_of(name: String) -> Array:
 	var raw: Variant = get_spell(name).get("effects", [])
 	return raw if raw is Array else []
 
-## Первый эффект типа type или {} (например "vampirism", "raise").
+## The first effect of type type or {} (for example "vampirism", "raise").
 static func effect_of_type(name: String, type: String) -> Dictionary:
 	for e in effects_of(name):
 		if str(e.get("type", "")) == type:
 			return e
 	return {}
 
-## Проверка базы: [ошибки] — каждый свиток резолвится, у каждого заклинания
-## есть звук и заполнены поля каста. Используется в tests/magic_smoke.gd.
+## Database check: [errors] — every scroll resolves, every spell
+## has a sound and cast fields are filled. Used in tests/magic_smoke.gd.
 static func validate() -> Array:
 	ensure_loaded()
 	var errs: Array = []
@@ -159,27 +159,27 @@ static func validate() -> Array:
 			errs.append("%s: нет папки снаряда %s" % [name, folder])
 	return errs
 
-## Сфера заклинания.
+## Spell sphere.
 static func sphere_of(name: String) -> String:
 	return str(get_spell(name).get("sphere", ""))
 
-## Папка кадров снаряда (assets/projectiles/<folder>/sprites-NNN.png).
+## Projectile frame folder (assets/projectiles/<folder>/sprites-NNN.png).
 static func projectile_folder(name: String) -> String:
 	return str(get_spell(name).get("projectile", ""))
 
-## Звук заклинания (ключ SoundDB; "" = нет/не задан).
+## Spell sound (SoundDB key; "" = none/not set).
 static func sound_of(name: String) -> String:
 	return str(get_spell(name).get("sound", ""))
 
-## Иконка магии Книги Магии: assets/spells/{snake}.png (ChatGPT, 31 шт.).
-## index — позиция в BOOK_SPELLS (0..23).
+## Book of Magic spell icon: assets/spells/{snake}.png (ChatGPT, 31 pcs.).
+## index — position in BOOK_SPELLS (0..23).
 static func book_icon_path(index: int) -> String:
 	if index < 0 or index >= BOOK_SPELLS.size():
 		return ""
 	var spell := str(BOOK_SPELLS[index])
 	return "res://assets/spells/%s.png" % spell.to_lower().replace("-", "_").replace(" ", "_")
 
-## Иконка заклинания (обычная, из inventory -000.png).
+## Spell icon (regular, from inventory -000.png).
 static func icon_of(name: String) -> String:
 	var o := get_spell(name)
 	var icons: Dictionary = o.get("icons", {})
@@ -187,9 +187,9 @@ static func icon_of(name: String) -> String:
 
 static var _proj_icon_cache: Dictionary = {}
 
-## Иконка магии из реального снаряда реестра projectiles.reg: самый «полный»
-## (по непрозрачным пикселям) кадр assets/projectiles/<folder>/sprites-NNN.png.
-## Кэшируется; "" если спарйта нет.
+## Magic icon from the real registry projectile (projectiles.reg): the "fullest"
+## (by opaque pixels) frame assets/projectiles/<folder>/sprites-NNN.png.
+## Cached; "" if there is no sprite.
 static func projectile_icon(name: String) -> String:
 	if _proj_icon_cache.has(name):
 		return _proj_icon_cache[name]
@@ -227,7 +227,7 @@ static func projectile_icon(name: String) -> String:
 	_proj_icon_cache[name] = res
 	return res
 
-## Число кадров анимации снаряда в папке (считаем файлы sprites-NNN.png).
+## Number of projectile animation frames in the folder (count sprites-NNN.png files).
 static func projectile_frames(name: String) -> int:
 	var folder := projectile_folder(name)
 	if folder == "":
@@ -244,8 +244,8 @@ static func projectile_frames(name: String) -> int:
 		dir.list_dir_end()
 	return n
 
-## Заклинание из названия свитка ("Scroll Fire Ball"/"SuperScroll Fire Ball") или "".
-## Позиция (0..23) в Книге Магии: слот панели 1..24 = иконке снаряда магии.
+## Spell from a scroll name ("Scroll Fire Ball"/"SuperScroll Fire Ball") or "".
+## Position (0..23) in the Book of Magic: panel slot 1..24 = magic projectile icon.
 const BOOK_SPELLS := [
 	"Fire_Arrow", "Fire_Ball", "Wall_of_Fire", "Protection_from_Fire",
 	"Heal", "Bless", "Haste", "Drain_Life",
@@ -254,11 +254,11 @@ const BOOK_SPELLS := [
 	"Summon", "Animate_Dead", "Teleport", "Shield",
 	"Protection_from_Earth", "Stone_Curse", "Wall_of_Earth", "Stone_Missile",
 ]
-## Индекс заклинания в каноничной Книге Магии (0..23) или -1, если оно не из книги.
+## Spell index in the canonical Book of Magic (0..23) or -1 if it is not from the book.
 static func book_index(name: String) -> int:
 	return BOOK_SPELLS.find(str(name))
 
-## Заклинание из названия свитка ("Scroll Fire Ball"/"SuperScroll Fire Ball") или "".
+## Spell from a scroll name ("Scroll Fire Ball"/"SuperScroll Fire Ball") or "".
 static func spell_from_scroll(item_name: String) -> String:
 	var n := str(item_name)
 	for prefix in ["Scroll ", "SuperScroll ", "Elven Scroll ", "Эльфийский свиток: ",
@@ -270,23 +270,23 @@ static func spell_from_scroll(item_name: String) -> String:
 	return ""
 
 
-## Сила свитка из его effects: "castSpell=Fire_Ball:50" -> 50.0, ":100" -> 100.0.
-## -1.0 — если сила не задана (тогда каст считается по навыку героя).
-## Работаем со словарём предмета, а не с ключом: SpellDB не должен зависеть
-## от ItemDB (циклическая ссылка классов).
+## Scroll power from its effects: "castSpell=Fire_Ball:50" -> 50.0, ":100" -> 100.0.
+## -1.0 — if the power is not set (then the cast uses the hero's skill).
+## We work with the item dictionary, not the key: SpellDB must not depend
+## on ItemDB (circular class reference).
 static func scroll_power_of(item: Dictionary) -> float:
 	for raw in item.get("effects", []):
 		var s := str(raw)
 		if not s.begins_with("castSpell="):
 			continue
 		var parts := s.split(":")
-		# "castSpell=Fire_Ball:50" → ["castSpell=Fire_Ball", "50"]: сила — последняя
-		# часть. Раньше здесь стояло `>= 3` и сила всегда читалась как -1.
+		# "castSpell=Fire_Ball:50" → ["castSpell=Fire_Ball", "50"]: the power is the last
+		# part. Before, it said `>= 3` here and the power was always read as -1.
 		if parts.size() >= 2:
 			return float(parts[parts.size() - 1])
 	return -1.0
 
-## Имя заклинания по его литералу (нечувствительно к регистру): "" если нет.
+## Spell name by its literal (case-insensitive): "" if none.
 static func _resolve_spell(literal: String) -> String:
 	ensure_loaded()
 	if _by_lower.is_empty():
@@ -294,31 +294,31 @@ static func _resolve_spell(literal: String) -> String:
 			_by_lower[str(name).to_lower()] = name
 	return str(_by_lower.get(str(literal).to_lower(), ""))
 
-## Заклинание из ключа книги одного заклинания ("Book Fire Arrow" -> "Fire_Arrow").
-## "" — если это не книга заклинания (книги стихий обрабатываются отдельно).
+## Spell from a single-spell book key ("Book Fire Arrow" -> "Fire_Arrow").
+## "" — if it is not a spell book (element books are handled separately).
 static func spell_of_book(item_key: String) -> String:
 	var n := str(item_key).to_lower().trim_prefix("book ").strip_edges()
 	if n in ["fire", "water", "air", "earth", "astral"]:
-		return ""   # книга стихии — открывает всю сферу
+		return ""   # element book — opens the whole sphere
 	return _resolve_spell(n.replace(" ", "_"))
 
-## Ключ предмета-книги одного заклинания ("Fire_Arrow" -> "Book Fire Arrow").
+## Item key of a single-spell book ("Fire_Arrow" -> "Book Fire Arrow").
 static func book_key_for_spell(spell: String) -> String:
 	return "Book " + str(spell).replace("_", " ")
 
-## Предмет-книга по ключу склада ("Book Fire Arrow") или {} (не книга).
+## Item-book by inventory key ("Book Fire Arrow") or {} (not a book).
 static func book_item(item_key: String) -> Dictionary:
 	var spell := spell_of_book(item_key)
 	if spell == "":
 		return {}
 	return make_book_item(spell)
 
-## Иконка книги стихии (для книг одного заклинания этой сферы).
-## Иконка книги стихии. Раньше здесь лежали иконки книг Аллодов, вынесенные
-## из assets/inventory/ в assets/items/sphere_books/ перед удалением той папки.
-## Теперь используются заклинания-символы стихий из assets/spells/ (нарезка
-## tests/extract_chatgpt_magic.py из атласа ChatGPTMagic1.png), а папка
-## sphere_books/ удалена как осиротевшая.
+## Element book icon (for single-spell books of this sphere).
+## Element book icon. Before, Allods book icons lived here, moved
+## from assets/inventory/ to assets/items/sphere_books/ before that folder was deleted.
+## Now the element symbol spells from assets/spells/ are used (sliced by
+## tests/extract_chatgpt_magic.py from the ChatGPTMagic1.png atlas), and the folder
+## sphere_books/ was deleted as orphaned.
 const BOOK_ICONS := {
 	"Fire": "res://assets/spells/book_fire.png",
 	"Water": "res://assets/spells/book_water.png",
@@ -327,7 +327,7 @@ const BOOK_ICONS := {
 	"Astral": "res://assets/spells/book_astral.png",
 }
 
-## Синтез предмета «книга одного заклинания» (для склада и прилавка магазина).
+## Synthesize the "single-spell book" item (for the inventory and the shop counter).
 static func make_book_item(spell: String) -> Dictionary:
 	var o := get_spell(spell)
 	if o.is_empty():
@@ -346,7 +346,7 @@ static func make_book_item(spell: String) -> Dictionary:
 		"sphere": sphere,
 	}
 
-## Самое простое заклинание сферы: минимум маны, предпочтительны атака/лечение.
+## The simplest spell of a sphere: minimum mana, attack/heal preferred.
 static func simplest_spell_of_sphere(sphere: String) -> String:
 	ensure_loaded()
 	var best := ""
@@ -367,7 +367,7 @@ static func simplest_spell_of_sphere(sphere: String) -> String:
 			best = name
 	return best
 
-## Все заклинания в порядке прилавка магазина (сфера, затем дешевле).
+## All spells in shop counter order (sphere, then cheaper).
 static func catalog_spells() -> Array:
 	ensure_loaded()
 	var order := {"Fire": 0, "Water": 1, "Air": 2, "Earth": 3, "Astral": 4}
