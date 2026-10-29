@@ -1,32 +1,32 @@
-﻿## КОНТРАКТ анимированного юнита: всё, что риг обязан уметь вместо спрайт-листов.
+﻿## CONTRACT of an animated unit: everything a rig must be able to do instead of sprite sheets.
 ##
-## Зачем этот тест (10.10, фаза 0 перехода на 2D-риг):
-## Юниты создаются КОДОМ (`UnitAnim.new()` в player/enemy/npc/mercenary),
-## публичная поверхность — 9 членов, а `game.gd` обращается к ней через
-## `get_node_or_null("UnitAnim")` + `has_method`, то есть по ИНТЕРФЕЙСУ, а не
-## по классу. Именно на этом стоит миграция «спрайт-листы -> риг»: новый
-## RiggedAnim встаёт рядом без единой правки в game.gd/spell_vfx/craft_vfx.
+## Why this test exists (10.10, phase 0 of the move to a 2D rig):
+## Units are created BY CODE (`UnitAnim.new()` in player/enemy/npc/mercenary),
+## the public surface is 9 members, and `game.gd` reaches it through
+## `get_node_or_null("UnitAnim")` + `has_method`, that is by INTERFACE, not
+## by class. The "sprite sheets -> rig" migration rests exactly on that: the new
+## RiggedAnim plugs in alongside without a single edit in game.gd/spell_vfx/craft_vfx.
 ##
-## Но до сих пор контракт НЕ сторожил ни один тест: `UnitAnim` упоминают лишь
-## 5 тестов из ~60, и то косвенно. Сломанный контракт прошёл бы все тесты
-## зелёными и упал бы в игре.
+## But until now NO test guarded the contract: `UnitAnim` is mentioned by only
+## 5 tests out of ~60, and even then indirectly. A broken contract would pass every test
+## green and then fail in the game.
 ##
-## Тест проверяет ДВА слоя:
-##   1. наличие членов контракта (дёшево, ловит переименование);
-##   2. что контракт РЕАЛЬНО работает на живом экземпляре (дорого, но это
-##      единственная проверка, которая не пройдёт на сломанной схеме).
+## The test checks TWO layers:
+##   1. that the contract members exist (cheap, catches renames);
+##   2. that the contract ACTUALLY works on a live instance (expensive, but it is
+##      the only check that will not pass on a broken scheme).
 ##
-## Если появится `rigged_anim.gd`, тест подхватит его автоматически — список
-## бэкендов расширяется сам, иначе новый риг стартовал бы без страховки.
-## У каждого бэкенда СВОЙ набор: спрайт-листы не грузят риг и наоборот.
+## If a `rigged_anim.gd` appears, the test picks it up automatically — the backend
+## list grows by itself, otherwise a new rig would start without a safety net.
+## Every backend has its OWN set: sprite sheets do not load a rig and vice versa.
 ##
-## Запуск:
+## Run:
 ##   godot --headless --path . --script res://tests/anim_contract_smoke.gd
 
 extends SceneTree
 
-## Члены, которые обязан иметь любой бэкенд анимации юнита.
-## Формат: [имя, "method"|"var"].
+## The members any unit animation backend must have.
+## Format: [name, "method"|"var"].
 const CONTRACT: Array = [
 	["setup", "method"],
 	["play", "method"],
@@ -39,21 +39,21 @@ const CONTRACT: Array = [
 	["position", "var"],
 ]
 
-## Бэкенды, которые тест обязан проверить. RiggedAnim подхватывается, если
-## файл есть — жёсткой ссылки на класс нет намеренно: пока файла нет, такая
-## ссылка была бы Parse Error и тест не запускался бы вовсе.
+## The backends the test must check. RiggedAnim is picked up if
+## the file exists — a hard class reference is avoided on purpose: while the file does
+## not exist, such a reference would be a Parse Error and the test would not run at all.
 ##
-## Эталон спрайт-листов переведён с `humans/swordsman_` на `ork_mage_a52/t0`
-## 11.10: семейства Аллодов удалены, и держать тест на их арте было бы значит
-## тащить обратно то, что вычистили. Проверки поведенческие (а не «фаза N
-## равна M»), поэтому набору не нужны блоки анимации — ему нужны кадры.
+## The sprite-sheet reference was moved from `humans/swordsman_` to `ork_mage_a52/t0`
+## on 11.10: the Allods families were removed, and keeping the test on their art would
+## mean dragging back what was cleaned out. The checks are behavioural (not "phase N
+## equals M"), so the set needs no animation blocks — it needs frames.
 const BACKENDS: Array = [
 	{"name": "UnitAnim", "path": "res://scripts/unit_anim.gd", "set": "ork_mage_a52/t0"},
 	{"name": "RiggedAnim", "path": "res://scripts/rigged_anim.gd", "set": "rig/pilot"},
 ]
 
-## Число мировых направлений (октант). Дублирует UnitAnim.FULL_DIRS, чтобы
-## тест не зависел от загрузки бэкенда: проверка октант — это контракт.
+## The number of world directions (octants). Duplicates UnitAnim.FULL_DIRS so that
+## the test does not depend on the backend loading: the octant check is the contract.
 const FULL_DIRS := 8
 
 var _checks := 0
@@ -72,8 +72,8 @@ func _check(ok: bool, msg: String) -> void:
 
 
 func _has_member(obj: Object, member: String, kind: String) -> bool:
-	# ВАЖНО (грабля §9.2): `has_method` на объекте Script видит только
-	# СТАТИЧЕСКИЕ методы, поэтому проверять надо на экземпляре.
+	# IMPORTANT (trap §9.2): `has_method` on a Script object sees only
+	# STATIC methods, so the check must run on an instance.
 	if kind == "method":
 		return obj.has_method(member)
 	for p in obj.get_property_list():
@@ -89,11 +89,11 @@ func _make_backend(backend: Dictionary) -> Object:
 	var obj: Object = script.new()
 	if obj == null:
 		return null
-	obj.name = "UnitAnim"  # имя узла — часть контракта (game.gd ищет по нему)
+	obj.name = "UnitAnim"  # the node name is part of the contract (game.gd finds it by name)
 	return obj
 
 
-## Слой 1: у бэкенда есть все члены контракта.
+## Layer 1: the backend has all the contract members.
 func _test_members(label: String, obj: Object) -> void:
 	for entry in CONTRACT:
 		var member := str(entry[0])
@@ -102,9 +102,9 @@ func _test_members(label: String, obj: Object) -> void:
 			"%s: контракт — есть %s `%s`" % [label, kind, member])
 
 
-## Слой 2: контракт реально работает на живом экземпляре.
-## Без этого первый слой проверяет только наличие имён: переименование
-## ловится, а поломанная логика — нет.
+## Layer 2: the contract actually works on a live instance.
+## Without it the first layer checks only that the names exist: a rename
+## is caught, broken logic is not.
 func _test_functional(label: String, obj: Object, test_set: String) -> void:
 	var anim := obj as Node2D
 	if anim == null:
@@ -119,36 +119,36 @@ func _test_functional(label: String, obj: Object, test_set: String) -> void:
 	_check(str(obj.get("set_name")) == test_set,
 		"%s: setup() запомнил набор (`%s`)" % [label, str(obj.get("set_name"))])
 
-	# Узел обязан быть в дереве, иначе game.gd не найдёт "UnitAnim" по get_node.
+	# The node must be in the tree, otherwise game.gd will not find "UnitAnim" via get_node.
 	var holder := Node2D.new()
 	holder.add_child(anim)
 	_check(anim.get_parent() != null, "%s: узел добавлен в дерево" % label)
 
-	# У анимированного юнита должна быть ненулевая высота — по ней game.gd и
-	# spell_vfx позиционируют шкалу HP, ауры и кольцо выбора.
+	# An animated unit must have a non-zero height — game.gd and
+	# spell_vfx position the HP bar, the auras and the selection ring by it.
 	var sh: float = float(obj.call("sprite_height"))
 	var vh: float = float(obj.call("visual_height"))
 	_check(sh > 0.0, "%s: sprite_height() > 0 (%.1f)" % [label, sh])
 	_check(vh > 0.0, "%s: visual_height() > 0 (%.1f)" % [label, vh])
 
-	# Направление. Проверяем НЕ `dir`, а `target_dir`: `set_direction_vec`
-	# выставляет цель, а `dir` доворачивается в _process по аккумулятору
-	# ROT_STEP_TIME. Первая версия проверки ждала мгновенной смены `dir`
-	# и была фиктивно-зелёной по замыслу: за один headless-кадр аккумулятор
-	# не набирает 0.05 с, и проверка прошла бы даже на сломанном маппинге.
+	# Direction. We check `target_dir`, NOT `dir`: `set_direction_vec`
+	# sets the goal, while `dir` turns towards it in _process via the accumulator
+	# ROT_STEP_TIME. The first version of the check expected an instant `dir` change
+	# and was fake-green by design: in one headless frame the accumulator does not
+	# reach 0.05 s, and the check would pass even on broken mapping.
 	#
-	# Реальный инвариант — соглашение о компасных октантах. ВАЖНО: у нас
-	# индексация КОНТРИКЛОКОВАЯ: 0 = север (спина), 7 = северо-восток,
-	# 6 = восток, 5 = юго-восток, 4 = юг, 3 = юго-запад, 2 = запад,
-	# 1 = северо-запад.
+	# The real invariant is the compass octant convention. IMPORTANT: our
+	# indexing is COUNTER-CLOCKWISE: 0 = north (back), 7 = north-east,
+	# 6 = east, 5 = south-east, 4 = south, 3 = south-west, 2 = west,
+	# 1 = north-west.
 	#
-	# Вектор октанты i — это угол Godot (90 + i*45), то есть (cos a, sin a).
-	# Первая версия теста строила вектор как (sin(i*45), cos(i*45)) — это
-	# ОТРАЖЕНИЕ, и хелпер вместе с ожиданием posmod(-i) оставались взаимно
-	# согласованы, то есть тест проверял, что код совпадает сам с собой, а не
-	# что направления верны. Именно эта ошибка хелпера держала инвертированное
-	# зеркало в RiggedAnim: игрок жаловался, что на ходу влево/вправо персонаж
-	# идёт боком.
+	# The octant vector i is the Godot angle (90 + i*45), that is (cos a, sin a).
+	# The first version of the test built the vector as (sin(i*45), cos(i*45)) — that is
+	# a REFLECTION, and the helper together with the expected posmod(-i) stayed mutually
+	# consistent, that is the test checked that the code agrees with itself rather than
+	# that the directions are correct. It was this helper bug that kept the inverted
+	# mirror in RiggedAnim: the player complained that walking left/right the character
+	# moves sideways.
 	var octant_ok := true
 	var detail := ""
 	for i in range(FULL_DIRS):
@@ -162,12 +162,12 @@ func _test_functional(label: String, obj: Object, test_set: String) -> void:
 	_check(octant_ok, "%s: set_direction_vec раскладывает вектор по 8 октантам (0=север, против часовой)%s"
 		% [label, "" if octant_ok else " — " + detail])
 
-	# Плавный доворот обязан реально доводить dir до цели, иначе юнит
-	# застревает в промежуточном ракурсе навсегда.
-	# Дёргать `await process_frame` НЕЛЬЗЯ: в headless дельта кадра не
-	# набирает ROT_STEP_TIME за разумное число итераций (та же грабля, что в
-	# §12 про «замер по кадрам вместо замера по времени»). Поэтому шагаем
-	# `_advance_rotation` явной дельтой — детерминированно и без гонки.
+	# Smooth turning must really bring dir to the goal, otherwise the unit
+	# stays stuck in an intermediate angle forever.
+	# We must NOT use `await process_frame`: in headless the frame delta does not
+	# reach ROT_STEP_TIME in a reasonable number of iterations (the same trap as in
+	# §12 about "measuring by frames instead of by time"). So we step
+	# `_advance_rotation` with an explicit delta — deterministic and without a race.
 	obj.call("set_direction_vec", Vector2.RIGHT)
 	if _has_member(obj, "_advance_rotation", "method"):
 		var steps := 0
@@ -180,18 +180,18 @@ func _test_functional(label: String, obj: Object, test_set: String) -> void:
 	else:
 		print("-- %s: нет _advance_rotation, шаг доворота не проверяем" % label)
 
-	# Воспроизведение блока и одноразовость.
+	# Block playback and one-shot behaviour.
 	obj.call("play", 0)  # Anim.IDLE
 	var anim_after: int = int(obj.get("anim"))
 	_check(anim_after == 0, "%s: play(IDLE) выставил anim=0 (получено %d)"
 		% [label, anim_after])
 
-	# advance() обязан вернуть true на ОДНОРАЗОВОМ блоке. Первая версия
-	# проверяла это на IDLE и упала на риге — и это была ошибка проверки, а не
-	# кода: у рига idle действительно зациклен по-настоящему (в спрайт-листах
-	# тот же блок циклически перебирает кадры и «возвращает true»). Ждать
-	# завершения от вечного цикла бессмысленно, ждать его надо от атаки.
-	obj.call("play", 2)  # Anim.ATTACK — одноразовый блок
+	# advance() must return true on a ONE-SHOT block. The first version checked
+	# that on IDLE and failed on the rig — and that was a bug in the check, not in
+	# the code: in the rig idle really is looped (in sprite sheets the
+	# same block cycles the frames and "returns true"). Waiting
+	# for an endless loop to finish is pointless, it must be waited for from an attack.
+	obj.call("play", 2)  # Anim.ATTACK — a one-shot block
 	var finished := false
 	for i in range(600):
 		if bool(obj.call("advance", 0.05)):
@@ -199,15 +199,15 @@ func _test_functional(label: String, obj: Object, test_set: String) -> void:
 			break
 	_check(finished, "%s: advance() вернул true на одноразовом блоке ATTACK" % label)
 
-	# freeze_last_frame обязан оставить юнит на ПОСЛЕДНЕМ кадре блока: иначе
-	# труп возвращается к началу и зацикливается вместо того, чтобы лежать.
+	# freeze_last_frame must leave the unit on the LAST frame of the block: otherwise
+	# the corpse returns to the start and loops instead of lying still.
 	#
-	# Номер последнего кадра у бэкендов разный и НИГДЕ не задан извне: у
-	# спрайт-листов фазы берутся из units_db, у рига — из числа ключей клипа.
-	# Первая версия проверки ожидала величину из units_db и была фиктивной для
-	# рига (смешала два источника истины). Поэтому сравниваем не с числом, а
-	# с ПОВЕДЕНИЕМ: freeze обязан дать индекс не меньше максимального, который
-	# бэкенд показывал при обычном проигрывании того же блока.
+	# The last frame number differs between backends and is set from the outside NOWHERE: in
+	# sprite sheets the phases come from units_db, in the rig — from the number of clip keys.
+	# The first version of the check expected a value from units_db and was fake for
+	# the rig (it mixed two sources of truth). So we compare not with a number but
+	# with BEHAVIOUR: freeze must give an index no less than the maximum the
+	# backend showed during normal playback of the same block.
 	obj.call("play", 3)  # Anim.DYING
 	var max_seen := 0
 	for i in range(600):
@@ -220,7 +220,7 @@ func _test_functional(label: String, obj: Object, test_set: String) -> void:
 		"%s: freeze_last_frame(DYING) не откатил назад (заморожен %d, в игре доходило до %d)"
 			% [label, frozen, max_seen])
 
-	# speed_scale — обычное поле, контракт требует его наличия и базовой 1.0.
+	# speed_scale is an ordinary field, the contract requires it to exist and to be 1.0 by default.
 	_check(is_equal_approx(float(obj.get("speed_scale")), 1.0),
 		"%s: speed_scale по умолчанию 1.0" % label)
 
@@ -229,9 +229,9 @@ func _test_functional(label: String, obj: Object, test_set: String) -> void:
 	holder.free()
 
 
-## Условие выбора бэкенда. Player решает по нему, риг ли брать — значит
-## ошибка здесь тихо вернёт героя на спрайт-листы, и пилот «не работает»
-## без единой ошибки в логе.
+## The backend selection condition. Player decides by it whether to take the rig — so
+## an error here would silently return the hero to sprite sheets, and the pilot "would not
+## work" without a single error in the log.
 func _test_backend_selection() -> void:
 	if not ResourceLoader.exists("res://scripts/rigged_anim.gd"):
 		return
@@ -242,8 +242,8 @@ func _test_backend_selection() -> void:
 	_check(not bool(RiggedAnim.has_rig("нетакого/набора")),
 		"выбор бэкенда: несуществующий набор не считается ригом")
 
-	# Набор без рига обязан дать НЕ ЗАГРУЖЕННЫЙ риг, а не риг с пустым
-	# скелетом: иначе юнит просто исчезнет вместо отката к листам.
+	# A set without a rig must give a NOT LOADED rig rather than a rig with an empty
+	# skeleton: otherwise the unit would simply disappear instead of falling back to sheets.
 	var r := RiggedAnim.new()
 	r.setup("ork_mage_a52/t0")
 	_check(not r.is_loaded(), "выбор бэкенда: риг без своего rig.json не загружается")
@@ -252,20 +252,20 @@ func _test_backend_selection() -> void:
 	r.free()
 
 
-## ВИДИМОСТЬ ЧАСТЕЙ.
+## VISIBILITY OF PARTS.
 ##
-## Этот тест проверял контракт, кости, позы и повороты — но НИ РАЗУ не
-## спрашивал, есть ли у спрайтов текстуры. Из-за этого он оставался зелёным
-## на полностью невидимом риге:
+## This test checked the contract, the bones, the poses and the rotations — but NOT
+## ONCE asked whether the sprites have textures. Because of that it stayed green
+## on a completely invisible rig:
 ##
-##   `rig.json` ссылался на папку `assets/units/rig/heroes_pilot/parts/`,
-##   а при чистке Аллодов (11.10) семейство `heroes/` вычистили целиком и
-##   пилот переехал в `rig/rig_pilot/`. Ссылка в JSON осталась на старый путь,
-##   `load()` вернул null, все 19 `Sprite2D` создались пустыми — скелет был,
-##   рисовать было нечего, и в игре герой не виден.
+##   `rig.json` pointed at the folder `assets/units/rig/heroes_pilot/parts/`,
+##   and during the Allods cleanup (11.10) the `heroes/` family was cleaned out entirely and
+##   the pilot moved to `rig/rig_pilot/`. The reference in JSON stayed on the old path,
+##   `load()` returned null, all 19 `Sprite2D` were created empty — the skeleton was there,
+##   there was nothing to draw, and in the game the hero was invisible.
 ##
-## Проверка именно на ТЕКСТУРЕ, а не на числе узлов: пустой `Sprite2D`
-## существует и считается «частью рига», поэтому подсчёт детей проходил.
+## The check is on the TEXTURE, not on the number of nodes: an empty `Sprite2D`
+## exists and counts as "a rig part", so counting children passed.
 func _test_rig_textures() -> void:
 	if not ResourceLoader.exists("res://scripts/rigged_anim.gd"):
 		return
@@ -295,14 +295,14 @@ func _test_rig_textures() -> void:
 		_check(sprites > 0, "рифг: у рига есть части-спрайты (%d)" % sprites)
 		_check(with_tex > 0,
 			"рифг: у хотя бы одной части есть текстура (%d из %d)" % [with_tex, sprites])
-		# Строгое равенство, а не «хотя бы одна»: пустая часть не рисуется и
-		# выглядит как дыра в персонаже.
+		# Strict equality, not "at least one": an empty part is not drawn and
+		# looks like a hole in the character.
 		_check(with_tex == sprites,
 			"рифг: у ВСЕХ частей есть текстура (%d с текстурой, %d пустых)"
 				% [with_tex, empty_tex])
 
-		# Путь в rig.json обязан существовать. Именно он рассинхронизировался
-		# при переезде папки, и это ловится дешевле, чем по картинке.
+		# The path in rig.json must exist. It is exactly what went out of sync
+		# when the folder moved, and this is caught more cheaply than by the picture.
 		var cfg: Variant = JSON.parse_string(FileAccess.get_file_as_string(
 			"res://assets/units/rig/rig_pilot/rig.json"))
 		_check(cfg is Dictionary, "рифг: rig.json читается")
@@ -319,10 +319,10 @@ func _test_rig_textures() -> void:
 		r.free()
 
 
-## Поворот рига: жалоба игрока «постоянно разворачивается спиной идёт».
-## Жалоба имела ДВЕ причины, и обе проверяются здесь раздельно:
-##   1. скелет пересобирался на каждом шаге поворота (мерцание);
-##   2. зеркало щёлкало на границе октантов (дёрганье).
+## Rig rotation: the player complaint "it keeps turning its back".
+## The complaint had TWO causes, and both are checked here separately:
+##   1. the skeleton was rebuilt on every rotation step (flicker);
+##   2. the mirror clicked at the octant border (jitter).
 func _test_rig_turning() -> void:
 	if not ResourceLoader.exists("res://scripts/rigged_anim.gd"):
 		return
@@ -335,14 +335,14 @@ func _test_rig_turning() -> void:
 		r.queue_free()
 		return
 
-	# Вектор октанты берётся общим хелпером — см. _octant_vector.
+	# The octant vector comes from the common helper — see _octant_vector.
 	var vec: Callable = func(i: int) -> Vector2:
 		return _octant_vector(i)
 
-	# --- 1. Скелет НЕ пересобирается при повороте внутри одной ракурсной группы ---
-	# Восточный октант (2) и юго-восточный (3) смотрят в одну сторону, значит
-	# ракурс тот же. Если бы _build_view вызывался на каждом шаге, узел Hip
-	# был бы ДРУГИМ экземпляром — это ловится по instance_id.
+	# --- 1. The skeleton is NOT rebuilt when turning inside one view group ---
+	# The east octant (2) and the south-east one (3) look the same way, so
+	# the view is the same. If _build_view were called on every step, the Hip node
+	# would be a DIFFERENT instance — caught by instance_id.
 	r.set_direction_vec(vec.call(2))
 	for i in range(6):
 		r._advance_rotation(0.06)
@@ -362,9 +362,9 @@ func _test_rig_turning() -> void:
 	_check(hip_after_se == hip_after_east,
 		"поворот рига: скелет НЕ пересобран при смене октанта внутри вида (восток->юго-восток)")
 
-	# --- 2. Зеркало НЕ щёлкает на соседних октантах, смотрящих в одну сторону ---
-	# 2 (восток) и 3 (юго-восток) оба вправо: mirror обязан остаться тем же.
-	# Это ровно то «дёрганье», на которое жаловался игрок.
+	# --- 2. The mirror does NOT click between neighbouring octants looking the same way ---
+	# 2 (east) and 3 (south-east) are both right-facing: mirror must stay the same.
+	# This is exactly the "jitter" the player complained about.
 	var mirror_stable := true
 	for probe in [2, 3, 2, 3, 2]:
 		var before := _hip_scale_sign(r)
@@ -376,13 +376,13 @@ func _test_rig_turning() -> void:
 	_check(mirror_stable,
 		"поворот рига: зеркало стабильно на октантах, смотрящих в одну сторону")
 
-	# --- 2b. Зеркало ОРИЕНТИРОВАНО, а не только стабильно ---
-	# Арт пилота нарисован вправо (faces_east = 1). Октанта 6 = восток =>
-	# без зеркала; октанта 2 = запад => зеркало. Проверка на стабильность
-	# (2a) перепутанный знак ПРОПУСКАЛА: зеркало было стабильным, но инвертированным,
-	# и игрок видел «на ходу влево/вправо персонаж идёт боком». Поэтому знак
-	# проверяем явно, а не «лишь бы не дёргалось».
-	r.set_direction_vec(vec.call(6))   # восток
+	# --- 2b. The mirror is ORIENTED, not merely stable ---
+	# The pilot art is drawn facing right (faces_east = 1). Octant 6 = east =>
+	# no mirror; octant 2 = west => mirror. The stability check
+	# (2a) MISSED a flipped sign: the mirror was stable but inverted,
+	# and the player saw "walking left/right the character moves sideways". So the sign
+	# is checked explicitly, not just "as long as it does not jitter".
+	r.set_direction_vec(vec.call(6))   # east
 	for i in range(20):
 		r._advance_rotation(0.06)
 	var east_sign := _hip_scale_sign(r)
@@ -390,7 +390,7 @@ func _test_rig_turning() -> void:
 		"поворот рига: на востоке (октанта 6) арт НЕ отражён (dir=%d, scale.x=%.0f)"
 			% [r.dir, east_sign])
 
-	r.set_direction_vec(vec.call(2))   # запад
+	r.set_direction_vec(vec.call(2))   # west
 	for i in range(20):
 		r._advance_rotation(0.06)
 	var west_sign := _hip_scale_sign(r)
@@ -398,19 +398,19 @@ func _test_rig_turning() -> void:
 		"поворот рига: на западе (октанта 2) арт ОТРАЖЁН (dir=%d, scale.x=%.0f)"
 			% [r.dir, west_sign])
 
-	# --- 3. Юг не дёргает зеркало ---
-	# Жалоба игрока: «когда идёт вниз, иногда отворачивается в другую
-	# сторону, хотя вектор один и точный». Причина: cos(270°) в плавающей
-	# точке это -1.8e-16, а не 0. Условие >= 0 решало «смотрит на запад» и
-	# включало зеркало ровно на октанте юга. При ходьбе вниз октанты 4<->5
-	# чередуются, и персонаж щёлкал туда-сюда.
-	# Обе октанты «вниз» — 4 (юг) и 5 (юго-восток) — обязаны давать ОДНО
-	# зеркало, иначе на ровной ходьбе вниз будет дёргание.
-	r.set_direction_vec(vec.call(6))   # восток — задаём известное состояние
+	# --- 3. The south does not jerk the mirror ---
+	# Player complaint: "when it walks down, it sometimes turns the other
+	# way, although the vector is one and exact". Cause: cos(270°) in floating
+	# point is -1.8e-16, not 0. The condition >= 0 decided "facing west" and
+	# enabled the mirror exactly on the south octant. When walking down the octants 4<->5
+	# alternate, and the character clicked back and forth.
+	# Both "down" octants — 4 (south) and 5 (south-east) — must give the SAME
+	# mirror, otherwise steady walking down will jitter.
+	r.set_direction_vec(vec.call(6))   # east — set a known state
 	for i in range(20):
 		r._advance_rotation(0.06)
 	var south_sign := _hip_scale_sign(r)
-	r.set_direction_vec(vec.call(4))   # ровно на юг
+	r.set_direction_vec(vec.call(4))   # exactly south
 	for i in range(20):
 		r._advance_rotation(0.06)
 	var due_south_sign := _hip_scale_sign(r)
@@ -418,9 +418,9 @@ func _test_rig_turning() -> void:
 		"поворот рига: на юге (октанта 4) зеркало не щёлкает (scale.x %.0f -> %.0f)"
 			% [south_sign, due_south_sign])
 
-	# Полный круг: 0..7. Зеркало обязано переключиться РОВНО ДВАЖДЫ (на
-	# западной стороне и обратно). Больше двух — значит «полярные» октанты
-	# север/юг дают ложные переключения.
+	# Full circle: 0..7. The mirror must switch EXACTLY TWICE (on
+	# the west side and back). More than two — means the "polar" octants
+	# north/south produce false switches.
 	r.set_direction_vec(vec.call(0))
 	for i in range(20):
 		r._advance_rotation(0.06)
@@ -437,36 +437,36 @@ func _test_rig_turning() -> void:
 	_check(flips == 2,
 		"поворот рига: полный круг даёт ровно 2 переключения зеркала (получено %d)" % flips)
 
-	# --- 4. Гистерезис: одиночный «дрож» направления не должен доворачивать юнита ---
+	# --- 4. Hysteresis: a single direction "twitch" must not turn the unit ---
 	r.set_direction_vec(vec.call(2))
 	for i in range(10):
 		r._advance_rotation(0.06)
 	var dir_before_jitter: int = r.dir
-	r.set_direction_vec(vec.call(1))   # на один шаг дёрнулись вбок
+	r.set_direction_vec(vec.call(1))   # jerked one step sideways
 	r._advance_rotation(0.06)
-	r.set_direction_vec(vec.call(2))   # и вернулись
+	r.set_direction_vec(vec.call(2))   # and came back
 	for i in range(10):
 		r._advance_rotation(0.06)
 	_check(r.dir == dir_before_jitter,
 		"поворот рига: одиночный дребезг направления не доворачивает юнита (было %d, стало %d)"
 			% [dir_before_jitter, r.dir])
 
-	# --- 4. Устойчивый поворот всё-таки доводит юнита ---
-	r.set_direction_vec(vec.call(6))   # запад, держим
+	# --- 4. A sustained turn still brings the unit around ---
+	r.set_direction_vec(vec.call(6))   # west, hold
 	for i in range(20):
 		r._advance_rotation(0.06)
 	_check(r.dir == 6, "поворот рига: устойчивое направление доезжает (dir=%d, ждали 6)" % r.dir)
 
-	# --- 5. Одноразовый клип ПЕРЕЗАПУСКАЕТСЯ при повторном play() ---
-	# Жалоба игрока: «когда атакует, то он первый раз делает взмах, и потом
-	# просто звуки и видно как отнимается здоровье». Причина: игровой код держит
-	# состояние "attack" дольше одного замаха (удары гейтятся кулдауном), и
-	# play(ATTACK) вызывается каждый кадр. Первый раз клип запустился, дальше
-	# play() выходил раньше по `anim == anim_kind`, и одноразовый клип навсегда
-	# оставался на последнем кадре. У спрайт-листов такого нет: там advance()
-	# циклит фазы, поэтому взмах повторялся сам собой.
-	# Проверяем ПОВЕДЕНИЕМ: после доигрывания и повторного play(ATTACK) поза
-	# обязана отличаться от замороженной последней.
+	# --- 5. A one-shot clip RESTARTS on a repeated play() ---
+	# Player complaint: "when it attacks, the first time it makes a swing, and then
+	# just sounds and you see the health going down". Cause: the game code keeps the
+	# "attack" state longer than one swing (hits are gated by cooldown), and
+	# play(ATTACK) is called every frame. The first time the clip started, after that
+	# play() exited early on `anim == anim_kind`, and the one-shot clip stayed
+	# on the last frame forever. Sprite sheets do not have this: there advance()
+	# cycles the phases, so the swing repeated by itself.
+	# We check BEHAVIOUR: after playing out and a repeated play(ATTACK) the pose
+	# must differ from the frozen last one.
 	r.play(2)  # ATTACK
 	while not r.advance(0.05):
 		pass
@@ -477,13 +477,13 @@ func _test_rig_turning() -> void:
 		held = is_equal_approx(_bone_rotation(r, "ArmFront"), arm)
 	_check(held, "повтор атаки: доигранный клип держит последний кадр")
 
-	r.play(2)  # повторный замах, БЕЗ reset
-	# Проверять ПОЗУ здесь бессмысленно: клип замаха возвращается в начальную
-	# позу на последнем ключе (ArmFront: -10° … -95° … 40° … -10°), поэтому
-	# первый и последний кадр неразличимы и проверка «поза изменилась» прошла
-	# бы и на сломанном коде. Поэтому сверяем сам факт рестарта — время клипа
-	# вернулось в ноль — и то, что клип реально проигрывается: замах проходит
-	# через крайнюю фазу, которой нет в конце.
+	r.play(2)  # a repeated swing, WITHOUT reset
+	# Checking the POSE here is pointless: the swing clip returns to the start
+	# pose on the last key (ArmFront: -10° … -95° … 40° … -10°), so
+	# the first and the last frame are indistinguishable and the "pose changed" check would
+	# pass even on broken code. So we verify the restart itself — the clip time
+	# went back to zero — and that the clip really plays: the swing goes
+	# through the extreme phase that is not present at the end.
 	var time_after_restart: float = float(r.get("_clip_time"))
 	_check(is_equal_approx(time_after_restart, 0.0),
 		"повтор атаки: play(ATTACK) ПЕРЕЗАПУСКАЕТ доигранный одноразовый клип (время %.3f)"
@@ -496,8 +496,8 @@ func _test_rig_turning() -> void:
 			break
 	_check(windup, "повтор атаки: после рестарта клип реально проигрывает замах")
 
-	# Замороженный труп перезапускаться НЕ должен: иначе play(DYING) в
-	# состоянии "dead" снова запустит падение, и мёртвый будет шевелиться.
+	# A frozen corpse must NOT restart: otherwise play(DYING) in the
+	# "dead" state would start the fall again, and the dead one would move.
 	r.freeze_last_frame(3)  # DYING
 	var frozen_rot := _bone_rotation(r, "ArmFront")
 	for i in range(6):
@@ -509,10 +509,10 @@ func _test_rig_turning() -> void:
 	r.queue_free()
 
 
-## Угол кости по имени. Полный путь — Hip/Torso/<кость>: Torso лежит под Hip,
-## а не под корнем, и первая версия искала "Torso/..." — промахивалась и
-## МОЛЧА возвращала 0.0, из-за чего проверка «поза удержалась» проходила
-## вхолостую. Теперь промах — ошибка теста, а не тихий ноль.
+## Bone angle by name. The full path is Hip/Torso/<bone>: Torso lies under Hip,
+## not under the root, and the first version looked for "Torso/..." — it missed and
+## SILENTLY returned 0.0, which is why the "pose stayed" check passed
+## for nothing. Now a miss is a test error, not a silent zero.
 func _bone_rotation(r: Object, bone_name: String) -> float:
 	for path in ["Hip/Torso/" + bone_name, "Hip/" + bone_name, bone_name]:
 		var b: Node = r.get_node_or_null(path)
@@ -530,25 +530,25 @@ func _hip_scale_sign(r: Object) -> float:
 	return signf(float((hip as Node2D).scale.x))
 
 
-## ЕДИНСТВЕННЫЙ хелпер «октанта -> вектор». Вынесен отдельно, потому что его
-## пришлось писать заново: инверсия оси здесь молча инвертировала зеркало рига
-## (жалоба игрока: «ходит влево или вправо, постоянно разворачивается спиной»).
-## Вектор октанты i — это угол Godot (90 + i*45): 0=север, 6=восток, 4=юг,
-## 2=запад. Godot-угол считается от +x против часовой, поэтому вектор = (cos, sin).
+## The ONLY helper "octant -> vector". Extracted on purpose because it had
+## to be rewritten: an axis inversion here silently inverted the rig mirror
+## (player complaint: "it walks left or right and keeps turning its back").
+## The octant vector i is the Godot angle (90 + i*45): 0=north, 6=east, 4=south,
+## 2=west. The Godot angle is measured from +x counter-clockwise, so the vector = (cos, sin).
 func _octant_vector(i: int) -> Vector2:
 	var a := deg_to_rad(90.0 + float(i) * 45.0)
 	return Vector2(cos(a), sin(a))
 
 
-## Атласный риг героя: два authored-ракурса, скольжение на север/юг.
+## The atlas rig of the hero: two authored views, sliding on north/south.
 ##
-## Жалоба игрока была «персонаж смотрит во все 4 стороны, хотя решили 2».
-## Причина: rig.json держал 4 view (N/E/S/W) и карту на все кардинальные
-## октанты. Контракт, который здесь защищается:
-##   * ровно ДВА ракурса — запад и восток;
-##   * север и юг отданы одному из них и СКОЛЬЗЯТ (view не меняется);
-##   * диагонали тоже не создают нового ракурса;
-##   * части не срезаны (у каждой текстуры холст заполнен контентом).
+## The player complaint was "the character faces all 4 directions, although we decided on 2".
+## Cause: rig.json held 4 views (N/E/S/W) and a map for all cardinal
+## octants. The contract defended here:
+##   * exactly TWO views — west and east;
+##   * north and south are given to one of them and SLIDE (the view does not change);
+##   * the diagonals do not create a new view either;
+##   * the parts are not cropped (every texture has its canvas filled with content).
 func _test_atlas_rig_two_views() -> void:
 	if not ResourceLoader.exists("res://scripts/rigged_anim.gd"):
 		return
@@ -562,14 +562,14 @@ func _test_atlas_rig_two_views() -> void:
 		"атлас: ровно ДВА authored-ракурса (%d)" % views.size())
 	_check(views.has("west") and views.has("east"),
 		"атлас: ракурсы называются west и east")
-	# faces_east различается — иначе оба ракурса это один и тот же кадр
+	# faces_east differs — otherwise both views are the same frame
 	if views.has("west") and views.has("east"):
 		var fw := int((views["west"] as Dictionary).get("faces_east", 0))
 		var fe := int((views["east"] as Dictionary).get("faces_east", 0))
 		_check(fw != fe,
 			"атлас: ракурсы смотрят в разные стороны (west=%d east=%d)" % [fw, fe])
 
-	# Скольжение: север и юг не должны переключать ракурс.
+	# Sliding: north and south must not switch the view.
 	var r := RiggedAnim.new()
 	r.name = "UnitAnim"
 	root.add_child(r)
@@ -582,7 +582,7 @@ func _test_atlas_rig_two_views() -> void:
 		"атлас: все текстуры частей на месте (%d отсутствует)" % r.missing_parts().size())
 
 	var wv := str((views.get("west", {}) as Dictionary).get("", ""))
-	# полный круг: вид меняется только на запад/восток
+	# full circle: the view changes only on west/east
 	var seen: Dictionary = {}
 	for oct in range(8):
 		r.set_direction_vec(_octant_vector(oct))
@@ -592,9 +592,9 @@ func _test_atlas_rig_two_views() -> void:
 	_check(seen[0] == seen[4],
 		"атлас: север и юг дают один ракурс (N=%s S=%s) — скольжение"
 			% [seen[0], seen[4]])
-	# Диагонали щёлкают на БЛИЖАЙШУЮ кардиналу (1,3 -> запад; 5,7 -> восток) —
-	# это правильное поведение. Инвариант не в том, что они равны северу:
-	# он в том, что они не порождают ТРЕТЬЕГО ракурса.
+	# The diagonals click to the NEAREST cardinal (1,3 -> west; 5,7 -> east) —
+	# that is correct behaviour. The invariant is not that they equal north:
+	# it is that they do not produce a THIRD view.
 	var allowed: Array[String] = [str(seen[0]), str(seen[6]), str(seen[2])]
 	for oct in [1, 3, 5, 7]:
 		_check(allowed.has(str(seen[oct])),
@@ -604,20 +604,20 @@ func _test_atlas_rig_two_views() -> void:
 		"атлас: восток и запад — разные ракурсы (E=%s W=%s)"
 			% [seen[6], seen[2]])
 
-	# Части не срезаны и не перевёрнуты. Проверки ДВЕ, потому что каждая
-	# ловит свой класс дефекта:
-	#   «центр пустой»      — pivot уехал с сустава (старый баг center_pivot);
-	#   «контент не с той стороны» — часть перевёрнута или обрезана по
-	#     половине холста, и пустой-центра при этом НЕТ, так что первая
-	#     проверка на такой дефект зелёная (проверено мутацией: голова,
-	#     сдвинутая в нижнюю половину холста, даёт fill 0.50 как у целой).
-	# Анатомия задаёт сторону: голов�� и торс висят на суставе СВЕРХУ
-	# (шея/таз внизу части), конечности — СНИЗУ (плечо/таз/колено сверху).
+	# Parts are not cropped and not flipped. There are TWO checks, because each
+	# catches its own class of defect:
+	#   "empty centre"      — the pivot slipped off the joint (the old center_pivot bug);
+	#   "content on the wrong side" — the part is flipped or cropped by
+	#     half the canvas, and there is NO empty centre in that case, so the first
+	#     check is green for such a defect (verified by mutation: a head
+	#     shifted into the lower half of the canvas gives fill 0.50 like a whole one).
+	# Anatomy sets the side: the head and the torso hang from the joint ABOVE
+	# (neck/pelvis at the bottom of the part), the limbs — from BELOW (shoulder/pelvis/knee above).
 	var hangs_from := {"head": -1, "torso": -1,
 					   "arm_far": 1, "arm_near": 1, "thigh": 1, "shin": 1}
-	# Обход частей идёт по КАЖДОМУ ракурсу отдельно. Раньше проверка смотрела
-	# на скелет в его текущем состоянии, то есть на последний построенный view:
-	# сломанная часть второго ракурса проходила молча (проверено мутацией).
+	# The parts are walked over for EVERY view separately. Before, the check looked
+	# at the skeleton in its current state, that is at the last built view:
+	# a broken part of the second view passed silently (verified by mutation).
 	var total_parts := 0
 	var total_hollow := 0
 	var total_wrong := 0
@@ -650,9 +650,9 @@ func _test_atlas_rig_two_views() -> void:
 	await process_frame
 
 
-## Скан частей одного ракурса. Возвращает СЧЁТЧИКИ, а не проверяет сам:
-## в GDScript int передаётся по значению, и проверка в отдельной функции
-## молча ничего не добавила бы наружу.
+## Scan the parts of one view. Returns COUNTERS rather than checking itself:
+## in GDScript int is passed by value, and a check inside a separate function
+## would silently add nothing outside.
 func _scan_parts(r: Node, vname: String, hangs_from: Dictionary) -> Dictionary:
 	var parts := 0
 	var hollow := 0
