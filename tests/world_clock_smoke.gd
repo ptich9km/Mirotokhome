@@ -1,25 +1,25 @@
 extends SceneTree
 ##
-## Календарь живой игры (28.10): день мира идёт по реальным секундам.
+## Live world calendar (28.10): the world day advances in real seconds.
 ##
-## ЗАЧЕМ
+## WHY
 ## -----
-## До этого `state.day` тикал ТОЛЬКО в headless sim_runner (`advance()`), а в
-## живой игре стоял на месте. Следствия были тихие: ротация заданий главы не
-## срабатывала никогда ([quests] offer_ttl_days считает дни мира), лента мира
-## показывала «день 0», угроза и журнал не росли.
+## Before this, `state.day` ticked ONLY in the headless sim_runner (`advance()`),
+## while in the live game it stood still. The consequences were silent: the
+## chapter quest rotation never fired ([quests] offer_ttl_days counts world
+## days), the world feed showed "day 0", threat and journal did not grow.
 ##
-## ЧТО ПРОВЕРЯЕМ
+## WHAT WE CHECK
 ## -------------
-##   1. `[world] day_seconds` есть в конфиге и читается (300 с);
-##   2. tick_day копит дробные секунды: 150 + 150 = ровно один день;
-##   3. день меняет state.day и шлёт day_changed РОВНО на переходе;
-##   4. живой тик НЕ трогает SIM-героя (ложные «Герой окреп» в журнале);
-##      headless advance() по-прежнему его трогает (эталон sim_runner);
-##   5. reset_day_timer сбрасывает накопленное (загрузка слота не докручивает);
-##   6. журнал ограничен JOURNAL_MAX записями (иначе сейв растёт без предела).
+##   1. `[world] day_seconds` exists in the config and is read (300 s);
+##   2. tick_day accumulates fractional seconds: 150 + 150 = exactly one day;
+##   3. a day changes state.day and sends day_changed EXACTLY on the transition;
+##   4. the live tick does NOT touch the SIM hero (false "Hero levelled up" in the journal);
+##      headless advance() still touches it (sim_runner reference);
+##   5. reset_day_timer resets the accumulated time (loading a slot does not fast-forward);
+##   6. the journal is capped at JOURNAL_MAX entries (otherwise the save grows forever).
 ##
-## Запуск: godot --headless --path . --script res://tests/world_clock_smoke.gd
+## Run: godot --headless --path . --script res://tests/world_clock_smoke.gd
 
 const WorldBusClass := preload("res://scripts/world/world_bus.gd")
 

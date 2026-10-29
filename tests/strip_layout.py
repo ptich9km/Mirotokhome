@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Собрать сетку фигур в полосе: сколько рядов и сколько колонок.
+"""Detect the figure grid in a strip: how many rows and how many columns.
 
-Модель за одну сессию отдала три раскладки на одну и ту же просьбу «4 фигуры
-в один ряд»: 4x1 (seedream), 4x2 (nano-banana стойка) и 2x2 (nano-banana
-бег). Нарезчик раньше умел брать один ряд и резать его на колонки, то есть на
-2x2 терял половину фаз. Поэтому сначала смотрим, что приходит на самом деле.
+In one session the model returned three layouts for the same request "4 figures
+in one row": 4x1 (seedream), 4x2 (nano-banana standing) and 2x2 (nano-banana
+running). The slicer used to take one row and cut it into columns, so on 2x2
+it lost half the phases. That is why we look at what actually arrives first.
 
-Запуск:
+Run:
   python tests/strip_layout.py import/Monsters/*.png
 """
 import sys
@@ -45,7 +45,7 @@ def layout(path: Path):
     fg = ~bg
     rows = runs_of(fg.sum(axis=1) >= 5, 0)
     cols = runs_of(fg.sum(axis=0) >= 5, 0)
-    # сколько колонок в каждом ряду
+    # how many columns are in each row
     per_row = []
     for y0, y1 in rows:
         sub = fg[y0:y1 + 1]
