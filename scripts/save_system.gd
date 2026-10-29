@@ -1,59 +1,59 @@
 class_name SaveSystem
 extends RefCounted
-## Сохранения: слоты, автосейв, версионирование, атомарная запись.
+## Saves: slots, autosave, versioning, atomic writing.
 ##
-## Статический класс, НАМЕРЕННО без autoload — добавление autoload в
-## project.godot это approval gate (AGENTS §9.4), а оно тут не нужно:
-## все методы статические, состояния у класса нет.
+## A static class, DELIBERATELY without an autoload — adding an autoload to
+## project.godot is an approval gate (AGENTS §9.4), and it is not needed here:
+## all methods are static, the class has no state.
 ##
-## Формат (решение игрока 22.10): КАЖДЫЙ слот — своя папка
-## `user://saves/<слот>/` с тремя элементами прогресса:
-##   hero.json    — герой: класс, статы, HP/мана, золото, склад, экипировка,
-##                  навыки, позиция;
-##   map.json     — карта: зона, сид, туман, плюс файлы мира текущей карты
+## Format (player decision 22.10): EVERY slot is its own folder
+## `user://saves/<slot>/` with three progress elements:
+##   hero.json    — the hero: class, stats, HP/mana, gold, inventory, equipment,
+##                  skills, position;
+##   map.json     — the map: zone, seed, fog, plus the world files of the current map
 ##                  (`*.alm`, `.npcs.json`, `.structures.json`, `.herbs.json`,
 ##                  `.portal.json`, `.spawn.json`, `.nowalk.json`,
-##                  `.allowwalk.json`) — карта ложится в сохранение байт-в-байт,
-##                  поэтому после перезапуска игры это та же самая карта;
-##   process.json — прогресс: мир SIM, события, квесты, метаданные слота
-##                  (имя, класс, уровень, день, время записи).
-## Каждый элемент пишется атомарно (.tmp → flush → rename), прежние версии
-## файлов уходят в `.bak`. При удалении игроком папка становится пустой:
-## остаются только эти три файла, пустые по содержимому.
+##                  `.allowwalk.json`) — the map goes into the save byte for byte,
+##                  so after a game restart it is the very same map;
+##   process.json — progress: the SIM world, events, quests, slot metadata
+##                  (name, class, level, day, time of writing).
+## Every element is written atomically (.tmp → flush → rename), previous versions
+## of the files go to `.bak`. When the player deletes a slot the folder becomes empty:
+## only these three files remain, empty in content.
 ##
-## Версия в `version` внутри каждого элемента; элемент новее текущего
-## отклоняется целиком, а не «читается как есть» — иначе битые/чужие данные
-## молча портят игровое состояние.
+## The version lives in `version` inside every element; an element newer than the current
+## one is rejected as a whole rather than "read as is" — otherwise corrupt/foreign data
+## silently spoils the game state.
 ##
-## v2 (28.10): в hero появились `party` (наёмники) и `hotbar` (клавиши 1..9).
-## Оба поля опциональны: сейв v1 читается без миграции — пустой отряд и пустой
-## хотбар это ровно то, что было в v1, где их не сохраняли вовсе.
+## v2 (28.10): `party` (mercenaries) and `hotbar` (keys 1..9) appeared in hero.
+## Both fields are optional: a v1 save is read without migration — an empty party and an empty
+## hotbar are exactly what v1 had, where they were not saved at all.
 
 const DIR := "user://saves/"
 const VERSION := 2
-## Где живут сохранения. Этот каталог НЕ должен трогать ни один прогон тестов
-## или инструментов: все сценарии (headless-тесты, `--path` на ту же
-## установку, копии проекта) используют один и тот же `user://`
-## (`%APPDATA%/Godot/app_userdata/<config/name>`), поэтому тест, трогавший
-## слоты, стирал живые сохранения игрока (жалоба 22.10: «сохранения видны,
-## пока не закроешь игру» — тест перетирал их при закрытии окна).
-## Тесты и инструменты пишут только в `TEST_DIR` (см. `use_test_dir()`).
+## Where saves live. This directory must NOT be touched by any test run
+## or tool: all scenarios (headless tests, `--path` on the same
+## installation, project copies) use the same `user://`
+## (`%APPDATA%/Godot/app_userdata/<config/name>`), so a test that touched
+## slots wiped the player's live saves (report 22.10: "the saves are visible
+## until you close the game" — the test overwrote them when the window closed).
+## Tests and tools write only to `TEST_DIR` (see `use_test_dir()`).
 static var _dir := DIR
 
-## Элементы сохранения внутри папки слота.
+## Save elements inside the slot folder.
 const HERO_FILE := "hero.json"
 const MAP_FILE := "map.json"
 const PROCESS_FILE := "process.json"
 const PARTS := [HERO_FILE, MAP_FILE, PROCESS_FILE]
-## Снимок ПРЕДЫДУЩЕГО сохранения слота, взятый ДО перезаписи: полный документ
-## того же вида, что отдаёт `load_slot()` (`{version, meta, data: {hero,
-## map, world, events, quests}}`). Поэлементные `.bak` держат прежние версии
-## отдельных файлов и мир в них разорван по трём элементам — восстановить
-## «предыдущее сохранение» из них можно только склейкой. Снимок целый и
-## пишется файлом, чтобы его мог прочитать и тест, и рука игрока.
+## A snapshot of the PREVIOUS save of the slot, taken BEFORE the overwrite: a full document
+## of the same shape `load_slot()` returns (`{version, meta, data: {hero,
+## map, world, events, quests}}`). The per-element `.bak` files hold the previous versions
+## of individual files, and the world is torn across three elements — restoring
+## "the previous save" from them is only possible by gluing. The snapshot is whole and
+## written as a file so that both a test and the player's hand can read it.
 const PREV_FILE := "previous.json"
-## Файлы мира текущей карты: `.alm` и sidecar-ы, которые читает AlmMap
-## (строки/НПЦ/травы/портал/спавн/разметка проходимости).
+## World files of the current map: `.alm` and the sidecars AlmMap reads
+## (structures/NPCs/herbs/portal/spawn/walkability markup).
 const WORLD_SUFFIXES := [
 	".alm", ".npcs.json", ".structures.json", ".herbs.json",
 	".portal.json", ".spawn.json", ".nowalk.json", ".allowwalk.json",
@@ -61,21 +61,21 @@ const WORLD_SUFFIXES := [
 ]
 
 
-## Переключить хранение слотов на тестовый каталог. Вызывается ТОЛЬКО
-## тестами (`tests/save_sandbox.gd`): живые сохранения остаются нетронутыми.
+## Switch slot storage to the test directory. Called ONLY
+## by tests (`tests/save_sandbox.gd`): live saves stay untouched.
 static func use_test_dir(path: String) -> void:
 	_dir = path if path.ends_with("/") else path + "/"
 	ensure_dir()
 
 
-## Текущий каталог слотов: игровой `user://saves/` или тестовый.
+## The current slot directory: the game `user://saves/` or the test one.
 static func dir() -> String:
 	return _dir
-## Игровых слотов для меню «Загрузить игру» (решение игрока 05.10: 6).
+## Game slots for the "Load game" menu (player decision 05.10: 6).
 const SLOT_COUNT := 6
 const AUTOSAVE_SLOT := "autosave"
 
-## Слоты, которые показываются игроку.
+## The slots shown to the player.
 const PLAYER_SLOTS := ["slot_0", "slot_1", "slot_2", "slot_3", "slot_4", "slot_5"]
 
 
@@ -83,19 +83,19 @@ static func ensure_dir() -> void:
 	DirAccess.make_dir_recursive_absolute(_dir)
 
 
-## Папка слота: внутри неё лежат hero.json / map.json / process.json и файлы
-## мира текущей карты.
+## The slot folder: hero.json / map.json / process.json and the world files
+## of the current map live inside it.
 static func slot_dir(slot: String) -> String:
 	return _dir + slot + "/"
 
 
-# --- Пути ---
+# --- Paths ---
 
 static func part_path(slot: String, part: String) -> String:
 	return slot_dir(slot) + part
 
 
-## Главный файл слота (герой). Прежнее имя одиночного файла сохранения.
+## The main slot file (the hero). The former name of the single save file.
 static func slot_path(slot: String) -> String:
 	return part_path(slot, HERO_FILE)
 
@@ -116,22 +116,22 @@ static func bak_of(path: String) -> String:
 	return path + ".bak"
 
 
-# --- Запись ---
+# --- Writing ---
 
-## Плоский payload старого формата (весь прогресс в одном блоке `data`, без
-## `quests`/`world`) — так писали до 22.10 и так пишут инструменты, которым
-## нужен только герой. Такой payload раскладывается по трём элементам
-## обычным путём: отдельного «старое-карта» в слоте не остаётся.
+## A flat payload of the old format (all progress in one `data` block, without
+## `quests`/`world`) — that is how it was written before 22.10 and how tools that
+## only need the hero still write it. Such a payload is laid out over the three
+## elements the usual way: no separate "old-map" remains in the slot.
 static func _is_flat_payload(payload: Dictionary) -> bool:
 	return not (payload.get("quests", null) is Dictionary) \
 		and not (payload.get("world", null) is Dictionary)
 
 
-## Записать слот. payload — словарь v1 (см. build_payload). Возвращает
-## сообщение об ошибке или "" при успехе.
+## Write a slot. payload — a v1 dictionary (see build_payload). Returns
+## an error message or "" on success.
 ##
-## Порядок: герой → прогресс → карта. Если запись карты упадёт (нет места на
-## диске), в слоте останутся прежние карта и туман, а не полуновое состояние.
+## Order: hero → progress → map. If writing the map fails (no disk
+## space), the slot keeps the previous map and fog instead of a half-new state.
 static func save(slot: String, payload: Dictionary) -> String:
 	if not (payload.get("hero", null) is Dictionary) \
 			or not (payload.get("map", null) is Dictionary):
@@ -142,7 +142,7 @@ static func save(slot: String, payload: Dictionary) -> String:
 		payload["events"] = []
 		payload["quests"] = {}
 	DirAccess.make_dir_recursive_absolute(slot_dir(slot))
-	# Снимок прежнего состояния — ДО первой перезаписи элементов.
+	# A snapshot of the previous state — BEFORE the first overwrite of the elements.
 	_snapshot_previous(slot)
 	var meta: Dictionary = payload.get("meta", {})
 	var err := _write_part(slot, HERO_FILE, {"version": VERSION, "meta": meta,
@@ -161,7 +161,7 @@ static func save(slot: String, payload: Dictionary) -> String:
 	return _save_map(slot, payload)
 
 
-## Карта: описание в map.json и файлы мира рядом с ним (байт-в-байт).
+## The map: the description in map.json and the world files next to it (byte for byte).
 static func _save_map(slot: String, payload: Dictionary) -> String:
 	var map_info: Dictionary = payload.get("map", {})
 	var err := _write_part(slot, MAP_FILE, {"version": VERSION,
@@ -174,8 +174,8 @@ static func _save_map(slot: String, payload: Dictionary) -> String:
 	return _mirror_world_files(slot, map_path, str(map_info.get("basename", "")))
 
 
-## Скопировать файлы мира (`.alm` + sidecar-ы) из каталога карты в папку
-## слота под стабильным именем `<basename>.…`; basename записан в map.json.
+## Copy the world files (`.alm` + sidecars) from the map directory into the slot
+## folder under the stable name `<basename>.…`; the basename is recorded in map.json.
 static func _mirror_world_files(slot: String, map_path: String, basename: String) -> String:
 	var src_dir := map_path.get_base_dir()
 	var src_base := map_path.get_file().get_basename()
@@ -195,18 +195,18 @@ static func _mirror_world_files(slot: String, map_path: String, basename: String
 	return ""
 
 
-# --- Чтение ---
+# --- Reading ---
 
-## Положить текущее сохранение слота (если оно есть) в `previous.json`.
-## Снимок — то же, что отдаёт `load_slot()`; если слот битый или пустой,
-## снимок не трогаем: лучше старое целое, чем пустое.
+## Put the current save of the slot (if there is one) into `previous.json`.
+## The snapshot is what `load_slot()` returns; if the slot is corrupt or empty,
+## we do not touch the snapshot: an old whole one is better than an empty one.
 static func _snapshot_previous(slot: String) -> void:
 	var current := load_slot(slot)
 	if current.is_empty() or current.has("error"):
 		return
-	# Снимок перезаписывать НЕЛЬЗЯ, если текущее сохранение читается ТОЛЬКО
-	# из `previous.json` (все элементы сломаны): иначе он перетрётся
-	# зеркалом того же снимка и слот станет невосстановимым.
+	# The snapshot must NOT be overwritten if the current save is readable ONLY
+	# from `previous.json` (all elements broken): otherwise it would be overwritten
+	# by a mirror of the same snapshot and the slot would become unrecoverable.
 	if not _parts_readable(slot):
 		return
 	_write_raw(prev_path(slot), JSON.stringify(JsonSafe.encode({
@@ -216,7 +216,7 @@ static func _snapshot_previous(slot: String) -> void:
 	})))
 
 
-## Оба главных элемента слота читаются сами по себе (без снимка).
+## Both main elements of the slot are readable on their own (without the snapshot).
 static func _parts_readable(slot: String) -> bool:
 	for part in [HERO_FILE, PROCESS_FILE]:
 		var doc := _read_doc(part_path(slot, part))
@@ -225,15 +225,15 @@ static func _parts_readable(slot: String) -> bool:
 	return true
 
 
-## Прочитать слот. Пустой словарь — читать нечего. "version" — элемент
-## новее текущего кода. "corrupt" — файл есть, но не читается, .bak не
-## помог и снимка прежнего сохранения нет.
-## data — сводка v1 (hero/map/world/events/quests), meta — метаданные слота.
+## Read a slot. An empty dictionary — nothing to read. "version" — the element
+## is newer than the current code. "corrupt" — the file exists but does not read, .bak
+## did not help and there is no snapshot of the previous save.
+## data — the v1 summary (hero/map/world/events/quests), meta — the slot metadata.
 static func load_slot(slot: String) -> Dictionary:
 	var hero := _read_part(slot, HERO_FILE)
 	if hero.is_empty() and FileAccess.file_exists(part_path(slot, HERO_FILE)):
-		# Файл есть, а читать его нечем: пробуем снимок прежнего сохранения
-		# и перечитываем — дальше путь один и тот же.
+		# The file exists but there is nothing to read it with: we try the snapshot of the
+		# previous save and re-read — after that the path is the same.
 		if restore_from_previous(slot):
 			hero = _read_part(slot, HERO_FILE)
 	if hero.has("error"):
@@ -247,8 +247,8 @@ static func load_slot(slot: String) -> Dictionary:
 	var map_doc := _read_part(slot, MAP_FILE)
 	if map_doc.has("error"):
 		return map_doc
-	# Карта необязательна: старые слоты и ручные сценарии пишут только героя.
-	# Пустой/битый map.json не должен хоронить рабочее сохранение.
+	# The map is optional: old slots and manual scenarios write only the hero.
+	# An empty/corrupt map.json must not bury a working save.
 	if map_doc.is_empty():
 		map_doc = {}
 	var proc_doc := _read_part(slot, PROCESS_FILE)
@@ -266,21 +266,21 @@ static func load_slot(slot: String) -> Dictionary:
 	return {"meta": meta, "data": data}
 
 
-## Элемент слота пишется через JsonSafe.encode (Vector2/Color → теги `__t`),
-## поэтому при чтении его данные обязаны пройти обратное декодирование.
-## Без этого позиция героя приезжает словарём {"__t": "v2", ...}, и герой
-## после загрузки встаёт на спавн карты.
+## A slot element is written through JsonSafe.encode (Vector2/Color → `__t` tags),
+## so when reading, its data must go through the reverse decoding.
+## Without that the hero position arrives as a dictionary {"__t": "v2", ...}, and the hero
+## stands at the map spawn after loading.
 static func _decoded(v: Variant) -> Variant:
 	var out: Variant = JsonSafe.decode(v)
-	# Двойные теги: старые слоты держали закодированный блок уже внутри
-	# `data` (JsonSafe.encode(payload) целиком), и decode останавливался на
-	# внешнем слое.
+	# Double tags: old slots held the encoded block already inside
+	# `data` (JsonSafe.encode(payload) as a whole), and decode stopped at the
+	# outer layer.
 	if out is Dictionary and (out as Dictionary).has(JsonSafe.TAG):
 		return JsonSafe.decode(out)
 	return out
 
 
-## Записать один элемент атомарно: .tmp → flush → старый в .bak → rename.
+## Write one element atomically: .tmp → flush → old to .bak → rename.
 static func _write_part(slot: String, part: String, doc: Dictionary) -> String:
 	var path := part_path(slot, part)
 	var tmp := path + ".tmp"
@@ -303,7 +303,7 @@ static func _write_part(slot: String, part: String, doc: Dictionary) -> String:
 	return ""
 
 
-## Текущий файл → .bak; прежний .bak предварительно убирается.
+## The current file → .bak; the previous .bak is removed beforehand.
 static func _recycle_to_bak(path: String) -> void:
 	var bak := bak_of(path)
 	if FileAccess.file_exists(bak):
@@ -312,9 +312,9 @@ static func _recycle_to_bak(path: String) -> void:
 		ProjectSettings.globalize_path(bak))
 
 
-## Копия файла с тем же порядком (.tmp → flush → старый в .bak → rename).
-## Копирование поверх самого себя — no-op: без этой проверки файл уезжал бы
-## в `.bak`, а на его месте не оставалось ничего (слот терял карту).
+## A copy of the file with the same order (.tmp → flush → old to .bak → rename).
+## Copying over itself is a no-op: without this check the file would go
+## to `.bak` and nothing would remain in its place (the slot lost the map).
 static func _atomic_copy(src: String, dst: String) -> bool:
 	if src == dst:
 		return FileAccess.file_exists(src)
@@ -334,7 +334,7 @@ static func _atomic_copy(src: String, dst: String) -> bool:
 		ProjectSettings.globalize_path(dst)) == OK
 
 
-## Прочитать элемент слота: документ, {} (файла нет) или {"error": …}.
+## Read a slot element: a document, {} (no file) or {"error": …}.
 static func _read_part(slot: String, part: String) -> Dictionary:
 	var path := part_path(slot, part)
 	var doc := _read_doc(path)
@@ -347,7 +347,7 @@ static func _read_part(slot: String, part: String) -> Dictionary:
 		return doc
 	if not FileAccess.file_exists(path):
 		return {}
-	# Основной файл есть, но не читается: если .bak читается — чиним молча.
+	# The main file exists but does not read: if .bak reads — we repair silently.
 	var bak := _read_doc(bak_of(path))
 	if bak.is_empty():
 		return {"error": "corrupt"}
@@ -364,7 +364,7 @@ static func _reads_ok(path: String) -> bool:
 	return not _read_doc(path).is_empty()
 
 
-## Откатить слот на .bak. true, если откат выполнен.
+## Roll the slot back to .bak. true if the rollback was performed.
 static func restore_from_backup(slot: String) -> bool:
 	for part in PARTS:
 		if _restore_path_from_bak(part_path(slot, part)):
@@ -382,13 +382,13 @@ static func _restore_path_from_bak(path: String) -> bool:
 	return _write_raw(path, text)
 
 
-## Сломанный слот → снимок прежнего сохранения.
+## A broken slot → the snapshot of the previous save.
 ##
-## Поэлементный откат по `.bak` не спасает, когда файл испорчен впервые (нет
-## `.bak`) или испорчены все три элемента (чужой процесс писал папку).
-## `previous.json` атомарен и самодостаточен, поэтому если он есть и
-## читается — кладём его содержимое обратно во все три элемента.
-## true — слот восстановлен.
+## The per-element rollback via `.bak` does not help when the file is corrupted for the first
+## time (no `.bak`) or all three elements are corrupted (a foreign process wrote the folder).
+## `previous.json` is atomic and self-sufficient, so if it exists and
+## reads — we put its content back into all three elements.
+## true — the slot was restored.
 static func restore_from_previous(slot: String) -> bool:
 	var prev := _read_doc(prev_path(slot))
 	var data: Variant = prev.get("data", null)
@@ -409,9 +409,9 @@ static func restore_from_previous(slot: String) -> bool:
 			"quests": d.get("quests", {}),
 			"version": int(d.get("version", VERSION)),
 		})})
-	# Снимок перезаписывать НЕЛЬЗЯ: `previous.json` — последняя версия,
-	# которую не испортили; иначе следующий сбой перетрёт её зеркалом
-	# сломанного слота.
+	# The snapshot must NOT be overwritten: `previous.json` is the last version
+	# that was not corrupted; otherwise the next failure would overwrite it with a mirror
+	# of the broken slot.
 	return true
 
 
@@ -447,10 +447,10 @@ static func _write_raw(path: String, text: String) -> bool:
 	return true
 
 
-# --- Список слотов для экрана ---
+# --- Slot list for the screen ---
 
-## Метаданные всех слотов для UI. Не грузит тяжёлые данные: метаданные лежат
-## в каждом элементе слота.
+## Metadata of all slots for the UI. Does not load heavy data: the metadata lives
+## in every slot element.
 static func list_slots() -> Array:
 	ensure_dir()
 	var out: Array = []
@@ -488,7 +488,7 @@ static func _slot_meta(slot: String, hero: Dictionary, proc: Dictionary) -> Dict
 	return {"hero_name": slot}
 
 
-## Слот пуст: либо элементов нет, либо в них нет данных (удалённый слот).
+## The slot is empty: either there are no elements or they hold no data (a deleted slot).
 static func is_empty_slot(slot: String) -> bool:
 	for part in PARTS:
 		var path := part_path(slot, part)
@@ -507,9 +507,9 @@ static func has_autosave() -> bool:
 	return not is_empty_slot(AUTOSAVE_SLOT)
 
 
-## Самая свежая запись среди всех слотов. "" — сохранять нечего.
-## Сравнение по meta.stamp: порядок файлов в каталоге о порядке сохранений
-## ничего не говорит, а полагаться на него нельзя.
+## The newest record among all slots. "" — nothing to save.
+## Compared by meta.stamp: the file order in the directory says nothing
+## about the save order, and relying on it is not allowed.
 static func newest_slot() -> String:
 	var best := ""
 	var best_stamp := -1
@@ -523,9 +523,9 @@ static func newest_slot() -> String:
 	return best
 
 
-# --- Файлы мира слота ---
+# --- Slot world files ---
 
-## Главный файл карты внутри папки слота, "" — карты в слоте нет.
+## The main map file inside the slot folder, "" — there is no map in the slot.
 static func world_map_path(slot: String) -> String:
 	var dir_path := slot_dir(slot)
 	var d := DirAccess.open(dir_path)
@@ -549,9 +549,9 @@ static func world_map_path(slot: String) -> String:
 	return dir_path + str(names[0])
 
 
-## Слот удалён игроком: папка становится пустой — три элемента без данных,
-## файлы мира, `.bak` и снимок прежнего состояния убраны. Сама папка
-## остаётся: она и есть слот.
+## The slot was deleted by the player: the folder becomes empty — three elements without data,
+## the world files, `.bak` and the snapshot of the previous state are removed. The folder
+## itself stays: it IS the slot.
 static func clear_slot(slot: String) -> void:
 	var dir_path := slot_dir(slot)
 	if not DirAccess.dir_exists_absolute(dir_path):
@@ -562,8 +562,8 @@ static func clear_slot(slot: String) -> void:
 		_write_raw(part_path(slot, part), JSON.stringify(empty))
 
 
-## Убирает из папки все ФАЙЛЫ (не подкаталоги), для которых keep вернул false.
-## `.tmp` удаляются всегда: после удаления слота от них остаётся мусор.
+## Removes from the folder all FILES (not subdirectories) for which keep returned false.
+## `.tmp` files are always removed: after deleting a slot they leave junk behind.
 static func _remove_files_where(dir_path: String, keep: Callable) -> void:
 	var d := DirAccess.open(dir_path)
 	if d == null:
@@ -583,16 +583,16 @@ static func _remove_files_where(dir_path: String, keep: Callable) -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(dir_path + n))
 
 
-# --- Состав сохранения (v1) ---
+# --- Save composition (v1) ---
 
-## Собрать payload из живого состояния игры.
+## Build a payload from the live game state.
 ##
-## Отряд (Game.party) в v1 НЕ сохраняется намеренно: наёмники описаны
-## в hero.party, и без их восстановления из mercenary_db они были бы
-## мусором в партии. Вернём вместе с ними состав в v2.
+## The party (Game.party) is deliberately NOT saved in v1: mercenaries are described
+## in hero.party, and without restoring them from mercenary_db they would be
+## garbage in the party. We will bring them back together with the roster in v2.
 ##
-## systems — блоки событий/квестов, собранные вызывающим: {"events": Array,
-## "quests": Dictionary}. Без них берутся из узлов-синглтонов, если они есть.
+## systems — event/quest blocks collected by the caller: {"events": Array,
+## "quests": Dictionary}. Without them they are taken from the singleton nodes if those exist.
 static func build_payload(player, world_dict: Dictionary, world_meta: Dictionary = {},
 		systems: Dictionary = {}) -> Dictionary:
 	var hero := {
@@ -615,8 +615,8 @@ static func build_payload(player, world_dict: Dictionary, world_meta: Dictionary
 		"known_spells": player.known_spells.duplicate(true),
 		"sphere_books": player.sphere_books.duplicate(true),
 		"position": player.global_position,
-		# v2: отряд и хотбар. Призванные (lifespan > 0) не сохраняются: они
-		# временные и привязаны к жизни каста, а не к прогулке героя.
+		# v2: party and hotbar. Summoned creatures (lifespan > 0) are not saved: they
+		# are temporary and tied to the cast lifetime, not to the hero walk.
 		"party": _party_snapshot(),
 		"hotbar": Game.hotbar.duplicate(true),
 	}
@@ -633,20 +633,20 @@ static func build_payload(player, world_dict: Dictionary, world_meta: Dictionary
 			"seed": int(Game.map_seed), "zone": str(Game.map_zone),
 			"world_seed": int(Game.world_seed), "sector": str(Game.map_sector),
 			"fog": Game.fog.mask_rle() if Game.fog != null else "",
-			# Карта — целыми файлами в папке слота (решение 22.10), поэтому
-			# сохраняется путь к текущему .alm и его стабильное имя.
+			# The map is stored as whole files in the slot folder (decision 22.10), so
+			# we save the path to the current .alm and its stable name.
 			"path": str(map_files.get("path", "")),
 			"basename": str(map_files.get("basename", "")),
-			# Захваченные форпосты (пакет B): ключ включает зону/сектор/сид,
-			# поэтому словарь общий для всех карт мира, как Game.hotbar.
+			# Captured outposts (package B): the key includes zone/sector/seed,
+			# so the dictionary is shared by all world maps, like Game.hotbar.
 			"outposts": Game.outposts_captured.duplicate(),
 		},
 		"hero": hero,
 		"world": world_dict,
 		"events": events,
 		"quests": quests,
-		# Мод-профиль: что было включено на момент сохранения. По нему при
-		# загрузке видно, каких модов не хватает (см. _check_mods).
+		# Mod profile: what was enabled at the moment of saving. From it, on
+		# load, you can see which mods are missing (see _check_mods).
 		"mods": ModLoader.save_profile(),
 	}
 	var meta := {
@@ -656,8 +656,8 @@ static func build_payload(player, world_dict: Dictionary, world_meta: Dictionary
 		"day": int(world_dict.get("day", 0)),
 		"zone": str(Game.map_zone),
 		"seed": int(Game.map_seed),
-		# Unix-время записи: экран «Продолжить» обязан уметь выбрать самый
-		# свежий слот, а порядок в списке определяется только им.
+		# Unix time of writing: the "Continue" screen must be able to pick the freshest
+		# slot, and the order in the list is defined only by it.
 		"stamp": int(Time.get_unix_time_from_system()),
 	}
 	meta.merge(world_meta, true)
@@ -665,9 +665,9 @@ static func build_payload(player, world_dict: Dictionary, world_meta: Dictionary
 	return payload
 
 
-## Отряд в сейв: чистые данные, без ссылок на узлы (save-systems: сохраняем
-## состояние, а не объекты сцены). Призванные существа (lifespan > 0) —
-## временные, они не часть прогулки героя.
+## The party into the save: clean data, no node references (save-systems: we save
+## state, not scene objects). Summoned creatures (lifespan > 0) are
+## temporary, they are not part of the hero walk.
 static func _party_snapshot() -> Array:
 	var out: Array = []
 	for m in Game.party:
@@ -691,9 +691,9 @@ static func _party_snapshot() -> Array:
 	return out
 
 
-## Прочитать отряд из сейва: набор обязан существовать в units_db, иначе
-## запись отбрасывается (сейв старой версии/правка данных не должны рождать
-## «наёмника-призрака» без анимации).
+## Read the party from the save: the set must exist in units_db, otherwise
+## the record is dropped (a save of an old version / an edit of the data must not give birth to
+## a "ghost mercenary" without animation).
 static func _party_saved(v: Variant) -> Array:
 	var out: Array = []
 	if not (v is Array):
@@ -719,8 +719,8 @@ static func _party_saved(v: Variant) -> Array:
 	return out
 
 
-## Хотбар из сейва: слоты 0..8, только существующие заклинания и предметы.
-## Неизвестную запись выбрасываем — иначе клавиша молча не делает ничего.
+## Hotbar from the save: slots 0..8, only existing spells and items.
+## We drop an unknown record — otherwise the key silently does nothing.
 static func _hotbar_saved(v: Variant) -> Dictionary:
 	var out: Dictionary = {}
 	if not (v is Dictionary):
@@ -747,17 +747,17 @@ static func _hotbar_saved(v: Variant) -> Dictionary:
 	return out
 
 
-## Текущая карта игры: {"path": user:// путь к .alm, "basename": имя}.
-## Карты в файле нет (карта из main.tscn/dev) — пустые строки.
+## The current game map: {"path": user:// path to .alm, "basename": name}.
+## There is no map in the file (a map from main.tscn/dev) — empty strings.
 static func world_files() -> Dictionary:
 	var out := {"path": "", "basename": ""}
 	if Game.pending_map_path != "" and FileAccess.file_exists(Game.pending_map_path):
 		if not Game.pending_map_path.begins_with("res://"):
 			out["path"] = Game.pending_map_path
-			# Зона/сектор — часть имени, как у карт генератора
-			# (`map_<сид>_<сектор>_<раса>`). Без этого `restore_zone_map` не
-			# находил готовая-карту после выхода и возврата: имя не содержало
-			# токена сектора, и карта на старте генерировалась заново.
+			# Zone/sector — part of the name, as in the generator maps
+			# (`map_<seed>_<sector>_<race>`). Without it `restore_zone_map` did not
+			# find the ready-made map after exit and return: the name had no
+			# sector token, and the map was generated anew at start.
 			var base := Game.pending_map_path.get_file().get_basename()
 			if Game.map_sector != "" and not base.contains(Game.map_sector):
 				base += "_" + Game.map_sector
@@ -783,10 +783,10 @@ static func _hero_level(player) -> int:
 	return player.exp_to_skill(t)
 
 
-## Подготовить мир слота к загрузке ДО смены сцены: файлы карты из папки
-## слота раскладываются в user://maps/ под стабильным именем, путь кладётся
-## в Game.pending_map_path (он имеет приоритет над сидом). Карты в слоте
-## нет — остаётся путь по сиду, как и было.
+## Prepare the slot world for loading BEFORE the scene change: the map files from the
+## slot folder are laid out into user://maps/ under a stable name, the path goes
+## to Game.pending_map_path (it takes priority over the seed). There is no map in the
+## slot — the seed path stays, as before.
 static func restore_map(slot: String) -> void:
 	Game.pending_map_path = ""
 	var src := world_map_path(slot)
@@ -798,12 +798,12 @@ static func restore_map(slot: String) -> void:
 	Game.pending_map_path = MapGenerator.MAPS_DIR + "save_%s.alm" % slot
 
 
-## Карта ДРУГОЙ зоны из папки слота (переход через портал после загрузки).
-## Возвращает путь к разложенному `.alm` в user://maps/ или "" — такой зоны в
-## слоте нет, карту строим по сиду.
+## A map of ANOTHER zone from the slot folder (a portal transition after loading).
+## Returns the path to the laid-out `.alm` in user://maps/ or "" — there is no such zone in
+## the slot, we build the map by seed.
 ##
-## Ищем `<basename слота>_<зона>*.alm`: MapGenerator кладёт в имя и расу
-## города (`map_<сид>_<зона>_<раса>.alm`), поэтому сравниваем по префиксу.
+## We look for `<slot basename>_<zone>*.alm`: MapGenerator puts the city
+## race into the name too (`map_<seed>_<zone>_<race>.alm`), so we compare by prefix.
 static func restore_zone_map(slot: String, zone: String) -> String:
 	var dir_path := slot_dir(slot)
 	var d := DirAccess.open(dir_path)
@@ -812,16 +812,16 @@ static func restore_zone_map(slot: String, zone: String) -> String:
 	var slot_base := _basename_of(_read_doc(part_path(slot, MAP_FILE)).get("data", {}))
 	if slot_base == "":
 		return world_map_path(slot)
-	# Текущая карта слота уже принадлежит этой зоне (в имени есть токен
-	# сектора) — берём именно её и готовим в user://maps/ под стабильным
-	# именем. Без этого возврат на стартовую (готовую) карту генерировал
-	# новую карту по сиду.
+	# The current map of the slot already belongs to this zone (the name has the sector
+	# token) — we take exactly it and prepare it in user://maps/ under a stable
+	# name. Without that, returning to the starting (ready-made) map generated
+	# a new map by seed.
 	if slot_base.split("_").has(zone):
 		if _stage_world_files(slot, slot_dir(slot) + slot_base + ".alm", "save_%s" % slot):
 			return MapGenerator.MAPS_DIR + "save_%s.alm" % slot
-	# Имя карты — `map_<сид>_<сектор>_<раса>` (или старый `_<зона>_`).
-	# Сектор/зона — отдельный токен имени: сид у соседних секторов свой, поэтому
-	# сравнивать «сид и расу» нельзя, а уникален здесь именно сектор.
+	# The map name is `map_<seed>_<sector>_<race>` (or the old `_<zone>_`).
+	# Sector/zone is a separate name token: neighbouring sectors have their own seed, so
+	# "seed and race" cannot be compared, and what is unique here is the sector.
 	var names: Array = []
 	d.list_dir_begin()
 	var fn := d.get_next()
@@ -836,9 +836,9 @@ static func restore_zone_map(slot: String, zone: String) -> String:
 	d.list_dir_end()
 	if names.is_empty():
 		return ""
-	# Свежая карта зоны — та, что правили последней. Раньше брали
-	# алфавитно первую: после возврата на готовую карту это был старый
-	# снимок `custom_<сектор>`, а не актуальный `save_<slot>_<сектор>`.
+	# The freshest map of the zone — the one edited last. Before we took the
+	# alphabetically first one: after returning to a ready-made map that was an old
+	# `custom_<sector>` snapshot rather than the current `save_<slot>_<sector>`.
 	names.sort_custom(func(a, b):
 		var ta := FileAccess.get_modified_time(dir_path + str(a))
 		var tb := FileAccess.get_modified_time(dir_path + str(b))
@@ -854,18 +854,18 @@ static func restore_zone_map(slot: String, zone: String) -> String:
 	return MapGenerator.MAPS_DIR + dst_base + ".alm"
 
 
-## Положить карту зоны (и её sidecar-ы) в папку слота. Вызывается при
-## переходе между зонами: слот копит карты всех посещённых зон, чтобы
-## `restore_zone_map` нашёл их после перезапуска. Имя — имя самого карты
-## (`map_<сид>_<зона>_<раса>`), чтобы поиск по зоне работал.
+## Put the zone map (and its sidecars) into the slot folder. Called when
+## moving between zones: the slot accumulates the maps of all visited zones so that
+## `restore_zone_map` finds them after a restart. The name is the map own name
+## (`map_<seed>_<zone>_<race>`) so that the search by zone works.
 static func store_zone_map(slot: String, map_path: String) -> String:
 	if map_path == "" or not FileAccess.file_exists(map_path):
 		return "карты нет: %s" % map_path
 	return _mirror_world_files(slot, map_path, map_path.get_file().get_basename())
 
 
-## Имя карты из map.json. Сравнивать с именами файлов нельзя в лоб:
-## `data` закодирован JsonSafe, а часть старых слотов писала живой словарь.
+## The map name from map.json. Comparing it with file names head-on is not allowed:
+## `data` is encoded by JsonSafe, while some old slots wrote a live dictionary.
 static func _basename_of(map_data: Variant) -> String:
 	var d: Variant = _decoded(map_data)
 	if d is Dictionary:
@@ -873,11 +873,11 @@ static func _basename_of(map_data: Variant) -> String:
 	return ""
 
 
-## Разложить `.alm` и sidecar-ы из папки слота в user://maps/ под именем
-## `dst_base`. true — хотя бы один файл скопирован.
+## Lay out the `.alm` and sidecars from the slot folder into user://maps/ under the name
+## `dst_base`. true — at least one file was copied.
 ##
-## Копирование поверх самого себя (карта зоны уже лежит в user://maps/, а слот
-## брал её оттуда) — не ошибка: файл на месте и читается.
+## Copying over itself (the zone map already lies in user://maps/ and the slot
+## took it from there) is not an error: the file is in place and reads.
 static func _stage_world_files(slot: String, src: String, dst_base: String) -> bool:
 	var dst_dir := MapGenerator.MAPS_DIR
 	DirAccess.make_dir_recursive_absolute(dst_dir)
@@ -892,20 +892,20 @@ static func _stage_world_files(slot: String, src: String, dst_base: String) -> b
 	return copied > 0
 
 
-## Применить payload к игре. Вызывать ДО загрузки сцены карты: сначала
-## ставим карту (pending_map_path или сид), потом создаём мир.
+## Apply the payload to the game. Call BEFORE loading the map scene: first
+## we set the map (pending_map_path or seed), then create the world.
 ##
-## player может быть null - тогда применяются только Game.* (выбор героя на
-## экране character_select применяет их ДО перехода на игровую сцену, где
-## игрока ещё нет). Раньше проверка player == null стояла выше блока
-## Game.hero_*, и весь герой молча терялся.
+## player may be null - then only Game.* are applied (the hero choice on
+## the character_select screen applies them BEFORE the transition to the game scene, where
+## there is no player yet). Before, the player == null check stood above the
+## Game.hero_* block, and the whole hero was silently lost.
 ##
-## slot — слот, из которого читаем: по нему вход в игру берёт файлы карты из
-## папки сохранения. Без slot карта берётся по сиду.
-## Мод-профиль сейва против текущего набора: пропавшие и обновлённые моды —
-## предупреждение в лог, а не отказ грузить мир. Урок Space Engineers, где
-## удаление мода ломает мир: у нас ключи строковые, предметы просто не найдутся,
-## и игра обязана открыться.
+## slot — the slot we read from: the game entry takes the map files from
+## the save folder. Without slot the map is taken by seed.
+## The save mod profile against the current set: missing and updated mods are
+## a warning in the log, not a refusal to load the world. A lesson from Space Engineers,
+## where deleting a mod breaks the world: our keys are strings, the items simply will not be
+## found, and the game must still open.
 static func _check_mods(saved: Variant) -> void:
 	if not (saved is Array) or (saved as Array).is_empty():
 		return
@@ -935,11 +935,11 @@ static func apply_payload(d: Dictionary, player, slot: String = "") -> void:
 	Game.map_zone = str(map_d.get("zone", "mid"))
 	Game.world_seed = int(map_d.get("world_seed", 0))
 	Game.map_sector = str(map_d.get("sector", ""))
-	# Туман и события (19.10): применяются узлами после сборки карты.
+	# Fog and events (19.10): applied by the nodes after the map is built.
 	Game.pending_fog_rle = str(map_d.get("fog", ""))
 	Game.pending_outposts_captured = {}
-	# Сейв — источник правды: захваты прежнего героя не должны «протечь» в
-	# загружаемый слот (даже если у карт совпал сид).
+	# The save is the source of truth: the captures of the previous hero must not "leak" into
+	# the slot being loaded (even if the maps share a seed).
 	Game.outposts_captured.clear()
 	var cap: Variant = map_d.get("outposts", {})
 	if cap is Dictionary:
@@ -960,7 +960,7 @@ static func apply_payload(d: Dictionary, player, slot: String = "") -> void:
 	Game.hero_gender = str(h.get("gender", Game.hero_gender))
 	Game.hero_name = str(h.get("name", Game.hero_name))
 	var cid := str(h.get("character_id", Game.hero_character_id))
-	# Миграция старых Аллодовских id → портреты рас.
+	# Migration of the old Allods ids → race portraits.
 	var legacy := {
 		"mfighter": "human_m_war", "ffighter": "human_f_war",
 		"mmage": "human_m_mage", "fmage": "human_f_mage",
@@ -976,18 +976,18 @@ static func apply_payload(d: Dictionary, player, slot: String = "") -> void:
 	if st is Dictionary:
 		Game.hero_stats = (st as Dictionary).duplicate(true)
 	Game.hero_start_book = str(h.get("start_book", ""))
-	# Позиция героя: всегда кладём в Game (для player==null и для apply до
-	# пересборки сцены). Раньше поле писалось в файл, но не применялось —
-	# герой после «Продолжить» всегда вставал на спавн.
+	# Hero position: always put it into Game (for player==null and for apply before
+	# the scene is rebuilt). Before, the field was written to the file but never applied —
+	# the hero always stood at spawn after "Continue".
 	var pos_v: Variant = h.get("position", null)
 	if pos_v is Vector2:
 		Game.load_position = pos_v as Vector2
 		Game.load_position_valid = true
 	else:
 		Game.clear_load_position()
-	# Runtime-состояние для нового Player после change_scene: золото/склад/
-	# экипировка/HP/навыки. Без этого _ready игрока снова выдавал стартовый
-	# набор, и сейв «терял» инвентарь, хотя файл был цел.
+	# Runtime state for the new Player after change_scene: gold/inventory/
+	# equipment/HP/skills. Without it the player _ready handed out the starter
+	# set again, and the save "lost" the inventory although the file was intact.
 	Game.hero_save = {
 		"max_hp": int(h.get("max_hp", 100)),
 		"max_mana": int(h.get("max_mana", 50)),
@@ -1000,8 +1000,8 @@ static func apply_payload(d: Dictionary, player, slot: String = "") -> void:
 		"known_spells": _dict(h.get("known_spells", {})),
 		"sphere_books": _dict(h.get("sphere_books", {})),
 	}
-	# v2: отряд и хотбар кладутся в статики Game — узлы создаёт game.gd, когда
-	# карта уже собрана (наёмнику нужен проходимый тайл, а не пустая сцена).
+	# v2: party and hotbar are put into Game statics — the nodes are created by game.gd when
+	# the map is already built (a mercenary needs a walkable tile, not an empty scene).
 	Game.pending_party = _party_saved(h.get("party", []))
 	Game.hotbar = _hotbar_saved(h.get("hotbar", {}))
 	if player == null:
