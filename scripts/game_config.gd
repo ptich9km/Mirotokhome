@@ -1,82 +1,82 @@
 extends RefCounted
 class_name GameConfig
 ##
-## Игровой конфиг: все числа, которые можно крутить без правки кода.
+## Game config: every number that can be tweaked without touching the code.
 ##
-## Замысел — от файла `import/rates.properties` (настройки сервера AION).
-## Оттуда взяты удачные решения: множитель урона и множители HP/PW по тирам
-## мобов. Отброшено лишнее: в AION ~80% файла — это `regular/premium/vip`,
-## три копии одного множителя ради монетизации; у нас повторять нечего.
+## The idea comes from the file `import/rates.properties` (AION server settings).
+## The good decisions were taken from there: the damage multiplier and the HP/PW multipliers
+## per mob tier. The rest was dropped: in AION ~80% of the file is `regular/premium/vip`,
+## three copies of one multiplier for monetisation; we have nothing to repeat.
 ##
-## Где лежит:
-##   res://assets/config/game.cfg  — эталоны, в репозитории
-##   user://config/game.cfg        — твои правки, вне git, перекрывают res
+## Where it lives:
+##   res://assets/config/game.cfg  — the reference copy, in the repository
+##   user://config/game.cfg        — your edits, outside git, override res
 ##
-## Правила, заложенные специально:
-##   1. Любой ключ имеет значение по умолчанию. Опечатка в конфиге не должна
-##      ронять игру — берём дефолт и пишем предупреждение в лог.
-##   2. Дефолты равны тем числам, что были зашиты в код. Появление конфига
-##      ничего не меняет в поведении игры, только делает числа видимыми.
-##   3. Конфиг читается при старте. Горячей перезагрузки нет.
+## Rules baked in on purpose:
+##   1. Every key has a default value. A typo in the config must not
+##      crash the game — we take the default and log a warning.
+##   2. The defaults equal the numbers that were hardcoded. Adding the config
+##      changes nothing in the game behaviour, it only makes the numbers visible.
+##   3. The config is read at start. There is no hot reload.
 ##
 
-## Пути. USER_PATH — то, что ты крутишь руками.
+## Paths. USER_PATH is the one you edit by hand.
 const RES_PATH := "res://assets/config/game.cfg"
 const USER_PATH := "user://config/game.cfg"
 
-## Значения по умолчанию = текущие числа из кода (правило 2).
-## Порядок ключей здесь = порядок секций в .cfg.
+## Default values = the current numbers from the code (rule 2).
+## The key order here = the section order in .cfg.
 const DEFAULTS := {
 	"combat": {
-		"hit_base": 70,             # база попадания, %
-		"hit_soften": 5,            # смягчение: шанс = base*(att+soft)/(def+soft)
+		"hit_base": 70,             # hit base, %
+		"hit_soften": 5,            # softening: chance = base*(att+soft)/(def+soft)
 		"hit_min": 5,
 		"hit_max": 95,
-		"damage_multiplier": 1.0,   # глобальный множитель урона (взят из AION)
-		"attack_cooldown": 1.0,     # раньше продублировано 1.0 в трёх файлах
-		"enemy_defense_div": 25,    # было max_hp/25
-		"enemy_attack_dmg_div": 2,  # было damage/2
-		"enemy_attack_hp_div": 30,  # было max_hp/30
-		"enemy_absorption_div": 40, # было max_hp/40
-		"protection_max": 95,       # потолок сопротивления стихии, %
+		"damage_multiplier": 1.0,   # global damage multiplier (taken from AION)
+		"attack_cooldown": 1.0,     # before, 1.0 was duplicated in three files
+		"enemy_defense_div": 25,    # it was max_hp/25
+		"enemy_attack_dmg_div": 2,  # it was damage/2
+		"enemy_attack_hp_div": 30,  # it was max_hp/30
+		"enemy_absorption_div": 40, # it was max_hp/40
+		"protection_max": 95,       # elemental resistance cap, %
 	},
 	"magic": {
-		"sp_offset": 15.0,          # SP = навык + разум - offset
-		"staff_mana_cost": 4,       # ману за удар посоха
+		"sp_offset": 15.0,          # SP = skill + mind - offset
+		"staff_mana_cost": 4,       # mana per staff hit
 		"chain_min_targets": 4,
 		"chain_max_targets": 6,
 		"chain_radius": 160.0,
-		"auto_heal_ratio": 0.45,    # авто-лечение, когда HP/макс ниже порога
-		"auto_buff_interval": 2.0,  # сек между проверками авто-баффов
-		"npc_heal_cooldown": 6.0,   # маги-НПЦ: пауза между лечениями, сек
-		"npc_heal_percent": 0.12,   # маги-НПЦ: доля максимального HP за лечение
+		"auto_heal_ratio": 0.45,    # auto-heal when HP/max is below the threshold
+		"auto_buff_interval": 2.0,  # seconds between auto-buff checks
+		"npc_heal_cooldown": 6.0,   # NPC mages: pause between heals, seconds
+		"npc_heal_percent": 0.12,   # NPC mages: share of max HP per heal
 	},
 	"economy": {
-		"start_gold": 20,           # ТУТ БЫЛО 20. Этап 2 поднимет до 400:
-		"sell_price_div": 2,        # продажа = цена / div (зашито в двух местах)
+		"start_gold": 20,           # IT USED TO BE 20. Stage 2 will raise it to 400:
+		"sell_price_div": 2,        # sale = price / div (hardcoded in two places)
 		"loot_gold_multiplier": 1.0,
 	},
 	"loot": {
-		"enemy_potion_chance": 45,   # было randi()%100 < 45
+		"enemy_potion_chance": 45,   # it was randi()%100 < 45
 		"enemy_gear_chance": 35,
 		"npc_citizen_potion_chance": 50,
 		"npc_guard_potion_chance": 25,
-		# npc_guard_gear_chance УДАЛЁН 07.10: NPC роняют сломанную вещь
-		# ВСЕГДА, а не с шансом. Шанс был частью старой модели, где NPC
-		# роняли целую вещь - теперь она сломанная по определению.
+		# npc_guard_gear_chance was REMOVED on 07.10: NPCs always drop a broken
+		# item, not with a chance. The chance was part of the old model where NPCs
+		# dropped a whole item — now it is broken by definition.
 	},
 	"progression": {
 		"unit_exp_base": 100,
 	},
 	"npc": {
-		# Радиус агро городской стражи на Серых. 190 -> 133 (-30%):
-		# стража стоит по краям города и не должна хватать Серых по площади.
+		# Aggro radius of the city guard against Greys. 190 -> 133 (-30%):
+		# the guard stands at the city edge and must not scoop up Greys over an area.
 		"guard_aggro_radius": 133.0,
-		# Дальше этого от поста страж не преследует Серого.
+		# Beyond this distance from the post a guard does not chase a Grey.
 		"guard_leash": 380.0,
 	},
 	"movement": {
-		"accel": 1100.0,   # дублируется в player.gd и enemy.gd
+		"accel": 1100.0,   # duplicated in player.gd and enemy.gd
 		"decel": 1800.0,
 		"speed_multiplier": 1.0,
 	},
@@ -84,62 +84,62 @@ const DEFAULTS := {
 		"interval": 60.0,
 	},
 	"world": {
-		# Календарь живой игры (28.10): сколько РЕАЛЬНЫХ секунд длится один
-		# игровой день. До этого день мира тикал только в headless sim_runner,
-		# поэтому в игре стояли лента мира, угроза и ротация заданий
-		# ([quests] offer_ttl_days). 300 с = 5 минут: ротация заданий ~15 мин.
-		# 0 или меньше — календарь выключен (прежнее поведение).
+		# Calendar of the live game (28.10): how many REAL seconds one
+		# game day lasts. Before that the world day only ticked in the headless sim_runner,
+		# so in the game the world feed, the threat and the quest rotation stood still
+		# ([quests] offer_ttl_days). 300 s = 5 minutes: quest rotation ~15 min.
+		# 0 or less — the calendar is off (the previous behaviour).
 		"day_seconds": 300.0,
 	},
 	"metal": {
-		# absorption_min/max — потолок поглощения по металлу. Ссылается тест
-		# game_config_smoke; сам игровой код их пока не читает.
+		# absorption_min/max — the absorption cap per metal. Referenced by the
+		# game_config_smoke test; the game code does not read them yet.
 		"absorption_min": 1,
 		"absorption_max": 6,
 
-		# --- Формула «металл -> статы» (этап 2, 03.10) -------------------
-		# Исторически масштабировщик от цены слитка копировал damage из
-		# образца, и 554 из 651 предметов фракционных металлов оказались
-		# побайтовыми клонами. Теперь статы = база(тип, качество) x
-		# (слиток/слиток_реф) ^ exp.
-		# Степени подобраны по существующим «настоящим» металлам, чтобы
-		# переезд НЕ ломал их: bronze 1.00, iron 1.40 (было 1.38).
-		# Монотонность по цене слитка получается САМОЙ по себе, а не
-		# таблицей, которую надо поддерживать руками.
-		# Пакет A (28.10): 16 фракционных металлов удалены, формула
-		# осталась и по-прежнему управляет статами bronze/iron/steel/gold
-		# (слитки 2/9/20/80); охраняет её тест metal_stats_smoke.
-		"reference_metal": "bronze",   # слиток с множителем ровно 1.0
+		# --- The "metal -> stats" formula (stage 2, 03.10) -------------------
+		# Historically the ingot-price scaler copied damage from the
+		# template, and 554 of the 651 faction metal items turned out to be
+		# byte-for-byte clones. Now stats = base(type, quality) x
+		# (ingot/ingot_ref) ^ exp.
+		# The exponents were fitted to the existing "real" metals so that the
+		# migration would NOT break them: bronze 1.00, iron 1.40 (was 1.38).
+		# Monotonicity by ingot price follows BY ITSELF rather than from
+		# a table that has to be maintained by hand.
+		# Package A (28.10): 16 faction metals were removed, the formula
+		# stayed and still drives the stats of bronze/iron/steel/gold
+		# (ingots 2/9/20/80); metal_stats_smoke guards it.
+		"reference_metal": "bronze",   # ingot with a multiplier of exactly 1.0
 		"damage_exp": 0.22,
-		"to_hit_exp": 0.10,            # точность растёт медленнее урона
+		"to_hit_exp": 0.10,            # accuracy grows slower than damage
 		"defence_exp": 0.22,
 		"absorption_exp": 0.15,
 	},
 	"craft": {
-		# --- Мастерская (07.10, пакет 1) ---------------------------------
-		# Кузнец/Портной/Мастер. Металл в игре существует ТОЛЬКО как
-		# производная от убитых НПЦ: сломанная вещь -> переплавка -> слиток
-		# -> рецепт. Лавка СЕЙЧАС ещё продаёт броню и оружие — это осознанный
-		# долг пакета 2 (см. AGENTS.md), не баг мастерской.
+		# --- Workshop (07.10, package 1) ---------------------------------
+		# Blacksmith/Tailor/Master. Metal exists in the game ONLY as
+		# a derivative of killed NPCs: broken item -> smelting -> ingot
+		# -> recipe. The shop STILL sells armour and weapons — that is a deliberate
+		# debt of package 2 (see AGENTS.md), not a workshop bug.
 
-		# Выход переработки сломанной вещи. Количество НЕ зависит от цены
-		# металла - кратность выражается качеством вещи, иначе появилась бы
-		# четвёртая валюта. Проверено по ценам слитков: bronze 2 ... gold 80
-		# (пакет A: фракционные металлы удалены), разброс в 40 раз
-		# закрывается тремя ступенями.
-		"yield_broken": 1,          # слитков из брони/оружия: Broken
+		# Output of smelting a broken item. The amount does NOT depend on the
+		# metal price — the ratio is expressed by the item quality, otherwise a
+		# fourth currency would appear. Verified against ingot prices: bronze 2 ... gold 80
+		# (package A: faction metals removed), the 40-fold spread
+		# is covered by three steps.
+		"yield_broken": 1,          # ingots from armour/weapons: Broken
 		"yield_broken_fine": 2,     # Broken Fine
 		"yield_broken_rare": 4,     # Broken Rare
-		# Кузнец даёт ткань «вразрез» с портным: много ткани нужно портному,
-		# поэтому из металлической вещи её выходит мало. Обмен асимметричен
-		# намеренно - это и есть баланс двух профессий.
+		# The blacksmith gives cloth as a counterweight to the tailor: the tailor needs
+		# a lot of cloth, so little of it comes out of a metal item. The exchange is asymmetric
+		# on purpose — that is the balance of the two professions.
 		"fabric_from_armor": 1,
 		"fabric_from_armor_fine": 2,
 		"fabric_from_armor_rare": 2,
 		"fabric_from_weapon": 0,
 		"fabric_from_weapon_fine": 1,
 		"fabric_from_weapon_rare": 1,
-		# Одежда мага: ткань + магическая эссенция.
+		# Mage clothing: cloth + magic essence.
 		"fabric_from_garment": 2,
 		"fabric_from_garment_fine": 4,
 		"fabric_from_garment_rare": 6,
@@ -147,12 +147,12 @@ const DEFAULTS := {
 		"essence_from_garment_fine": 2,
 		"essence_from_garment_rare": 3,
 
-		# --- Шансы трёх уровней крафта -------------------------------
-		# 80 / 15 / 5 на навыке 0. Навык сдвигает так, что сумма всегда 100:
-		#   обычная    = chance_ordinary - ordinary_step * навык
-		#   улучшенная = chance_improved + improved_step * навык
-		#   мастерская = chance_master  + master_step  * навык
-		# Навык 20 -> 52 / 33 / 15. Обычная зажата снизу floor_ordinary.
+		# --- Chances of the three crafting levels -------------------------------
+		# 80 / 15 / 5 at skill 0. Skill shifts them so the sum is always 100:
+		#   ordinary   = chance_ordinary - ordinary_step * skill
+		#   improved   = chance_improved + improved_step * skill
+		#   masterwork = chance_master  + master_step  * skill
+		# Skill 20 -> 52 / 33 / 15. The ordinary chance is clamped from below by floor_ordinary.
 		"chance_ordinary": 80.0,
 		"chance_improved": 15.0,
 		"chance_master": 5.0,
@@ -161,69 +161,69 @@ const DEFAULTS := {
 		"master_step": 0.5,
 		"floor_ordinary": 5.0,
 
-		# Множители характеристик крафтовых вещей. Текстура у всех трёх
-		# уровней ОДНА, различаются только числа и шейдер свечения.
+		# Stat multipliers of crafted items. All three
+		# levels share ONE texture, only the numbers and the glow shader differ.
 		"tier_improved_mult": 1.15,
 		"tier_master_mult": 1.35,
 
-		# --- Навыки крафта ---------------------------------------------
-		# Опыт за создание вещи. Формула роста уровня общая с боевыми
-		# навыками (1.1^n в player.skill_to_exp) - она сама замедляет рост.
+		# --- Crafting skills ---------------------------------------------
+		# Experience for creating an item. The level growth formula is shared with the combat
+		# skills (1.1^n in player.skill_to_exp) — it slows growth by itself.
 		"xp_per_craft": 20,
 		"xp_per_recycle": 4,
-		"xp_tier_bonus": 15,       # доп. опыт за улучшенную/мастерскую вещь
+		"xp_tier_bonus": 15,       # extra experience for an improved/masterwork item
 
-		# Мастер по улучшениям - третья вкладка. Включена 08.10: игрок
-		# просил «полностью сделаем».
+		# The master of upgrades - the third tab. Enabled 08.10: the player
+		# asked to "do it completely".
 		"master_enabled": 1,
 
-		# --- Дроп -------------------------------------------------------
-		# Шанс эссенции с Серых живёт НЕ здесь, а в assets/config/
-		# loot_tables.json рядом с gear_chance/potion_chance: он зависит от
-		# семейства (зверь / насекомое / нежить / чудовище), и держать
-		# половину таблицы в конфиге, а половину в json - это два источника
-		# правды на одно число.
-		"boss_intact_chance": 12,  # босс/дракон роняет ЦЕЛУЮ вещь вместо сломанной
+		# --- Drops -------------------------------------------------------
+		# The essence chance for Greys does NOT live here but in assets/config/
+		# loot_tables.json next to gear_chance/potion_chance: it depends on the
+		# family (beast / insect / undead / monster), and keeping
+		# half the table in the config and half in json is two sources of
+		# truth for one number.
+		"boss_intact_chance": 12,  # boss/dragon drops a WHOLE item instead of a broken one
 	},
 	"spawn": {
-		# Размер и плотность города. city_gap — зазор между зданиями, его
-		# решение от 26.09 («1 -> 2») в коде НЕ было применено: _footprint_fits
-		# содержал зашитый 1, а city_layout_smoke подстроился под факт
-		# (`gap >= CITY_GAP - 1`) и молча разрешал ему расти.
+		# City size and density. city_gap — the gap between buildings, its
+		# 26.09 decision ("1 -> 2") was NOT applied in the code: _footprint_fits
+		# contained a hardcoded 1, and city_layout_smoke adapted to the fact
+		# (`gap >= CITY_GAP - 1`) and silently allowed it to grow.
 		#
-		# Замер 03.10: при радиусе 8 и зазоре 2 в овал влезает только 3 из 5
-		# функциональных зданий (магазин/таверна/кузня/школа/алхимия) — то
-		# есть город мог остаться без кузни. Поэтому радиус поднят до 9:
-		# зазор 2 сохраняется, все пять зданий помещаются (проверено: 8 -> 3
-		# из 5, 9 -> 5 из 5).
+		# Measurement 03.10: with radius 8 and gap 2 only 3 of 5
+		# functional buildings fit into the oval (shop/tavern/forge/school/alchemy) — that
+		# is, the city could be left without a forge. So the radius was raised to 9:
+		# gap 2 is preserved, all five buildings fit (verified: 8 -> 3
+		# of 5, 9 -> 5 of 5).
 		"herb_region_grid": 4,
 		"herb_min_distance": 4,
 		"city_radius": 9,
 		"city_gap": 2,
 
-		# Респавн Серых. Замер 03.10: респавна НЕ БЫЛО вообще — убил всех в зоне,
-		# и зона становилась пустой навсегда. Теперь держим лимит.
-		# gray_target — сколько живых Серых держим; берётся из зоны, если 0.
-		# gray_respawn_min_dist — клеток от героя, чтобы зверь не появлялся на глазах.
-		# 07.10 пакет B: target поднят, карты не должны быть «пустыми».
+		# Grey respawn. Measurement 03.10: there was NO respawn at all — you killed everyone in the zone,
+		# and the zone stayed empty forever. Now we keep a limit.
+		# gray_target — how many live Greys we keep; taken from the zone if 0.
+		# gray_respawn_min_dist — cells from the hero so a beast does not appear in plain sight.
+		# 07.10 package B: the target was raised, the maps must not be "empty".
 		"gray_target": 150,
 		"gray_respawn_seconds": 20.0,
 		"gray_respawn_min_dist": 26,
 	},
 	"mob_tier": {
-		# Множители по тирам мобов (идея из AION). Тиров Серых в игре ещё нет,
-		# место заведено заранее — см. аудит, пакет C.
+		# Multipliers per mob tier (an idea from AION). Grey tiers do not exist in the game yet,
+		# the place is reserved in advance — see the audit, package C.
 		"hp_multiplier": 1.0,
 		"damage_multiplier": 1.0,
 	},
 	"zone": {
-		# Плоские ключи вида zone.<name>.<key> — ConfigFile не умеет вложенные
-		# секции, поэтому зоны живут одной секцией с префиксом.
+		# Flat keys of the form zone.<name>.<key> — ConfigFile has no nested
+		# sections, so the zones live in one section with a prefix.
 		#
-		# ВАЖНО: значения ниже = ТЕКУЩЕЕ поведение генератора, а не желаемое.
-		# Сейчас зоны различаются только по Серым (GRAY_ZONE), а стражи и
-		# горожане одинаковы везде. Этап баланса поднимет Серых в ранних зонах,
-		# этап спавна разведёт стражей по зонам. Пока дефолты = как было.
+		# IMPORTANT: the values below = the CURRENT generator behaviour, not the desired one.
+		# Right now the zones differ only by Greys (GRAY_ZONE), while the guards and
+		# the townsfolk are the same everywhere. The balance stage will raise the Greys in the early zones,
+		# the spawn stage will spread the guards over the zones. For now the defaults = as before.
 		"start.gray_count_min": 40,     "start.gray_count_max": 60,
 		"start.gray_hp_min": 25,       "start.gray_hp_max": 45,
 		"start.gray_damage_min": 4,    "start.gray_damage_max": 6,
@@ -233,7 +233,7 @@ const DEFAULTS := {
 		"start.citizen_hp": 30,
 		"start.citizen_count_min": 6, "start.citizen_count_max": 9,
 		"start.captain_hp": 120,       "start.captain_damage": 12,
-		"start.interest_points": 0,    # руины/стоянки/святилища. Зона новичка остаётся тихой: точки рядом со стартом убивают смысл первого города.
+		"start.interest_points": 0,    # ruins/camps/shrines. The beginner zone stays quiet: points near the start kill the point of the first city.
 		"start.poi_hp": 60,           "start.poi_damage": 6,
 		"start.tree_density": 0.18,
 
@@ -277,122 +277,122 @@ const DEFAULTS := {
 		"faction.tree_density": 0.20,
 	},
 	"events": {
-		# Динамические события на карте героя (19.10): стычки NPC vs NPC
-		# с таймером жизни в РЕАЛЬНЫХ секундах (день мира слишком груб для
-		# двухминутной стычки — [world] day_seconds); маркер события виден на
-		# миникарте всегда.
-		"enabled": 1,           # включено после проверки 19.10; 0 = выкл
-		"spawn_period": 45.0,   # сек между попытками спавна
-		"spawn_chance": 35,     # % шанс события на попытку
-		"max_active": 2,        # максимум одновременных событий на карте
+		# Dynamic events on the hero map (19.10): NPC vs NPC skirmishes
+		# with a lifetime in REAL seconds (the world day is too coarse for
+		# a two-minute skirmish — [world] day_seconds); the event marker is always
+		# visible on the minimap.
+		"enabled": 1,           # enabled after the 19.10 check; 0 = off
+		"spawn_period": 45.0,   # seconds between spawn attempts
+		"spawn_chance": 35,     # % chance of an event per attempt
+		"max_active": 2,        # maximum simultaneous events on the map
 		"ttl_seconds_min": 90,
 		"ttl_seconds_max": 240,
-		"spawn_min_dist": 400,  # px от героя до места события
+		"spawn_min_dist": 400,  # px from the hero to the event site
 		"spawn_max_dist": 900,
-		"members_min": 2,       # размер одной группы стычки
+		"members_min": 2,       # size of one skirmish group
 		"members_max": 3,
 	},
 	"quests": {
-		# Квесты главы города (22.10): офферы по сиду карты, ротация по дню
-		# мира, награда = золото + репутация фракции + могущество мага +
-		# чертёж за сложное задание.
+		# City head quests (22.10): offers by map seed, rotation by the world
+		# day, reward = gold + faction reputation + mage power +
+		# a blueprint for a hard quest.
 		"enabled": 1,
-		"offer_slots": 3,          # сколько офферов держит один город
-		"max_active": 5,           # сколько квестов можно взять одновременно
-		"offer_ttl_days": 3,       # оффер живёт столько дней мира, потом ротация
-		"urgent_seconds": 120.0,   # срок срочного задания, реальные секунды
+		"offer_slots": 3,          # how many offers one city holds
+		"max_active": 5,           # how many quests can be taken at once
+		"offer_ttl_days": 3,       # an offer lives this many world days, then rotates
+		"urgent_seconds": 120.0,   # time limit of an urgent quest, real seconds
 		"blueprint_min_difficulty": 3,
 		"kill_elite_hp_mult": 2.5,
 		"kill_elite_dmg_mult": 1.5,
-		"gray_kill_base": 4,       # база количества в "убей N особей"
-		"rep_base": 5,             # репутация фракции за сложность 1
-		"power_base": 0.2,         # могущество мага за сложность 1
-		"prep_min_dist": 6,        # клеток от героя до цели при спавне
+		"gray_kill_base": 4,       # base amount in "kill N creatures"
+		"rep_base": 5,             # faction reputation for difficulty 1
+		"power_base": 0.2,         # mage power for difficulty 1
+		"prep_min_dist": 6,        # cells from the hero to the target at spawn
 		"prep_max_dist": 22,
 	},
 	"reputation": {
-		# Репутация героя как пропуск к товарам (28.10). Ключи оси — раса
-		# города ("humans"/"ork"/"necro"/"druid"), её пишут квесты главы
-		# ([quests] rep_base = 5 за сложность 1).
+		# Hero reputation as a pass to goods (28.10). The axis keys are the city
+		# race ("humans"/"ork"/"necro"/"druid"), written by the head quests
+		# ([quests] rep_base = 5 for difficulty 1).
 		#
-		# Пороги выбирались по темпу: один сложный квест даёт 15, средний 9,
-		# лёгкий 5. Тир 1 = 1 сложный квест, тир 3 = 6 сложных.
-		"tier_1": 15,        # второй тир наёмников, рецепты в магазине
-		"tier_2": 40,        # третий тир наёмников, эльфийские свитки
-		"tier_3": 80,        # четвёртый тир наёмников
-		"discount_1": 5,     # скидка магазина, % (накопительно по тирам)
+		# The thresholds were chosen by pacing: one hard quest gives 15, a medium one 9,
+		# an easy one 5. Tier 1 = 1 hard quest, tier 3 = 6 hard ones.
+		"tier_1": 15,        # second mercenary tier, recipes in the shop
+		"tier_2": 40,        # third mercenary tier, elven scrolls
+		"tier_3": 80,        # fourth mercenary tier
+		"discount_1": 5,     # shop discount, % (cumulative across the tiers)
 		"discount_2": 10,
 		"discount_3": 15,
-		"elven_rep": 40,     # с какой репутации продаются эльфийские свитки
-		"inn_tier_cost": 40, # доплата за тир наёмника, золото
+		"elven_rep": 40,     # from which reputation elven scrolls are sold
+		"inn_tier_cost": 40, # surcharge per mercenary tier, gold
 	},
 	"outpost": {
-		# Форпосты фракций (пакет B, 28.10). Лагерь вне города: шатёр расы,
-		# костёр и стража. Зачистка всех стражников = захват форпоста.
+		# Faction outposts (package B, 28.10). A camp outside the city: the race tent,
+		# a campfire and guards. Clearing all the guards = capturing the outpost.
 		#
-		# В стартовой зоне форпостов нет вовсе (решение игрока): новичок
-		# должен встречать только Серых.
-		"per_map": 3,        # лагерей на карту (кроме стартовой зоны)
-		"guards_min": 3,     # стражников в лагере
+		# There are no outposts in the starting zone at all (player decision): a beginner
+		# must meet only Greys.
+		"per_map": 3,        # camps per map (except the starting zone)
+		"guards_min": 3,     # guards in a camp
 		"guards_max": 5,
-		"rep_penalty": 5,    # репутация фракции за каждого убитого стражника
-		"capture_gold": 40,  # золото за захват форпоста (сверху лута со стражи)
+		"rep_penalty": 5,    # faction reputation for every guard killed
+		"capture_gold": 40,  # gold for capturing an outpost (on top of the guards loot)
 	},
 	"debug": {
-		# Отладочные переключатели (0 = выкл, 1 = вкл). Ключи заведены, чтобы
-		# не править код ради отладки и не оставлять в сборке мусор.
+		# Debug toggles (0 = off, 1 = on). The keys exist so that
+		# you do not edit code for debugging and do not leave junk in a build.
 		#
-		# perf: профилировщик кадра (29.10). Печатает раз в 2 с таблицу
-		# «мс на кадр» по блокам: ИИ стражей/врагов, поиск пути, ховер,
-		# сетка расталкивания, туман, квесты, события, UI. Включённый
-		# профилировщик сам стоит времени — для замеров, не для игры.
+		# perf: frame profiler (29.10). Every 2 s it prints a table of
+		# "ms per frame" by block: guard/enemy AI, pathfinding, hover,
+		# the separation grid, fog, quests, events, UI. An enabled
+		# profiler costs time itself — for measurements, not for playing.
 		"perf": 0,
 		#
-		# all_magic: все 31 заклинание + бесконечная мана. До 03.10 это был
-		# жёсткий `static var debug_magic = true` в game.gd — то есть сборка
-		# для беты отдавала всю магию, и отключить её без правки кода было
-		# нельзя. Теперь это просто ключ.
+		# all_magic: all 31 spells + infinite mana. Until 03.10 this was a
+		# hard `static var debug_magic = true` in game.gd — that is, the beta build
+		# handed out all the magic, and it could not be turned off without editing the code.
+		# Now it is just a key.
 		"all_magic": 1,
 		#
-		# fog_of_war: туман войны на карте героя (19.10, FogOfWar). Радиус
-		# видимости ~14 клеток, исследованное остаётся приглушённым, враги
-		# вне видимости скрыты. Включён после проверки игрока 19.10.
+		# fog_of_war: fog of war on the hero map (19.10, FogOfWar). Visibility
+		# radius ~14 cells, explored terrain stays dimmed, enemies
+		# outside the visible area are hidden. Enabled after the player check on 19.10.
 		"fog_of_war": 1,
 		#
-		# show_coords: подпись координат в HUD. По умолчанию выключена —
-		# на экране она выглядела как отладочная, из-за чего сборка читалась
-		# как debug-сборка, а не как игра.
+		# show_coords: a coordinate label in the HUD. Off by default —
+		# on screen it looked like a debug thing, which made the build read
+		# as a debug build rather than a game.
 		"show_coords": 0,
 	},
 	"archmage": {
-		# Великий маг фракции (пакет 3.0, docs/lore/gdd_archmage.md).
+		# Faction great mage (package 3.0, docs/lore/gdd_archmage.md).
 		#
-		# ВАЖНО про decay_base/decay_threat: это спад ЗА ОДИН ТИК, а тик идёт
-		# каждые sim_interval секунд. В сутках 86400/sim_interval тиков, поэтому
-		# спад в сутки = decay * 86400/sim_interval.
+		# IMPORTANT about decay_base/decay_threat: this is the decay PER TICK, and a tick runs
+		# every sim_interval seconds. A day has 86400/sim_interval ticks, therefore
+		# the daily decay = decay * 86400/sim_interval.
 		#
-		# Первая версия была 0.02 + 0.06, и это давало 4.32 спада в СУТКИ
-		# (4320 тиков * 0.02) — фракция падала с 60 до 0 за 14 дней, а держать
-		# её требовало 216 слитков в день. Прогон tests/sim_archmage_stakes.py
-		# показал настоящие числа; см. коммит с этим ключом.
-		"sim_interval": 20.0,     # сек между тиками мага
-		"decay_base": 0.0005,     # спад за тик при global_threat = 0  -> 2.16/день
-		"decay_threat": 0.0015,   # спад за тик при global_threat = 1  -> 8.64/день
-		# Ставки платы. Зелье сильнее слитка намеренно: то, что нужно игроку,
-		# нужно и фракции — это и есть конфликт выбора.
-		"stake_ingot": 1.0,       # слиток любого металла
-		"stake_gold": 1.0,        # за gold_per_stake единиц золота
-		"stake_potion": 1.5,      # зелье
-		"gold_per_stake": 100,    # сколько золота даёт 1.0 платы
-		"power_start": 60.0,      # стартовое могущество
+		# The first version was 0.02 + 0.06, and that gave 4.32 decay per DAY
+		# (4320 ticks * 0.02) — the faction fell from 60 to 0 in 14 days, and sustaining
+		# it took 216 ingots a day. The run tests/sim_archmage_stakes.py
+		# showed the real numbers; see the commit that introduced this key.
+		"sim_interval": 20.0,     # seconds between mage ticks
+		"decay_base": 0.0005,     # decay per tick at global_threat = 0  -> 2.16/day
+		"decay_threat": 0.0015,   # decay per tick at global_threat = 1  -> 8.64/day
+		# Payment stakes. A potion is stronger than an ingot on purpose: what the player needs
+		# the faction needs too — that is the conflict of choice.
+		"stake_ingot": 1.0,       # an ingot of any metal
+		"stake_gold": 1.0,        # for gold_per_stake units of gold
+		"stake_potion": 1.5,      # a potion
+		"gold_per_stake": 100,    # how much gold 1.0 of payment gives
+		"power_start": 60.0,      # starting power
 		"power_max": 100.0,
-		"tier_1": 35.0,           # порог ступени 1 (offensive)
+		"tier_1": 35.0,           # threshold of stage 1 (offensive)
 		"tier_2": 65.0,
 		"tier_3": 90.0,
 	},
 	"stress": {
-		# Стресс-тест движка (игрок 07.10): 1000×1000, ×100 деревьев/НПЦ.
-		# enabled=1 только для прогона; в проде 0.
+		# Engine stress test (player 07.10): 1000×1000, ×100 trees/NPCs.
+		# enabled=1 only for a run; 0 in production.
 		"enabled": 0,
 		"map_size": 1000,
 		"tree_count": 83700,
@@ -409,8 +409,8 @@ static var _unknown_keys: PackedStringArray = PackedStringArray()
 
 
 static func load_all() -> void:
-	## Читает res-эталон, поверх — пользовательский файл. Ошибка любого из
-	## них не фатальна: игра идёт на дефолтах.
+	## Reads the res reference, then the user file on top. An error in either
+	## is not fatal: the game runs on the defaults.
 	_loaded = true
 	_unknown_keys = PackedStringArray()
 	var cfg := ConfigFile.new()
@@ -457,7 +457,7 @@ static func getf(section: String, key: String) -> float:
 	return float(d)
 
 
-## Ключ зоны вида "start.gray_hp_min" живёт в секции [zone].
+## A zone key like "start.gray_hp_min" lives in the [zone] section.
 static func zonei(zone: String, key: String) -> int:
 	return geti("zone", "%s.%s" % [zone, key])
 
@@ -470,7 +470,7 @@ static func unknown_keys() -> PackedStringArray:
 	return _unknown_keys
 
 
-## Все известные ключи — для валидатора и дампа значений.
+## All known keys — for the validator and the value dump.
 static func known_keys() -> Array[String]:
 	var out: Array[String] = []
 	for section in DEFAULTS:
@@ -479,8 +479,8 @@ static func known_keys() -> Array[String]:
 	return out
 
 
-## Скопировать эталон из репозитория в пользовательский файл, чтобы его
-## можно было крутить руками. Идемпотентно: если файл уже есть — не трогаем.
+## Copy the reference from the repository into the user file so it
+## can be edited by hand. Idempotent: if the file already exists, we do not touch it.
 static func seed_user_file() -> bool:
 	if FileAccess.file_exists(USER_PATH):
 		return false
@@ -491,8 +491,8 @@ static func seed_user_file() -> bool:
 	var dir := USER_PATH.get_base_dir()
 	if not DirAccess.dir_exists_absolute(dir):
 		DirAccess.make_dir_recursive_absolute(dir)
-	# set_value для каждого известного ключа, иначе save() создаст пустой файл:
-	# ConfigFile не хранит комментарии, а нам нужен читаемый файл.
+	# set_value for every known key, otherwise save() would create an empty file:
+	# ConfigFile does not store comments, and we need a readable file.
 	for section in DEFAULTS:
 		for key in DEFAULTS[section]:
 			cfg.set_value(section, key, (DEFAULTS[section] as Dictionary)[key])
