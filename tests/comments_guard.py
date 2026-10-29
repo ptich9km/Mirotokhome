@@ -165,13 +165,16 @@ def gd_split(text: str, strip_shader_comments: bool = False) -> tuple[str, list[
             continue
 
         # Inside a string literal.
-        if strip_shader_comments and text.startswith("//", i):
-            j = i + 1
-            while j < n and text[j] != "\n":
-                j += 1
-            i = j
-            continue
         if quote in ('"""', "'''"):
+            # GLSL comments live inside triple-quoted shader blocks only. Doing
+            # this for single-line strings would eat the closing quote after
+            # "res://..." and desync the lexer for the rest of the file.
+            if strip_shader_comments and text.startswith("//", i):
+                j = i + 1
+                while j < n and text[j] != "\n":
+                    j += 1
+                i = j
+                continue
             if text.startswith(quote, i):
                 code.append(quote)
                 i += 3

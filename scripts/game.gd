@@ -6,102 +6,102 @@ class_name Game
 @onready var camera: Camera2D = $Camera2D
 @onready var ui: CanvasLayer = $UI
 
-## Единое направление между двумя точками. Vector2.normalized() на НУЛЕВОМ векторе
-## (юнит стоит ровно на вейпоинте) печатает в консоль C++-предупреждение
-## «Vector2 cannot be normalized, the elements must be finite», поэтому нормализуем
-## только вектор длиной больше порога.
+## Single direction between two points. Vector2.normalized() on a ZERO vector
+## (a unit standing exactly on the waypoint) prints a C++ warning to the console
+## "Vector2 cannot be normalized, the elements must be finite", so we normalize
+## only a vector longer than the threshold.
 static func safe_dir(from: Vector2, to: Vector2, fallback: Vector2 = Vector2.ZERO) -> Vector2:
 	var d := to - from
 	if d.length_squared() < 0.0001:
 		return fallback
 	return d.normalized()
 
-## Компасная октанта вектора направления: 0..7, ЕДИНСТВЕННЫЙ источник конвенции.
+## Compass octant of a direction vector: 0..7, the SINGLE source of the convention.
 ##
-## ИНДЕКСАЦИЯ КОНТРИКЛОКОВАЯ, 0 = СЕВЕР (вверх экрана):
-##   0=север  7=северо-восток  6=восток  5=юго-восток
-##   4=юг     3=юго-запад      2=запад  1=северо-запад
+## INDEXING IS COUNTER-CLOCKWISE, 0 = NORTH (top of the screen):
+##   0=north  7=northeast  6=east  5=southeast
+##   4=south  3=southwest  2=west  1=northwest
 ##
-## Вынесено из UnitAnim.set_direction_vec, потому что конвенцию теперь читают
-## ДВА бэкенда анимации (спрайт-листы и 2D-риг). Дублировать формулу означало
-## бы, что рано или поздно риг начнёт смотреть не туда — а направление в бою
-## игровая информация, а не украшение. Сторож: tests/anim_contract_smoke.gd.
+## Extracted from UnitAnim.set_direction_vec because the convention is now read by
+## TWO animation backends (sprite sheets and the 2D rig). Duplicating the formula would
+## mean that sooner or later the rig would face the wrong way — and direction in combat
+## is game information, not decoration. Guard: tests/anim_contract_smoke.gd.
 static func unit_octant(dir_vec: Vector2) -> int:
 	if dir_vec.length_squared() < 0.001:
 		return -1
-	var ang := rad_to_deg(dir_vec.angle())  # -180..180, 0 = вправо
+	var ang := rad_to_deg(dir_vec.angle())  # -180..180, 0 = right
 	var d := int(round((ang - 90.0) / 45.0)) % 8
 	if d < 0:
 		d += 8
 	return d
 
-## Ближайший кардинальный октант: диагональ схлопывается на соседний кардинал.
-## Нужен ригу, где нарисовано 3 ракурса (юг/восток/север), а мир запрашивает 8.
+## Nearest cardinal octant: a diagonal collapses onto the neighbouring cardinal.
+## Needed by the rig, which has 3 drawn views (south/east/north) while the world asks for 8.
 static func snap_octant_to_cardinal(octant: int) -> int:
 	if octant < 0:
 		return -1
 	return posmod(int(round(float(octant) / 2.0)) * 2, 8)
 
-## Разрешён ли шаг юнита по карте (общая проходимость для игрока и NPC).
+## Whether a unit may step on the map (shared walkability for the player and NPCs).
 static var is_paused: bool = false
 static var player_target: Vector2 = Vector2.ZERO
 static var enemies: Array = []
-static var npcs: Array = []               # мирные жители (Npc) вне Game.enemies
-static var hero: Node2D = null            # игрок (для наёмников/лута)
+static var npcs: Array = []               # peaceful residents (Npc) outside Game.enemies
+static var hero: Node2D = null            # the player (for mercenaries/loot)
 static var fog: FogOfWar = null         # fog of war of the hero map (19.10)
 static var pending_fog_rle: String = "" # saved fog mask, applied by FogOfWar
 static var pending_events: Array = []   # saved events, applied by EventSystem
-## Сохранённые квесты (офферы, активные, история): их применяет QuestSystem.
-## Пусто — новая игра; applied=true — блок уже прочитан (не применяем дважды).
+## Saved quests (offers, active, history): QuestSystem applies them.
+## Empty — a new game; applied=true — the block was already read (do not apply twice).
 static var pending_quests: Dictionary = {}
 static var pending_quests_applied: bool = false
-## Форпосты фракций (пакет B, 28.10): что стоит на текущей карте и какие уже
-## захвачены. Ключ захвата включает карту (зона|сектор|сид), потому что id
-## лагеря ("op0") повторяется на каждой карте.
+## Faction outposts (package B, 28.10): what stands on the current map and which are already
+## captured. The capture key includes the map (zone|sector|seed) because the
+## camp id ("op0") repeats on every map.
 static var outposts: Array = []
 static var outposts_captured: Dictionary = {}
 static var pending_outposts_captured: Dictionary = {}
-static var _hit_sfx_ms: int = 0          # троттл звука попадания (единая точка урона)
+static var _hit_sfx_ms: int = 0          # throttling of the hit sound (single damage point)
 ## Slot the running game came from ("" — new game). The slot folder holds the
 ## map files, so a zone change reuses its maps instead of regenerating them.
 static var loaded_slot: String = ""
-static var party: Array = []              # наёмники (Mercenary) из таверны
-## Отряд из сейва v2: данные без узлов. game.gd создаёт наёмников, когда карта
-## уже собрана (наёмнику нужен проходимый тайл). Пусто — восстанавливать нечего.
+static var party: Array = []              # mercenaries (Mercenary) from the tavern
+## Squad from a v2 save: data without nodes. game.gd creates the mercenaries when the map
+## is already built (a mercenary needs a walkable tile). Empty — nothing to restore.
 static var pending_party: Array = []
 static var mana_regen_accum: float = 0.0
 static var _trauma: float = 0.0
 static var _trauma_t: float = 0.0
 static var action_mode: String = "none"  # none, follow, attack, guard
 static var action_target: Node2D = null
-static var pending_scroll: Dictionary = {}   # прицеливание свитка: {"spell","item_key"}
-## Контекст для тематического курсора (cursor_layer.gd):
-## "" — обычный, "cast" — прицел (по pending_*), "buy" — магазин,
-## "work" — мастерская. Ставится в ui.gd open_shop/open_workshop.
+static var pending_scroll: Dictionary = {}   # scroll targeting: {"spell","item_key"}
+## Context for the themed cursor (cursor_layer.gd):
+## "" — normal, "cast" — aiming (by pending_*), "buy" — shop,
+## "work" — workshop. Set in ui.gd open_shop/open_workshop.
 static var cursor_context: String = ""
-static var pending_spell: Dictionary = {}    # выбор заклинания из книги: {"name"}
-static var hotbar: Dictionary = {}           # быстрый вызов: слот 0..8 (клавиши 1..9) -> имя заклинания
-## Авто-волшебство мага: настройки в Esc → Настройки (раздел «Магия»).
-## auto_buff_tier: base (ускорение+щит) | medium (+благословение и защиты) | max (+невидимость).
-## auto_targets:  self (только я) | party (я и группа) | party_neutral (я, группа и нейтраллы).
-## auto_spell — ручное предпочтение лечения (ПКМ по книге); если пусто, берётся
-## первое изученное заклинание лечения.
+static var pending_spell: Dictionary = {}    # spell selection from the book: {"name"}
+static var hotbar: Dictionary = {}           # quick slot: slot 0..8 (keys 1..9) -> spell name
+## Mage auto-magic: settings in Esc → Settings (the "Magic" section).
+## auto_buff_tier: base (haste+shield) | medium (+blessing and wards) | max (+invisibility).
+## auto_targets:  self (me only) | party (me and the party) | party_neutral (me, party and neutrals).
+## auto_spell — manual healing preference (RMB on the book); if empty, the
+## first learned healing spell is taken.
 static var auto_spell: String = ""
 static var auto_buff_tier: String = "base"
 static var auto_targets: String = "party"
-## Воин: ЕДИНСТВЕННЫЙ свиток, помеченный правой кнопкой в книге магии.
-## Автоматически кастуется только на себя, по кулдауну заклинания, тратя 1 свиток.
+## Warrior: the ONLY scroll marked with the right button in the magic book.
+## Cast automatically on self only, on the spell cooldown, spending 1 scroll.
 static var auto_scroll_item: String = ""
-static var _spell_targeting_frame: int = -1  # кадр, когда начато прицеливание (защита от двойного каста)
-## Отладочные переключатели. Источник правды — game.cfg [debug], чтобы не
-## править код ради каждой отладки. Значение читается ОДИН раз при старте;
-## тесты и дебаг присваивают переменную напрямую как раньше (перекрытие).
+static var _spell_targeting_frame: int = -1  # the frame when targeting started (protection against a double cast)
+## Debug switches. The source of truth is game.cfg [debug] so that each debug
+## session does not require editing code. The value is read ONCE at start;
+## tests and debugging assign the variable directly as before (override).
 static var debug_magic: bool = GameConfig.geti("debug", "all_magic") != 0
-## Профилировщик кадра (29.10, разбор просадки в городе). Включается
-## [debug] perf = 1 или присваиванием Game.perf_enabled = true из теста.
-## Копит МИКРОсекунды по именам блоков и число вызовов, раз в 2 с печатает
-## таблицу «мс на кадр». Нужен, чтобы не гадать, кто ест кадр: ИИ, поиск пути,
-## ховер, туман или UI.
+## Frame profiler (29.10, analysing the city slowdown). Enabled by
+## [debug] perf = 1 or by assigning Game.perf_enabled = true from a test.
+## Accumulates MICROseconds per block name and the call count, every 2 s it prints
+## a "ms per frame" table. Needed so we do not guess who eats the frame: AI, pathfinding,
+## hover, fog or UI.
 static var perf_enabled: bool = GameConfig.geti("debug", "perf") != 0
 static var perf_usec: Dictionary = {}
 static var perf_calls: Dictionary = {}
@@ -111,28 +111,28 @@ static var _perf_wall_usec: int = 0
 static var _perf_last_usec: int = 0
 
 
-## Начать замер блока. Возвращает метку времени (0 — профилировщик выключен).
+## Start a block measurement. Returns a timestamp (0 — the profiler is off).
 static func perf_begin() -> int:
 	return Time.get_ticks_usec() if perf_enabled else 0
 
 
-## Закрыть замер блока: key — имя блока в таблице.
+## Close a block measurement: key — the block name in the table.
 static func perf_end(key: String, t0: int) -> void:
 	if not perf_enabled or t0 == 0:
 		return
 	perf_usec[key] = int(perf_usec.get(key, 0)) + (Time.get_ticks_usec() - t0)
 
 
-## Счётчик событий (например, число вызовов поиска пути), не время.
+## Event counter (for example, the number of pathfinding calls), not time.
 static func perf_count(key: String, amount: int = 1) -> void:
 	if not perf_enabled:
 		return
 	perf_calls[key] = int(perf_calls.get(key, 0)) + amount
 
 
-## Кадр закончился: раз в 2 секунды печатаем таблицу и обнуляем счётчики.
-## Wall-время считается между вызовами (обычно из Game._process), то есть это
-## реальная длительность кадра, а не сумма замеренных блоков.
+## The frame ended: every 2 seconds we print the table and reset the counters.
+## Wall time is measured between calls (usually from Game._process), that is, it is
+## the real frame duration, not the sum of the measured blocks.
 static func perf_frame() -> void:
 	if not perf_enabled:
 		return
@@ -174,7 +174,7 @@ static func perf_frame() -> void:
 	_perf_wall_usec = 0
 	_perf_since_ms = now
 
-# --- Защитные баффы (книги/свитки защиты, Shield): уменьшение входящего урона ---
+# --- Defensive buffs (ward books/scrolls, Shield): incoming damage reduction ---
 static func apply_shield(unit: Node2D, strength: int, seconds: float) -> void:
 	if not is_instance_valid(unit):
 		return
@@ -193,24 +193,24 @@ static func shield_reduce(unit: Node2D, dmg: int) -> int:
 		print("%s: щит поглотил весь урон!" % unit.name)
 	return out
 
-## --- Общая математика боя: характеристики -> шанс/урон (для ЛЮБОГО юнита) ---
+## --- Shared combat math: stats -> chance/damage (for ANY unit) ---
 
-## Шанс попадания, % — ОТНОСИТЕЛЬНАЯ формула.
+## Hit chance, % — a RELATIVE formula.
 ##
-## Раньше было `50 + атака − защита` (кламп 5..95). Это абсолютная разность, и
-## она ломалась, как только в бой включилась экипировка: тяжёлая броня даёт
-## defence 14, щит ещё 4, и герой с бронёй держал 50 + 8 − 23 = 35 %, а гоблин
-## с атакой 4 — 5 % (нижний кламп). Вся броня мира упиралась в пол, и
-## «статы экипировки не работают» выглядело как «работает, но незаметно».
+## It used to be `50 + attack − defense` (clamped 5..95). That is an absolute difference, and
+## it broke as soon as equipment entered combat: heavy armour gives
+## defence 14, a shield another 4, and an armoured hero held 50 + 8 − 23 = 35 %, while a goblin
+## with attack 4 got 5 % (the lower clamp). All the armour in the world hit the floor, and
+## "equipment stats do not work" looked like "it works, but you cannot feel it".
 ##
-## Теперь шанс — отношение силы атаки к силе защиты, поэтому одинаково
-## работает и для гоблина (атака 4), и для тролля (атака 30), и для брони.
-##   равные статы            -> BASE (70 %)
-##   защита вдвое выше       -> примерно вдвое ниже
-##   атака вдвое выше        -> упёрётся в MAX
-## Константы комбат-формул перенесены в GameConfig (assets/config/game.cfg),
-## чтобы их можно было крутить без правки кода. Значения по умолчанию равны
-## прежним константам, поэтому поведение игры не меняется.
+## Now the chance is the ratio of attack power to defense power, so it works the same
+## for a goblin (attack 4), for a troll (attack 30) and for armour.
+##   equal stats             -> BASE (70 %)
+##   defense twice as high   -> roughly twice as low
+##   attack twice as high    -> pinned to MAX
+## Combat formula constants moved to GameConfig (assets/config/game.cfg)
+## so they can be tuned without editing code. The default values equal
+## the previous constants, so game behaviour does not change.
 static func hit_chance(attack: int, defense: int) -> int:
 	var soften := GameConfig.geti("combat", "hit_soften")
 	var a := float(attack) + soften
@@ -220,7 +220,7 @@ static func hit_chance(attack: int, defense: int) -> int:
 	return clampi(int(round(float(GameConfig.geti("combat", "hit_base")) * a / d)),
 		GameConfig.geti("combat", "hit_min"), GameConfig.geti("combat", "hit_max"))
 
-## Промах? Юниты с методами get_attack()/get_defense() участвуют полностью.
+## Miss? Units with get_attack()/get_defense() methods take part fully.
 static func is_miss(attacker: Node2D, defender: Node2D) -> bool:
 	var atk := 0
 	var dfs := 0
@@ -230,22 +230,22 @@ static func is_miss(attacker: Node2D, defender: Node2D) -> bool:
 		dfs = int(defender.call("get_defense"))
 	return randi() % 100 >= hit_chance(atk, dfs)
 
-## Точность юнита (если есть метод — иначе 0).
+## Unit attack (if the method exists — otherwise 0).
 static func unit_attack(u: Node2D) -> int:
 	return int(u.call("get_attack")) if u != null and u.has_method("get_attack") else 0
 
-## Защита юнита (уклонение/броня).
+## Unit defense (evasion/armour).
 static func unit_defense(u: Node2D) -> int:
 	return int(u.call("get_defense")) if u != null and u.has_method("get_defense") else 0
 
-## Поглощение (материал/броня): get_absorption() — есть у героя и врагов.
+## Absorption (material/armour): get_absorption() — present on the hero and enemies.
 static func unit_absorption(u: Node2D) -> int:
 	return int(u.call("get_absorption")) if u != null and u.has_method("get_absorption") else 0
 
-## Сопротивление стихии в ПРОЦЕНТАХ: сколько процентов магического урона
-## не пройдёт. Так в оригинале (main.txt: «shows the percentage of the
-## magical effects… which will not affect the character») и это не ломается
-## от больших чисел, в отличие от плоского вычитания.
+## Elemental resistance in PERCENT: what percentage of magic damage
+## does not get through. That is how the original does it (main.txt: "shows the percentage of the
+## magical effects… which will not affect the character") and it does not break
+## on large numbers, unlike flat subtraction.
 static func unit_protection(u: Node2D, sphere: String) -> int:
 	if u == null or sphere == "":
 		return 0
@@ -254,10 +254,10 @@ static func unit_protection(u: Node2D, sphere: String) -> int:
 		return clampi(int(u.call(m)), 0, GameConfig.geti("combat", "protection_max"))
 	return 0
 
-## --- Сила магии: ОДИН стат на урон, лечение, щит и вампиризм ---
-## Формула оригинала (Allods II): SP = навык сферы + разум - 30.
-## Кламп в ноль обязателен: при навыке 5 и разуме 9 выходит -16, а оригинал
-## на таких значениях ломается (SP>255 — баг переполнения байта).
+## --- Magic power: ONE stat for damage, healing, shield and vampirism ---
+## The original formula (Allods II): SP = sphere skill + mind - 30.
+## Clamping to zero is mandatory: with skill 5 and mind 9 it comes out at -16, and the original
+## breaks at such values (SP>255 — a byte overflow bug).
 static func spell_power(caster: Node2D, sphere: String) -> float:
 	if caster == null or not is_instance_valid(caster):
 		return 0.0
@@ -270,17 +270,17 @@ static func spell_power(caster: Node2D, sphere: String) -> float:
 	return maxf(0.0, skill + mind - GameConfig.getf("magic", "sp_offset")) + float(StatusEffects.stat_flat(caster, "power"))
 
 
-## Кулдаун заклинания от ПОЗНАНИЯ магии, а не только база из spells_db.
+## Spell cooldown from KNOWLEDGE of magic, not just the base from spells_db.
 ##
-## База (`cooldown` в базе) — «повторное применение того же заклинания». Но у
-## опытного мага то же заклинание должно быть готово раньше: навык сферы и
-## разум (та же SP-формула, что у урона) сокращают кулдаун до 50 % на высоком
-## навыке. Нижняя граница 0.5 с — иначе на максимуме получается спам.
+## The base (`cooldown` in the database) is "reapplying the same spell". But for
+## an experienced mage the same spell should be ready sooner: sphere skill and
+## mind (the same SP formula as for damage) cut the cooldown down to 50 % at high
+## skill. The lower bound of 0.5 s — otherwise the maximum turns into spam.
 ##
-## power_override — для СВИТКОВ: «познание» берётся из силы заклинания,
-## заложенной в свиток (50 обычный, 100 эльфийский), а не из навыка воина.
-## То есть кулдаун считается по магии внутри свитка, а не «по применению
-## предмета» (отдельного кулдауна предмета в проекте нет и не нужно).
+## power_override — for SCROLLS: "knowledge" is taken from the spell power
+## embedded in the scroll (50 normal, 100 elven), not from the warrior's skill.
+## That is, the cooldown is computed from the magic inside the scroll, not from "using
+## an item" (the project has no per-item cooldown and does not need one).
 static func spell_cooldown(caster: Node2D, spell_name: String,
 		power_override: float = -1.0) -> float:
 	var base := SpellDB.cooldown_of(spell_name)
@@ -292,70 +292,70 @@ static func spell_cooldown(caster: Node2D, spell_name: String,
 	return maxf(0.5, base * (1.0 - 0.5 * power / 100.0))
 
 
-## Порог силы магии: SP = навык сферы + разум - offset.
+## Magic power threshold: SP = sphere skill + mind - offset.
 ##
-## offset лежит в GameConfig: [magic] sp_offset.
+## offset lives in GameConfig: [magic] sp_offset.
 ##
-## В оригинале Allods II здесь стоит 30, и константа верная ДЛЯ ОРИГИНАЛЬНЫХ
-## статов: у мага 6-го уровня разум ~84. Наши статы в 7–10 раз меньше
-## (маг на старте mind = 13, навык сферы = 5), и при смещении 30 получалось
-## 5 + 13 - 30 = -12, то есть SP ноль на всю раннюю игру: заклинания не
-## росли с уровнем вообще, и Fire_Ball (база 26) бил ровно базой. Это подтвердил
-## ручной аудит.
-## Смещение 15 выбрано игроком: на старте мага SP = 3, при прокачке навыка
-## сферы 5 -> 15 получаем SP = 13 (+13 % урона), к 30 — SP = 28. Форма
-## оригинала сохранена, масштаб приведён к нашим числам.
-## Урон заклинания с учётом силы кастера и множителя заклинания.
+## In the original Allods II this is 30, and the constant is right FOR THE ORIGINAL
+## stats: a level 6 mage has mind ~84. Our stats are 7–10 times smaller
+## (a starting mage has mind = 13, sphere skill = 5), and with an offset of 30 it came out
+## to 5 + 13 - 30 = -12, that is SP zero for the whole early game: spells did not
+## grow with level at all, and Fire_Ball (base 26) hit for exactly its base. A manual
+## audit confirmed this.
+## Offset 15 was chosen by the player: a starting mage has SP = 3, and as the
+## sphere skill goes 5 -> 15 we get SP = 13 (+13 % damage), by 30 — SP = 28. The shape
+## of the original is kept, the scale is brought to our numbers.
+## Spell damage taking the caster power and the spell multiplier into account.
 ## final = base * power_coef * (1 + spell_power/100)
 static func spell_damage(caster: Node2D, spell_name: String, sphere: String,
 		base_damage: int, power_override: float = -1.0) -> int:
 	var coef := SpellDB.power_coef_of(spell_name)
-	# Свиток несёт свою силу (50 — обычный, 100 — эльфийский). Раньше это
-	# число не использовалось вовсе: свиток кастовался навыком героя, и
-	# эльфийский не был сильнее обычного.
+	# A scroll carries its own power (50 — normal, 100 — elven). Before, this
+	# number was not used at all: the scroll was cast with the hero's skill, and
+	# the elven one was not stronger than the normal one.
 	var power := power_override if power_override >= 0.0 else spell_power(caster, sphere)
 	var raw := float(base_damage) * coef * (1.0 + power / 100.0)
 	return maxi(SpellDB.min_damage_of(spell_name), int(round(raw)))
 
 
-## ЕДИНАЯ точка урона: физика -> поглощение; магия -> защиты стихий; далее щит и HP.
-## Возвращает фактически нанесённый урон (0 — если всё поглощён/промах).
+## The SINGLE damage point: physical -> absorption; magic -> elemental defenses; then shield and HP.
+## Returns the damage actually dealt (0 — if everything was absorbed/missed).
 static func deal_damage(target: Node2D, dmg: int, kind: String, sphere: String, attacker: Node2D) -> int:
 	if not is_instance_valid(target) or dmg <= 0:
 		return 0
-	# Глобальный множитель урона - главный рычаг баланса (идея из AION).
-	# Применяется здесь, в ЕДИНОЙ точке урона, поэтому множитель одинаков
-	# для ближнего боя, магии, снарядов и AoE.
+	# Global damage multiplier - the main balance lever (idea from AION).
+	# Applied here, at the SINGLE damage point, so the multiplier is the same
+	# for melee, magic, projectiles and AoE.
 	var final := int(round(float(dmg) * GameConfig.getf("combat", "damage_multiplier")))
 	if kind == "magic":
-		# Сопротивление — процент от урона (как в оригинале)
+		# Resistance — a percentage of the damage (as in the original)
 		var prot := unit_protection(target, sphere)
 		final = maxi(0, int(round(float(dmg) * (1.0 - float(prot) / 100.0))))
 	else:
 		final = maxi(0, final - unit_absorption(target))
 	if final <= 0:
-		# Полное поглощение ДО take_damage. Причина важна игроку: «стойкость» —
-		# защита стихии, «броня» — физический удар. Раньше обе подписи были
-		# «щит», и щит тут ни при чём (щиты считаются внутри take_damage).
+		# Full absorption BEFORE take_damage. The reason matters to the player: "resilience" is
+		# elemental defense, "armour" is a physical hit. Before, both labels were
+		# "shield", while the shield has nothing to do with it (shields are counted inside take_damage).
 		DamageNumber.show_at(target.global_position, 0,
 			"resist" if kind == "magic" else "armor")
 		return 0
 	var dealt := 0
 	if target.has_method("take_damage"):
 		dealt = target.call("take_damage", final, attacker)
-	# take_damage вернул 0 — урон съел ЩИТ внутри юнита. Показывать полное
-	# число было прямой ложью: игрок видел «40» там, где не пришлось ни одного
-	# урона. Теперь показываем, что удар дошёл, но его закрыл щит.
+	# take_damage returned 0 — a SHIELD inside the unit ate the damage. Showing the full
+	# number was an outright lie: the player saw "40" where not a single point of
+	# damage landed. Now we show that the hit arrived but the shield blocked it.
 	if not (dealt is int) or int(dealt) <= 0:
 		DamageNumber.show_at(target.global_position, 0, "absorb")
 		return 0
 	final = int(dealt)
-	# Единственное место, где рисуется урон: иначе числа дублировались
-	# в projectile.gd и enemy.gd, и показывали сырое, а не фактическое значение.
+	# The only place where damage is drawn: otherwise the numbers were duplicated
+	# in projectile.gd and enemy.gd and showed the raw value instead of the actual one.
 	DamageNumber.show_at(target.global_position, final, "damage")
 	SpellVFX.hit_flash(target)
-	# Физический удар озвучиваем в единой точке урона: так звук получают и
-	# герой, и наёмники, и стычки NPC, а не только те ветки, где его не забыли.
+	# We voice the physical hit at the single damage point: that way the hero,
+	# the mercenaries and NPC skirmishes all get the sound, not only the branches where it was not forgotten.
 	if kind != "magic":
 		var now := Time.get_ticks_msec()
 		if now - _hit_sfx_ms > 55:
@@ -368,7 +368,7 @@ static func deal_damage(target: Node2D, dmg: int, kind: String, sphere: String, 
 	return final
 
 
-## Вампиризм (Drain_Life): часть нанесённого магией урона возвращается кастеру.
+## Vampirism (Drain_Life): part of the magic damage dealt returns to the caster.
 static func _apply_vampirism(caster: Node2D, dealt: int) -> void:
 	var ratio := StatusEffects.vampirism_ratio(caster)
 	if ratio <= 0.0 or dealt <= 0:
@@ -378,7 +378,7 @@ static func _apply_vampirism(caster: Node2D, dealt: int) -> void:
 		caster.call("heal_amount", amount)
 
 
-## Нанести урон всем целям в радиусе (для областных заклинаний/взрывов).
+## Deal damage to every target in radius (for area spells/explosions).
 static func deal_damage_area(targets: Array, dmg: int, kind: String, sphere: String, attacker: Node2D) -> void:
 	for t in targets:
 		if is_instance_valid(t):
@@ -405,18 +405,18 @@ static func configure_unit_body(unit: Node2D, radius: float = 12.0) -> void:
 	if not (unit is CharacterBody2D):
 		return
 	var body := unit as CharacterBody2D
-	# Слой 1 = стены/здания/боевые юниты. Маска 1 = чувствуем layer 1.
-	# Мирные NPC (жители, маг города) после этого вызова переезжают на слой 2 —
-	# герой через них ходит, иначе в городе 30+ NPC «упираются» в толпу.
+	# Layer 1 = walls/buildings/combat units. Mask 1 = we sense layer 1.
+	# Peaceful NPCs (residents, the city mage) move to layer 2 after this call —
+	# the hero walks through them, otherwise in a city 30+ NPCs "jam" into a crowd.
 	body.collision_layer = 1
 	body.collision_mask = 1
-	# motion_mode НЕ трогаем: в top-down интуитивно хочется MOTION_MODE_FLOATING,
-	# но это проверено и отвергнуто — на dev-карте герой застревал в кармане между
-	# двумя препятствиями (fuzz_edge: 1 застревание из 62 вместо 0), потому что
-	# в GROUNDED скользящая поверхность классифицируется как «пол» и выталкивает
-	# героя из узкого места, а в FLOATING любая коллизия — глухая стена.
-	# Настоящая причина «езды по рельсам» была не в этом, а в гашении скорости
-	# целиком — починено раздельным скольжением по осям в player/enemy.
+	# We do NOT touch motion_mode: in top-down MOTION_MODE_FLOATING feels intuitive,
+	# but it was tested and rejected — on the dev map the hero got stuck in a pocket between
+	# two obstacles (fuzz_edge: 1 stuck case out of 62 instead of 0), because
+	# in GROUNDED the sliding surface is classified as "floor" and pushes
+	# the hero out of a narrow spot, while in FLOATING any collision is a blank wall.
+	# The real cause of "riding the rails" was not this but damping the velocity
+	# entirely — fixed with per-axis sliding in player/enemy.
 	var shape_node: CollisionShape2D = null
 	for child in body.get_children():
 		if child is CollisionShape2D:
@@ -431,16 +431,16 @@ static func configure_unit_body(unit: Node2D, radius: float = 12.0) -> void:
 		shape.radius = radius
 		shape_node.shape = shape
 
-## Разделение юнитов, чтобы не слипались. Раньше здесь каждый кадр
-## аллоцировал Array из ВСЕХ юнитов и мерил дистанцию до каждого —
-## на 75 врагах это O(n²) в физике. Теперь: буфер без аллокации,
-## ранний выход, мирные NPC (слой 2) не толкают друг друга.
+## Unit separation so they do not stick together. Before, every frame this
+## allocated an Array of ALL units and measured the distance to each one —
+## with 75 enemies that is O(n²) in physics. Now: an allocation-free buffer,
+## an early exit, and peaceful NPCs (layer 2) do not push each other.
 const SEP_DIST := 24.0
 const SEP_DIST_SQ := SEP_DIST * SEP_DIST
 const SEP_SKIP_SQ := 40.0 * 40.0
 static var _sep_acc := Vector2.ZERO
-## P4: пространственная сетка для separation — раз в кадр строим вёдра 64px,
-## ищем только соседей. Без этого NPC×2 снова даст O(n²) в физике.
+## P4: a spatial grid for separation — once per frame we build 64px buckets
+## and look only at neighbours. Without it NPC×2 gives O(n²) in physics again.
 const SEP_GRID_CELL := 64.0
 static var _sep_grid: Dictionary = {}
 static var _sep_grid_frame: int = -1
@@ -451,11 +451,11 @@ static func _sep_bucket_key(pos: Vector2) -> String:
 
 
 static func _sep_insert(unit) -> void:
-	# Параметр БЕЗ типа намеренно: типизированный `unit: Node2D` проверяется
-	# движком ДО входа в тело, и на освобождённом узле падает вся функция -
-	# is_instance_valid внутри уже не спасает. Жалоба игрока 09.10:
+	# The parameter is UNTYPED on purpose: a typed `unit: Node2D` is checked
+	# by the engine BEFORE entering the body, and on a freed node the whole function fails -
+	# is_instance_valid inside no longer helps. Player report 09.10:
 	# "Invalid type in function '_sep_insert' ... argument 1 (previously freed)".
-	# Сторож: tests/stale_units_smoke.gd. Источник чинится в Main._ready().
+	# Guard: tests/stale_units_smoke.gd. The source is fixed in Main._ready().
 	if unit == null or not is_instance_valid(unit) or not (unit is Node2D):
 		return
 	var key := _sep_bucket_key(unit.global_position)
@@ -516,7 +516,7 @@ static func movement_direction(unit: Node2D, desired: Vector2) -> Vector2:
 	return result.normalized() if result.length_squared() > 0.0001 else desired.normalized()
 
 
-## Один юнит: если рядом — добавить вклад в _sep_acc. Возвращает 0/1.
+## One unit: if it is nearby — add its contribution to _sep_acc. Returns 0/1.
 static func _sep_push(my_pos: Vector2, my_layer: int, other: Node) -> int:
 	if other == null or not is_instance_valid(other) or not (other is Node2D):
 		return 0
@@ -538,21 +538,21 @@ static func _sep_push(my_pos: Vector2, my_layer: int, other: Node) -> int:
 	return 1
 
 
-## Лучшее скольжение, когда полный шаг заблокирован.
+## The best slide when the full step is blocked.
 ##
-## Зачем. Раньше одно и то же было продублировано в трёх местах, и все три
-## варианта выбирали ось ПО ПОРЯДКУ (`if can_x ... elif can_y ...`), а не по
-## близости к направлению движения. При перекрытом диагональном шаге (дерево,
-## угол здания) юнит шёл строго по X, даже если «правильным» было Y. Звери у
-## деревьев дёргались лошадью: шаг в диагональ превращался в шаг по одной оси.
-## Замер 03.10 показал, что при свободном движении по диагонали 179 кадров
-## из 179 были диагональными (угол 0.998) — то есть ломало именно СКОЛЬЖЕНИЕ,
-## а не сама походка.
+## Why. Before, the same thing was duplicated in three places, and all three
+## variants picked the axis IN ORDER (`if can_x ... elif can_y ...`), not by
+## closeness to the movement direction. When a diagonal step is blocked (a tree,
+## a building corner) the unit went strictly along X, even if Y was the "right" one. Beasts near
+## trees twitched like a chess knight: a diagonal step turned into a step along one axis.
+## A measurement on 03.10 showed that in free diagonal movement 179 frames
+## out of 179 were diagonal (angle 0.998) — that is, it was the SLIDING that broke,
+## not the walk itself.
 ##
-## Возвращает единичную ось (или ZERO, если нельзя ни туда, ни сюда).
+## Returns a unit axis (or ZERO if neither way is possible).
 static func choose_slide(desired: Vector2, can_x: bool, can_y: bool) -> Vector2:
 	if can_x and can_y:
-		# Обе свободны — берём ту, что вносит большую часть движения.
+		# Both are free — take the one that contributes the larger part of the movement.
 		var wx := absf(desired.x)
 		var wy := absf(desired.y)
 		var total := wx + wy
@@ -565,48 +565,48 @@ static func choose_slide(desired: Vector2, can_x: bool, can_y: bool) -> Vector2:
 		return Vector2(0.0, signf(desired.y))
 	return Vector2.ZERO
 
-var _select_ring: SelectRing = null       # подсветка цели (ховер/атака)
-var _pending_building := ""               # здание, к которому герой подходит («вход»)
-var _pending_s: Dictionary = {}           # структура-цель ожидающего входа
+var _select_ring: SelectRing = null       # target highlight (hover/attack)
+var _pending_building := ""               # the building the hero is approaching ("entrance")
+var _pending_s: Dictionary = {}           # the structure target of a pending entrance
 var _pending_herb: HerbNode = null
-var _pending_archmage: Node2D = null      # капитан-маг, к которому подходим
-var _pending_city_head: Node2D = null     # глава города, к которому подходим
+var _pending_archmage: Node2D = null      # the captain mage we are approaching
+var _pending_city_head: Node2D = null     # the city head we are approaching
 var _save_menu: SaveMenu = null
-## Сцена уступает место главному меню или процесс завершается (_quit_to_menu/
-## _quit_app): автосейв уже записан, при сносе узла повторять его нельзя.
+## The scene gives way to the main menu or the process is closing (_quit_to_menu/
+## _quit_app): the autosave is already written, it must not be repeated when the node is freed.
 var _leaving_for_quit: bool = false
 var _autosave_accum: float = 0.0
-## Интервал автосейва. 60 с - компромисс: чаще - лишний ввод-вывод, реже -
-## можно потерять минуты прогресса при аварии. Первый автосейв приходит
-## через 60 с после старта, а не сразу, поэтому отдельного "минимального
-## времени" не нужно.
+## Autosave interval. 60 s is a compromise: more often means extra I/O, less often means
+## minutes of progress can be lost in a crash. The first autosave comes
+## 60 s after start, not immediately, so a separate "minimum
+## time" is not needed.
 const AUTOSAVE_INTERVAL := 60.0
 
-## Интервал автосейва — из конфига [autosave] interval. Константа выше
-## осталась как запасное значение и как перекрытие для тестов.
+## The autosave interval comes from config [autosave] interval. The constant above
+## remains as a fallback value and as an override for tests.
 static func autosave_interval() -> float:
 	var v := GameConfig.getf("autosave", "interval")
 	return AUTOSAVE_INTERVAL if v <= 0.0 else v
 
-# --- Выбор героя на старте (сцена character_select) ---
+# --- Hero selection at start (the character_select scene) ---
 static var hero_class: String = "warrior"   # warrior | mage
 static var hero_gender: String = "male"     # male | female
 static var hero_name: String = "Герой"
-static var hero_character_id: String = "human_m_war"  # id портрета расы
-static var hero_portrait: String = ""       # res:// путь к портрету
+static var hero_character_id: String = "human_m_war"  # race portrait id
+static var hero_portrait: String = ""       # res:// path to the portrait
 static var hero_race: String = "human"      # human | necro | druid | ork
-static var hero_stats: Dictionary = {}      # стартовые характеристики
-static var hero_start_book: String = ""     # книга простейшего заклинания школы мага
+static var hero_stats: Dictionary = {}      # starting stats
+static var hero_start_book: String = ""     # the book of the simplest spell of the mage school
 
-## Позиция героя из сохранения. Кладёт SaveSystem.apply_payload; применяет
-## _spawn_player_on_walkable после пересборки сцены (иначе герой всегда на спавне).
+## Hero position from a save. Placed by SaveSystem.apply_payload; applied by
+## _spawn_player_on_walkable after the scene is rebuilt (otherwise the hero is always at spawn).
 static var load_position: Vector2 = Vector2.ZERO
 static var load_position_valid: bool = false
 
-## Runtime-состояние героя из сейва (gold/inventory/equipped/HP/spells/...).
-## change_scene пересоздаёт Player, и _ready выдавал стартовый набор —
-## золото и инвентарь «терялись», хотя лежали в файле. Пустой словарь =
-## новая игра (стартовый gold/starter set).
+## Hero runtime state from a save (gold/inventory/equipped/HP/spells/...).
+## change_scene recreates Player, and _ready handed out the starter set —
+## gold and inventory were "lost" even though they sat in the file. An empty dictionary =
+## a new game (starting gold/starter set).
 static var hero_save: Dictionary = {}
 
 static func clear_load_position() -> void:
@@ -616,13 +616,13 @@ static func clear_load_position() -> void:
 
 static func clear_hero_save() -> void:
 	hero_save = {}
-	# Новая игра/новая карта: захваченные форпосты прежнего мира не должны
-	# «протекать» в новый (ключ включает сид, но старые ключи копились бы).
+	# New game/new map: captured outposts of the previous world must not
+	# "leak" into the new one (the key includes the seed, but old keys would pile up).
 	outposts.clear()
 	outposts_captured.clear()
 	pending_outposts_captured.clear()
 
-## Путь портрета: явный hero_portrait или сборка из character_id (с легаси-маппингом).
+## Portrait path: an explicit hero_portrait or built from character_id (with legacy mapping).
 static func hero_portrait_path() -> String:
 	if hero_portrait != "" and ResourceLoader.exists(hero_portrait):
 		return hero_portrait
@@ -635,33 +635,33 @@ static func hero_portrait_path() -> String:
 		cid = str(legacy[cid])
 	return "res://assets/hero_portraits/%s.png" % cid
 
-# --- Выбор карты ---
-## Явно запрошенный путь к .alm. Не пусто только когда путь задан вручную:
-## редактор карт (F9 «Назад в игру») или загрузка сохранения. Имеет приоритет над сидом.
+# --- Map selection ---
+## An explicitly requested .alm path. Non-empty only when the path was set by hand:
+## the map editor (F9 "Back to game") or a save load. Takes priority over the seed.
 static var pending_map_path: String = ""
-## Сид карты новой игры. 0 = карта не запрошена, AlmMap берёт запасной путь из main.tscn
-## (детерминированный dev-режим и автотесты — им случайная карта мешала бы).
+## Map seed of a new game. 0 = no map requested, AlmMap takes the fallback path from main.tscn
+## (deterministic dev mode and automated tests — a random map would get in their way).
 static var map_seed: int = 0
-static var map_zone: String = "mid"   # start | mid | hard | faction (ТИР сектора)
-## Сид мира 4x3 и текущий сектор ("s41"). map_seed выводится из них.
+static var map_zone: String = "mid"   # start | mid | hard | faction (sector TIER)
+## World seed of the 4x3 world and the current sector ("s41"). map_seed is derived from them.
 static var world_seed: int = 0
 static var map_sector: String = ""
-## Новую игру открыли через loading.tscn: main должен показать оверлей,
-## пока идёт расселение и прогрев, а не мигать пустой картой.
+## A new game was opened through loading.tscn: main must show the overlay
+## while settling and warm-up are running, not blink an empty map.
 static var startup_loading: bool = false
 
-## Куда вернуться из редактора карт по Esc/F9: главное меню или выбор героя.
-## Пустая строка — поведение по умолчанию (главное меню).
+## Where to return from the map editor on Esc/F9: the main menu or hero selection.
+## An empty string means the default behaviour (the main menu).
 static var editor_return_scene: String = ""
 
-## Настройки новой игры, переданные из редактора карт («Играть эту карту»).
-## character_select читает их один раз в _ready и очищает.
+## New game settings passed from the map editor ("Play this map").
+## character_select reads them once in _ready and clears them.
 static var start_preset: Dictionary = {}
 
 static func _world_map() -> GDScript:
 	return load("res://scripts/world/world_map.gd") as GDScript
 
-## Сид конкретного сектора от сида мира.
+## The seed of a specific sector from the world seed.
 static func sector_seed(sector_id: String) -> int:
 	if sector_id == "":
 		return map_seed
@@ -674,8 +674,8 @@ static func sector_seed(sector_id: String) -> int:
 	return int(_world_map().seed_of(world_seed, sector_id))
 
 
-## Автолоад по имени класса в headless-скрипте не резолвится (проверено
-## 23.10: "Identifier not found: WorldBus"). Берём узел из дерева.
+## An autoload by class name does not resolve in a headless script (verified
+## 23.10: "Identifier not found: WorldBus"). We take the node from the tree.
 static func _world_bus_static() -> Node:
 	var loop := Engine.get_main_loop()
 	if loop == null or not (loop is SceneTree):
@@ -686,8 +686,8 @@ static func _world_bus_static() -> Node:
 	return scene.root.get_node_or_null("WorldBus")
 
 
-## Репутация героя у фракции (расы) — для витрин: таверна и магазин (28.10).
-## Пустая раса (карта без городов) — репутации нет, витрина работает как раньше.
+## Hero reputation with a faction (race) — for storefronts: tavern and shop (28.10).
+## An empty race (a map without cities) — no reputation, the storefront works as before.
 static func hero_reputation(race: String) -> int:
 	if race == "":
 		return 0
@@ -697,19 +697,19 @@ static func hero_reputation(race: String) -> int:
 	return int(bus.state.hero_rep(race))
 
 
-# --- Форпосты фракций (пакет B переработки ковки) --------------------------
+# --- Faction outposts (forging rework package B) ---------------------------
 
-## Ключ захвата: id лагеря уникален только внутри карты, а карты у секторов
-## свои. Сид+зона+сектор остаются те же после сохранения и загрузки (имя файла
-## карты меняется на save_<slot>, поэтому имя в ключ не годится).
+## Capture key: a camp id is unique only inside a map, and sectors have their
+## own maps. Seed+zone+sector stay the same after saving and loading (the map
+## file name changes to save_<slot>, so the name does not suit the key).
 static func outpost_key(oid: String) -> String:
 	if oid == "":
 		return ""
 	return "%s|%s|%d|%s" % [str(map_zone), str(map_sector), int(map_seed), oid]
 
 
-## Перечитать форпосты карты. Вызывается после сборки/загрузки карты и ДО
-## спавна юнитов: иначе стража уже захваченных лагерей успела бы появиться.
+## Re-read the map outposts. Called after the map is built/loaded and BEFORE
+## unit spawn: otherwise the guards of already captured camps would have appeared.
 static func reload_outposts(map_node = null) -> void:
 	outposts = []
 	if map_node != null and is_instance_valid(map_node) \
@@ -717,20 +717,20 @@ static func reload_outposts(map_node = null) -> void:
 		var raw: Variant = map_node.call("outposts")
 		if raw is Array:
 			outposts = (raw as Array).duplicate(true)
-	# Захваченное пришло из сейва: переносим один раз, дальше живёт в словаре.
+	# The captured state came from a save: we import it once, then it lives in the dictionary.
 	if not pending_outposts_captured.is_empty():
 		for key in pending_outposts_captured:
 			outposts_captured[str(key)] = true
 		pending_outposts_captured.clear()
 
 
-## Захвачен ли форпост текущей карты.
+## Whether an outpost of the current map is captured.
 static func is_outpost_captured(oid: String) -> bool:
 	return outposts_captured.has(outpost_key(oid))
 
 
-## Умер стражник форпоста: падение репутации фракции и, если лагерь зачищен,
-## его захват. Вызывает enemy.gd из take_damage (после лута и сигнала died).
+## An outpost guard died: faction reputation drops and, if the camp is cleared,
+## it is captured. Called by enemy.gd from take_damage (after loot and the died signal).
 static func on_outpost_guard_died(unit: Node2D) -> void:
 	if unit == null or not is_instance_valid(unit):
 		return
@@ -742,7 +742,7 @@ static func on_outpost_guard_died(unit: Node2D) -> void:
 		var bus := _world_bus_static()
 		if bus != null and ("state" in bus) and bus.state != null:
 			bus.state.add_hero_reputation(faction, -GameConfig.geti("outpost", "rep_penalty"))
-	# Живые стражники того же лагеря? Труп уже вычищен из Game.enemies.
+	# Any living guards of the same camp? The corpse is already cleaned from Game.enemies.
 	for e in enemies:
 		if e != null and is_instance_valid(e) and str(e.get("outpost_id")) == oid:
 			return
@@ -761,8 +761,8 @@ static func on_outpost_guard_died(unit: Node2D) -> void:
 	var bus2 := _world_bus_static()
 	if bus2 != null and ("state" in bus2) and bus2.state != null:
 		bus2.state.log_entry("outpost", "%s захвачен" % name)
-	# Захват даёт чертежи наборов этой фракции (пакет C+D): взял лагерь —
-	# узнал, как куют их броню. Лавки (пакет F) добавят второй источник.
+	# A capture grants blueprints of that faction's sets (package C+D): took the camp —
+	# learned how their armour is forged. Shops (package F) will add a second source.
 	var scrolls := CraftDB.recipe_ids_of_faction(faction)
 	var given := 0
 	if hero != null and is_instance_valid(hero) and hero.has_method("add_item"):
@@ -785,8 +785,8 @@ func _world_bus() -> Node:
 		return null
 	return get_tree().root.get_node_or_null("WorldBus")
 
-## Новая карта со случайным сидом. Вызывается из character_select перед стартом.
-## zone может быть тиром (start/mid/hard/faction) или id сектора ("s41").
+## A new map with a random seed. Called from character_select before the start.
+## zone can be a tier (start/mid/hard/faction) or a sector id ("s41").
 static func new_random_map(zone: String = "mid") -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
@@ -802,7 +802,7 @@ static func new_random_map(zone: String = "mid") -> void:
 	clear_load_position()
 	clear_hero_save()
 
-## Конкретная карта по сиду (загрузка сохранения, тесты).
+## A specific map by seed (save load, tests).
 static func request_map_by_seed(seed_value: int, zone: String = "mid") -> void:
 	map_seed = seed_value
 	map_zone = zone
@@ -812,7 +812,7 @@ static func request_map_by_seed(seed_value: int, zone: String = "mid") -> void:
 	clear_load_position()
 	clear_hero_save()
 
-## Явно заданный файл карты (редактор, отладочные сцены).
+## An explicitly set map file (editor, debug scenes).
 static func request_map_by_path(path: String) -> void:
 	pending_map_path = path
 	map_seed = 0
@@ -825,7 +825,7 @@ const PLAYER_SPEED: float = 120.0
 const POSTFX_SHADER := """shader_type canvas_item;
 render_mode unshaded, blend_mix;
 
-// Виньетка и зерно. В Environment в Godot 4 таких полей нет ни в одной версии.
+// Vignette and grain. Godot 4 Environment has no such fields in any version.
 uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_linear;
 uniform float vignette_strength : hint_range(0.0, 1.0) = 0.34;
 uniform float vignette_softness : hint_range(0.05, 1.5) = 0.62;
@@ -837,7 +837,7 @@ float hash21(vec2 p) {
 
 void fragment() {
 	vec2 c = SCREEN_UV - vec2(0.5);
-	// Учитываем соотношение сторон, иначе виньетка овальная на широком окне.
+	// Account for the aspect ratio, otherwise the vignette is oval on a wide window.
 	c.x *= 0.62;
 	float v = 1.0 - vignette_strength * smoothstep(0.18, 0.72, length(c) * vignette_softness * 2.0);
 	vec3 col = textureLod(screen_texture, SCREEN_UV, 0.0).rgb * v;
@@ -845,15 +845,15 @@ void fragment() {
 	COLOR = vec4(col, 1.0);
 }"""
 
-# --- Свет и пост-обработка 2D ---
+# --- 2D lighting and post-processing ---
 
-## Приглушение окружения. Почти нейтральное.
-## Первая версия была 0.88 — и игрок пожаловался, что «все объекты, НПЦ и
-## строения стали тёмные». Причина в том, что у рельефа своя яркость от солнца
-## зашита в вершинные цвета (`AlmMap._brightness`), а спрайты её не имеют и
-## живут в средних тонах — там AgX сажает яркость вниз сильнее всего.
-## Свет заклинаний при 0.97 не гаснет: он кратковременный и идёт с энергией
-## 1.5–2.2, запаса хватает.
+## Environment dimming. Almost neutral.
+## The first version was 0.88 — and the player complained that "all objects, NPCs and
+## buildings went dark". The reason is that the relief has its own brightness from the sun
+## baked into the vertex colours (`AlmMap._brightness`), while sprites do not have it and
+## live in midtones — where AgX drops brightness the hardest.
+## Spell light at 0.97 does not fade: it is short-lived and comes with energy
+## 1.5–2.2, so there is enough headroom.
 const AMBIENT := Color(0.97, 0.98, 1.0, 1.0)
 
 func _setup_rendering() -> void:
@@ -862,10 +862,10 @@ func _setup_rendering() -> void:
 	_setup_post_pass()
 
 
-## CanvasModulate — базовая яркость всего холста. Без него аддитивные
-## источники света не могут ничего добавить: холст и так рисуется в полную
-## яркость. Действует ТОЛЬКО на свой слой, поэтому UI на своём CanvasLayer
-## не затрагивается.
+## CanvasModulate — the base brightness of the whole canvas. Without it additive
+## light sources cannot add anything: the canvas is already drawn at full
+## brightness. It affects ONLY its own layer, so UI on its own CanvasLayer
+## is untouched.
 func _setup_ambient() -> void:
 	if get_node_or_null("Ambient") != null:
 		return
@@ -875,15 +875,15 @@ func _setup_ambient() -> void:
 	add_child(ambient)
 
 
-## WorldEnvironment: glow + тональная компрессия для 2D.
+## WorldEnvironment: glow + tone mapping for 2D.
 ##
-## background_mode ОБЯЗАН быть BG_CANVAS (3). Со значением по умолчанию
-## (BG_CLEAR_COLOR) Environment влияет ТОЛЬКО на 3D, а в чисто 2D-проекте это
-## значит «ничего не делает» — самая частая потеря времени при настройке.
+## background_mode MUST be BG_CANVAS (3). With the default value
+## (BG_CLEAR_COLOR) Environment affects ONLY 3D, and in a purely 2D project that
+## means "it does nothing" — the most common waste of time when setting it up.
 ##
-## Цвета каналов > 1.0 в шейдерах заклинаний дают избирательное свечение:
-## раньше 2D был RGBA8 и значения обрезались до 1.0, то есть «ярче белого»
-## было невозможно в принципе. Теперь работает hdr_2d.
+## Channel colours > 1.0 in spell shaders give selective glow:
+## before, 2D was RGBA8 and values were clipped to 1.0, that is, "brighter than white"
+## was impossible in principle. Now hdr_2d works.
 func _setup_environment() -> void:
 	if get_node_or_null("WorldEnvironment") != null:
 		return
@@ -894,21 +894,21 @@ func _setup_environment() -> void:
 	env.glow_bloom = 0.08
 	env.glow_strength = 1.1
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
-	# Порог чуть ниже 1.0: с hdr_2d в кадре почти нет по-настоящему белых
-	# пикселей, и при 1.0 не светилось бы ничего.
+	# Threshold a bit below 1.0: with hdr_2d there are almost no truly white
+	# pixels in the frame, and at 1.0 nothing would glow.
 	env.glow_hdr_threshold = 0.92
-	# Имена уровней glow содержат «/», к таким свойствам нельзя обращаться
-	# присваиванием (только через set()) — прямой доступ не парсится.
+	# Glow level names contain "/", such properties cannot be accessed
+	# by assignment (only through set()) — direct access does not parse.
 	env.set("glow_levels/4", 0.2)
 	env.set("glow_levels/5", 0.35)
 	env.set("glow_levels/6", 0.18)
-	# AgX оставлен: он даёт «цветную» землю, которая понравилась. Но он же
-	# сажает средние тона вниз, а спрайты живут именно в них — компенсируем
-	# экспозицией и убираем лишний контраст теней.
+	# AgX is kept: it gives the "colourful" ground that was liked. But it also
+	# drops midtones, and sprites live exactly there — we compensate with
+	# exposure and remove the extra shadow contrast.
 	env.tonemap_mode = Environment.TONE_MAPPER_AGX
 	env.tonemap_exposure = 1.25
 	env.tonemap_agx_contrast = 0.85
-	# UI на CanvasLayer с layer > 0 и так исключён из пост-обработки.
+	# UI on a CanvasLayer with layer > 0 is already excluded from post-processing.
 	env.background_canvas_max_layer = 0
 
 	var node := WorldEnvironment.new()
@@ -917,14 +917,14 @@ func _setup_environment() -> void:
 	add_child(node)
 
 
-## Пост-пасс: виньетка + зерно. В Environment в Godot 4 виньетки НЕТ ни в одной
-## версии — её всегда делают своим шейдером.
+## Post pass: vignette + grain. In Godot 4 Environment there is NO vignette in any
+## version — it is always done with a custom shader.
 ##
-## Кладётся ПЕРВЫМ потомком UI-CanvasLayer: тогда HUD рисуется поверх и не
-## затемняется, а сам слой (layer 1) не попадает под glow.
+## Placed as the FIRST child of the UI CanvasLayer: then the HUD is drawn on top and is not
+## darkened, and the layer itself (layer 1) does not fall under glow.
 func _setup_post_pass() -> void:
-	# Узел UI в main.tscn НЕ состоит в группе "ui" (там нет строки groups = [...]),
-	# поэтому искать его по группе нельзя — берём уже сохранённую ссылку `ui`.
+	# The UI node in main.tscn is NOT in the "ui" group (there is no groups = [...] line),
+	# so it cannot be found by group — we take the already stored `ui` reference.
 	var ui_node: Node = ui
 	if ui_node == null:
 		ui_node = get_tree().get_first_node_in_group("ui")
@@ -948,43 +948,43 @@ func _setup_post_pass() -> void:
 	rect.material = mat
 	rect.color = Color(1, 1, 1, 1)
 	layer.add_child(rect)
-	# Переносим наверх списка детей, чтобы HUD был ПОВЕРХ пост-обработки.
+	# Move it to the top of the child list so the HUD is ABOVE the post-processing.
 	layer.move_child(rect, 0)
 
 
-func _ready():  # Инициализация мира и боя
-	process_mode = PROCESS_MODE_ALWAYS  # Работает даже на паузе
+func _ready():  # World and combat initialisation
+	process_mode = PROCESS_MODE_ALWAYS  # Works even when paused
 	MusicDB.start_playlist.call_deferred()
 
-	# Тематический анимированный курсор (обычный + прицел, см. cursor_layer.gd).
+	# Themed animated cursor (normal + reticle, see cursor_layer.gd).
 	add_child(load("res://scripts/cursor_layer.gd").new())
 
-	# С 21.10: физическая интерполяция проекта (physics/common) заставляет
-	# Camera2D переключаться на physics-процесс и печатать WARNING, если
-	# callback = IDLE. Камера и так двигается в _physics_process (lerp по
-	# герою) — задаём PHYSICS явно, вар не печатается, дёрганья нет.
+	# Since 21.10: the project physics interpolation (physics/common) forces
+	# Camera2D to switch to the physics process and print a WARNING if
+	# callback = IDLE. The camera already moves in _physics_process (lerp to
+	# the hero) — we set PHYSICS explicitly, the warning is not printed, there is no jitter.
 	camera.process_callback = Camera2D.CAMERA2D_PROCESS_PHYSICS
 
-	# Свет и пост-обработка 2D. Без них эффекты рисуются «как есть» и выглядят
-	# наклейками: правило VFX — эффект должен излучать и освещать мир.
+	# 2D lighting and post-processing. Without them effects are drawn "as is" and look
+	# like stickers: the VFX rule — an effect must emit light and light up the world.
 	_setup_rendering()
 
-	# Сброс режимов прицеливания (статика переживает перезапуск сцены)
+	# Reset targeting modes (static state survives a scene restart)
 	pending_scroll = {}
 	pending_spell = {}
 	_spell_targeting_frame = -1
-	# Авто-каст НЕ сбрасываем: игрок задал его в книге и ждёт, что маг лечит.
+	# We do NOT reset auto-cast: the player set it in the book and expects the mage to heal.
 
-	# Страховка: если main.tscn запущен напрямую (F6, отладка) без выбора
-	# персонажа на старте — уходим на экран выбора героя.
+	# Safety net: if main.tscn is launched directly (F6, debugging) without choosing
+	# a character at start — we go to the hero selection screen.
 	if Game.hero_stats.is_empty():
 		get_tree().call_deferred("change_scene_to_file", "res://scenes/character_select.tscn")
 		return
 
-	# Спавним игрока на проходимом тайле в центре карты
+	# Spawn the player on a walkable tile in the centre of the map
 	_ensure_world_state()
-	# Свежая сцена начинает ленту с одной строки прибытия: после загрузки
-	# сохранения не должно оставаться болтовни прошлой сессии.
+	# A fresh scene starts the feed with a single arrival line: after loading
+	# a save nothing from the previous session should remain.
 	var wf = load("res://scripts/world/world_feed.gd")
 	wf.clear()
 	wf.post("world", Loc.f("ui.feed.arrival", [_sector_name(Game.map_sector)]))
@@ -992,20 +992,20 @@ func _ready():  # Инициализация мира и боя
 	Game.hero = player
 	Game.party.clear()
 	_restore_pending_party()
-	# enemies/npcs — static var, они ПЕРЕЖИВАЮТ смену сцены: узлы прежней
-	# карты к этому моменту уже освобождены движком, но остаются в массивах.
-	# Раньше чистился только party, и новая игра ловила
-	# `_sep_insert(unit: Node2D)`: argument 1 (previously freed) — падение на
-	# типизированном параметре происходит ДО входа в тело функции, поэтому
-	# is_instance_valid внутри _sep_insert не помогает.
-	# Это же чинит хвост в _alive_gray_count (считал мёртвые узлы).
+	# enemies/npcs are static var, they SURVIVE a scene change: the nodes of the previous
+	# map are already freed by the engine at this point, but remain in the arrays.
+	# Before, only party was cleaned, and a new game hit
+	# `_sep_insert(unit: Node2D)`: argument 1 (previously freed) — a crash on a
+	# typed parameter happens BEFORE entering the function body, so
+	# is_instance_valid inside _sep_insert does not help.
+	# This also fixes the tail in _alive_gray_count (it counted dead nodes).
 	Game.enemies.clear()
 	Game.npcs.clear()
-	# Форпосты карты — ДО спавна юнитов: стража захваченных лагерей не появляется.
+	# Map outposts — BEFORE the unit spawn: guards of captured camps do not appear.
 	Game.reload_outposts(alm_map)
 	_sep_grid.clear()
 	_sep_grid_frame = -1
-	# НПЦ и монстры из карты (.alm секция units или sidecar .npcs.json)
+	# NPCs and monsters from the map (.alm units section or the .npcs.json sidecar)
 	if Game.startup_loading:
 		Game.startup_loading = false
 		_show_loading(Loc.t("ui.loading.assembly"))
@@ -1030,7 +1030,7 @@ func _ready():  # Инициализация мира и боя
 
 	await get_tree().process_frame
 
-	# Находим врагов (группа "enemy": враг из сцены + спавн из карты)
+	# Collect enemies (the "enemy" group: scene enemies + map spawns)
 	enemies.clear()
 	for child in get_children():
 		if child.is_in_group("enemy"):
@@ -1039,7 +1039,7 @@ func _ready():  # Инициализация мира и боя
 
 	print("Всего врагов: ", enemies.size())
 
-	# Добавляем игрока в группу "player" для врагов
+	# Add the player to the "player" group for the enemies
 	player.add_to_group("player")
 
 	if ui:
@@ -1052,9 +1052,9 @@ func _ready():  # Инициализация мира и боя
 	add_child(_select_ring)
 	_select_ring.visible = false
 
-	# Сохранения: троттл автосейва. Первый автосейв не раньше, чем
-	# AUTOSAVE_MIN_SECONDS от старта, иначе он сработал бы на пустой партии
-	# сразу при входе в игру.
+	# Saves: autosave throttling. The first autosave is not earlier than
+	# AUTOSAVE_MIN_SECONDS after start, otherwise it would fire on an empty run
+	# right after entering the game.
 	_autosave_accum = 0.0
 	set_process_unhandled_input(true)
 
@@ -1063,7 +1063,7 @@ func _spawn_player_on_walkable():
 	var mh: int = int(alm_map.get("map_height"))
 	if not alm_map or mw == 0:
 		return
-	# 0) Позиция из сохранения (одноразово): герой встаёт туда, где сохранился.
+	# 0) Position from a save (one-shot): the hero stands where they were saved.
 	if load_position_valid:
 		var lp: Vector2 = load_position
 		if alm_map.call("is_walkable_world", lp):
@@ -1072,13 +1072,13 @@ func _spawn_player_on_walkable():
 			clear_load_position()
 			return
 		clear_load_position()
-	# 1) Точка спавна, заданная в карте (тип «Спавн»)
+	# 1) The spawn point set in the map (the "Spawn" type)
 	var spawn_pos: Vector2 = alm_map.call("get_spawn_pos")
 	if alm_map.call("is_walkable_world", spawn_pos):
 		player.global_position = spawn_pos
 		player.reset_physics_interpolation()
 		return
-	# 2) Запасной вариант — проходимый тайл от центра
+	# 2) Fallback — a walkable tile from the centre
 	var cx := int(mw / 2.0)
 	var cy := int(mh / 2.0)
 	for r in range(0, 20):
@@ -1095,9 +1095,9 @@ func _spawn_player_on_walkable():
 					return
 
 
-## Восстановить отряд из сейва v2. Зовётся после сборки карты и постановки
-## героя: позиция наёмника из сейва проверяется на проходимость, иначе он
-## встаёт рядом с героем (клетку могли занять зданием при перегенерации).
+## Restore the squad from a v2 save. Called after the map is built and the
+## hero is placed: the mercenary position from the save is checked for walkability, otherwise
+## they stand next to the hero (the cell could be taken by a building after regeneration).
 func _restore_pending_party() -> void:
 	if Game.pending_party.is_empty():
 		return
@@ -1131,16 +1131,16 @@ func _restore_pending_party() -> void:
 		Game.party.append(mercenary)
 
 
-## Снять живой отряд перед загрузкой слота: иначе в сцене остались бы наёмники
-## прошлой партии, и к ним добавились бы наёмники из сейва.
+## Remove the live squad before loading a slot: otherwise mercenaries of the previous
+## run would stay in the scene, and the mercenaries from the save would join them.
 func _clear_party_nodes() -> void:
 	for m in Game.party:
 		if is_instance_valid(m):
 			(m as Node).queue_free()
 	Game.party.clear()
 
-## Спавн НПЦ/монстров из данных карты: .alm секция units (type_id) или
-## sidecar .npcs.json (set). Агрессия — UnitDB.is_hostile (монстры palette=5).
+## Spawn NPCs/monsters from map data: the .alm units section (type_id) or
+## the .npcs.json sidecar (set). Hostility — UnitDB.is_hostile (monsters palette=5).
 func _spawn_map_units(done: Callable = Callable()) -> void:
 	if alm_map == null or not alm_map.has_method("get_units"):
 		if done.is_valid():
@@ -1156,7 +1156,7 @@ func _spawn_map_units(done: Callable = Callable()) -> void:
 			set_name = UnitDB.set_name_for_id(int(rec["type_id"]))
 		if set_name == "" or not UnitDB.has(set_name):
 			continue
-		# Захваченный форпост стражи не имеет: лагерь уже за героем.
+		# A captured outpost has no guards: the camp already belongs to the hero.
 		var oid := str(rec.get("outpost", ""))
 		if oid != "" and is_outpost_captured(oid):
 			continue
@@ -1169,13 +1169,13 @@ func _spawn_map_units(done: Callable = Callable()) -> void:
 		else:
 			_spawn_npc(set_name, open_pos, rec)
 		spawned += 1
-		# Пачки: 190 НПЦ за один кадр давали заметный всплеск после перехода.
-		# Оверлей загрузки в это время ещё висит, полоса идёт 60..95%.
+		# Batches: 190 NPCs in one frame gave a noticeable spike after a transition.
+		# The loading overlay is still up at that time, the bar runs 60..95%.
 		if spawned % 24 == 0:
 			_on_spawn_batch(spawned, recs.size())
-			# Карта могла быть снесена прямо во время спавна (смена сцены в
-			# тестах/переход между зонами): тогда get_tree() уже null, и
-			# await падал с "null instance". Остаток спавна бессмыслен.
+			# The map could be freed right during the spawn (a scene change in
+			# tests/a transition between zones): then get_tree() is already null, and
+			# await failed with "null instance". The rest of the spawn is pointless.
 			if not is_inside_tree():
 				return
 			await get_tree().process_frame
@@ -1192,7 +1192,7 @@ func _on_spawn_batch(spawned: int, total: int) -> void:
 	_loading_view.set_progress(int(60.0 + 35.0 * frac), Loc.t("ui.loading.assembly"))
 
 
-## После стартового расселения: пара кадров на шейдеры и снятие оверлея.
+## After the initial settling: a couple of frames for shaders and removing the overlay.
 func _on_startup_spawned() -> void:
 	for _i in 3:
 		await get_tree().process_frame
@@ -1201,8 +1201,8 @@ func _on_startup_spawned() -> void:
 func _spawn_monster(set_name: String, pos: Vector2, rec: Dictionary) -> void:
 	var e := Enemy.new()
 	var oid := str(rec.get("outpost", ""))
-	# Имя узла: у стражи форпоста набор одинаковый (city_ork_warrior/t1), и без
-	# id лагеря в отладочном выводе все стражники были бы «Monster_t1».
+	# Node name: outpost guards share the same unit set (city_ork_warrior/t1), and without
+	# the camp id in debug output all guards would be "Monster_t1".
 	e.name = ("Outpost_%s_%s" % [oid, set_name.get_file()]) if oid != "" \
 		else "Monster_" + set_name.get_file()
 	e.anim_set = set_name
@@ -1212,7 +1212,7 @@ func _spawn_monster(set_name: String, pos: Vector2, rec: Dictionary) -> void:
 	var dmg := int(rec.get("damage", 0))
 	if dmg > 0:
 		e.damage = dmg
-	# Форпост (пакет B): фракция и id лагеря едут в записи .npcs.json.
+	# Outpost (package B): the faction and camp id travel in the .npcs.json record.
 	e.faction = str(rec.get("faction", ""))
 	e.outpost_id = str(rec.get("outpost", ""))
 	e.position = pos
@@ -1248,9 +1248,9 @@ func _spawn_npc(set_name: String, pos: Vector2, rec: Dictionary) -> void:
 	add_child(n)
 	npcs.append(n)
 
-## Ищем проходимую клетку рядом со спавном, у которой есть проходимые соседи
-## (минимум 2 из 4) — чтобы персонаж не оказался в тупике. Возвращаем центр
-## клетки в мировых координатах или Vector2(-1,-1), если в радиусе 6 нет места.
+## Look for a walkable cell near the spawn that has walkable neighbours
+## (at least 2 of 4) — so the character does not end up in a dead end. We return the centre
+## of the cell in world coordinates or Vector2(-1,-1) if there is no room within radius 6.
 func _find_open_spot(start: Vector2i, ts: int) -> Vector2:
 	if _is_open_spot(start.x, start.y):
 		return Vector2(start.x * ts + ts / 2.0, start.y * ts + ts / 2.0)
@@ -1258,14 +1258,14 @@ func _find_open_spot(start: Vector2i, ts: int) -> Vector2:
 		for dy in range(-r, r + 1):
 			for dx in range(-r, r + 1):
 				if abs(dx) != r and abs(dy) != r:
-					continue  # только кольцо на расстоянии r
+					continue  # only the ring at distance r
 				var tx := start.x + dx
 				var ty := start.y + dy
 				if _is_open_spot(tx, ty):
 					return Vector2(tx * ts + ts / 2.0, ty * ts + ts / 2.0)
 	return Vector2(-1, -1)
 
-## Клетка проходима и имеет >=2 проходимых соседей (не закуток).
+## The cell is walkable and has >=2 walkable neighbours (not a nook).
 func _is_open_spot(tx: int, ty: int) -> bool:
 	var ts: int = alm_map.tile_size
 	var wx: int = tx * ts + int(ts / 2.0)
@@ -1283,21 +1283,21 @@ func _is_open_spot(tx: int, ty: int) -> bool:
 	return open_neighbors >= 2
 
 func _input(event):
-	# Окно портала само обрабатывает Esc (Esc = «Остаться»).
+	# The portal window handles Esc itself (Esc = "Stay").
 	if _portal_confirm != null and is_instance_valid(_portal_confirm):
 		return
-	# Тактическая пауза: мир замер, значит и приказы/магия недоступны.
-	# Раньше _input продолжал работать (корень сцены Always), и клик по миру
-	# или хоткей 1..9 запускали заклинание прямо на паузе. Блокируем только
-	# их: Esc, Space и панели (I/B/W/M) — это интерфейс, он обязан работать.
+	# Tactical pause: the world is frozen, so orders/magic are unavailable too.
+	# Before, _input kept working (the scene root is Always), and a click on the world
+	# or a hotkey 1..9 started a spell right during the pause. We block only
+	# those: Esc, Space and the panels (I/B/W/M) are interface, they must keep working.
 	if is_paused:
 		if event is InputEventMouseButton:
 			return
 		if event is InputEventKey and event.pressed and not event.echo \
 				and event.keycode >= KEY_1 and event.keycode <= KEY_9:
 			return
-	# Прицеливание (свиток или заклинание книги): ПКМ или ESC отменяет.
-	# Свиток НЕ тратится, мана/заряд НЕ списываются.
+	# Targeting (a scroll or a book spell): RMB or ESC cancels.
+	# The scroll is NOT spent, mana/charge are NOT deducted.
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
 		if not Game.pending_scroll.is_empty() or not Game.pending_spell.is_empty():
 			cancel_targeting()
@@ -1306,16 +1306,16 @@ func _input(event):
 		if not Game.pending_scroll.is_empty() or not Game.pending_spell.is_empty():
 			cancel_targeting()
 			return
-		# Открытое меню сохранений само перехватывает Esc и закрывается.
+		# The open save menu intercepts Esc itself and closes.
 		if _save_menu != null and is_instance_valid(_save_menu):
 			return
 		open_save_menu()
 		return
 
-	# Быстрые клавиши (как у разработчиков): Ctrl+1..9 назначает на цифровую
-	# клавишу либо выбранную магию, либо расходник под курсором; 1..9 (без Ctrl)
-	# применяет назначенное: заклинание — с прицеливанием, зелье — сразу,
-	# свиток — с выбором цели кликом.
+	# Hotkeys (as in the original): Ctrl+1..9 assigns to a number key either the
+	# selected magic or the consumable under the cursor; 1..9 (without Ctrl)
+	# applies the assignment: a spell — with targeting, a potion — right away,
+	# a scroll — with target selection by click.
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode >= KEY_1 and event.keycode <= KEY_9:
 			var slot: int = event.keycode - KEY_1
@@ -1348,18 +1348,18 @@ func _input(event):
 				return
 
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		# Клики по интерфейсу (книга заклинаний, инвентарь, панели, магазин/таверна)
-		# не должны двигать/атаковать героя по карте
+		# UI clicks (the spell book, inventory, panels, shop/tavern)
+		# must not move/attack the hero on the map
 		if ui != null and ui.has_method("is_editor_open") and ui.is_editor_open():
 			return
 		if ui != null and ui.has_method("is_pointer_over_ui") and ui.is_pointer_over_ui(event.position):
 			return
 		var world_position = get_global_mouse_position()
-		# Чтение свитка мага: клик выбирает цель (врага или себя/союзника)
+		# Reading a mage scroll: the click selects a target (an enemy or self/an ally)
 		if not Game.pending_scroll.is_empty():
 			_resolve_scroll_click(world_position)
 			return
-		# Заклинание из книги: клик выбирает цель для выбранной магии
+		# A spell from the book: the click selects a target for the selected magic
 		if not Game.pending_spell.is_empty():
 			_resolve_spell_click(world_position)
 			return
@@ -1369,37 +1369,37 @@ func _input(event):
 		is_paused = !is_paused
 		get_tree().paused = is_paused
 
-	# Рестарт по Ctrl+R
+	# Restart with Ctrl+R
 	if event is InputEventKey and event.pressed and event.keycode == KEY_R and event.ctrl_pressed:
 		get_tree().reload_current_scene()
 
-	# Открыть инвентарь по I
+	# Open the inventory with I
 	if event is InputEventKey and event.pressed and event.keycode == KEY_I:
 		if ui:
 			ui.open_inventory_panel()
 
-	# Toggle магий по B
+	# Toggle magic with B
 	if event is InputEventKey and event.pressed and event.keycode == KEY_B:
 		if ui:
 			ui.toggle_spells()
 
-	# Журнал квестов по W (как в оригинале, quest.txt: «press 'W'»)
+	# Quest journal with W (as in the original, quest.txt: "press 'W'")
 	if event is InputEventKey and event.pressed and event.keycode == KEY_W \
 			and not event.ctrl_pressed:
 		if ui and not ui.is_editor_open():
 			ui.open_quests()
 
-	# Карта мира по M (23.10)
+	# World map with M (23.10)
 	if event is InputEventKey and event.pressed and event.keycode == KEY_M \
 			and not event.ctrl_pressed:
 		if ui:
 			ui.open_world_map()
 
 func handle_click(world_position: Vector2):
-	# Тактическая пауза: клик по миру — это приказ герою, на паузе его нет.
+	# Tactical pause: a click on the world is an order to the hero, there is none during a pause.
 	if is_paused:
 		return
-	# Герой мёртв (падение/разложение) — управление не работает
+	# The hero is dead (falling/decomposing) — controls do not work
 	if is_instance_valid(player) and player.state in ["dead", "decay"]:
 		return
 	print("Клик в: ", world_position)
@@ -1409,8 +1409,8 @@ func handle_click(world_position: Vector2):
 	_pending_archmage = null
 	_pending_city_head = null
 
-	# Клик по зданию (функциональному или декоративному): всегда к двери.
-	# Функциональное — при подходе меню + герой «внутри»; декоративное — только подход.
+	# A click on a building (functional or decorative): always to the door.
+	# Functional — on approach a menu + the hero is "inside"; decorative — approach only.
 	var cell := Vector2i(int(int(world_position.x) / 32.0), int(int(world_position.y) / 32.0))
 	if alm_map != null and alm_map.has_method("structure_at"):
 		var s: Dictionary = alm_map.call("structure_at", cell)
@@ -1422,12 +1422,12 @@ func handle_click(world_position: Vector2):
 		if herb != null:
 			_herb_click(herb)
 			return
-	# Клик по великому магу (капитан): подходим / открываем панель.
+	# A click on the great mage (captain): we approach / open the panel.
 	var mage = _archmage_at_position(world_position)
 	if mage != null:
 		_archmage_click(mage)
 		return
-	# Клик по главе города: подходим / открываем квесты города.
+	# A click on the city head: we approach / open the city quests.
 	var head = _city_head_at_position(world_position)
 	if head != null:
 		_city_head_click(head)
@@ -1443,20 +1443,20 @@ func handle_click(world_position: Vector2):
 		player_target = world_position
 		player.state = "move"
 		player.attack_target = null
-		# Маршрут с обходом препятствий (pathfinding по клеткам), не «по прямой»
+		# A route avoiding obstacles (cell pathfinding), not "straight line"
 		if alm_map != null and alm_map.has_method("find_path"):
 			player.begin_path(alm_map.find_path(player.global_position, world_position))
 
-## Функциональная роль здания (StructureDB).
-## Логика переехала в StructureDB.kind_of — она была продублирована копией в
-## tests/alice_buildings_smoke.gd, и правка роли в игре и в тесте разъезжалась
-## молча. Теперь тест зовёт настоящий код.
+## The functional role of a building (StructureDB).
+## The logic moved to StructureDB.kind_of — it was duplicated by a copy in
+## tests/alice_buildings_smoke.gd, and a role change in the game and in the test drifted apart
+## silently. Now the test calls the real code.
 func _structure_kind(type_id: int) -> String:
 	return StructureDB.kind_of(type_id)
 
-## Клик по зданию: подходим к двери (южный край футпринта).
-## kind != "" — функциональное (магазин/таверна/…): при подходе меню.
-## kind == "" — декоративное: только подход, герой остаётся на карте.
+## A click on a building: we approach the door (the southern edge of the footprint).
+## kind != "" — functional (shop/tavern/…): a menu on approach.
+## kind == "" — decorative: approach only, the hero stays on the map.
 func _building_click(kind: String, s: Dictionary) -> void:
 	if ui == null or not is_instance_valid(player):
 		return
@@ -1478,9 +1478,9 @@ func _building_click(kind: String, s: Dictionary) -> void:
 func _open_building_kind(kind: String, s: Dictionary = {}) -> void:
 	if ui == null:
 		return
-	# Репутация (28.10): таверна и магазин работают с репутацией героя у
-	# фракции ГОРОДА. Раса города уже лежит в city_heads() (её пишет генератор),
-	# а здание ищет ближайшую главу — отдельного city_id у здания нет.
+	# Reputation (28.10): the tavern and the shop work with the hero's reputation with
+	# the faction of the CITY. The city race already lives in city_heads() (written by the generator),
+	# and the building looks for the nearest head — a building has no separate city_id.
 	var race := _city_race_at_world(_door_point(s)) if not s.is_empty() else ""
 	match kind:
 		"shop": ui.open_shop(race)
@@ -1490,8 +1490,8 @@ func _open_building_kind(kind: String, s: Dictionary = {}) -> void:
 		"workshop": ui.open_workshop()
 
 
-## Раса города, ближайшего к точке мира ("" — на карте нет глав/города).
-## Нужна панелям таверны и магазина: репутация героя считается по фракции.
+## The race of the city nearest to a world point ("" — the map has no heads/city).
+## Needed by the tavern and shop panels: hero reputation is counted by faction.
 func _city_race_at_world(p: Vector2) -> String:
 	if alm_map == null or not alm_map.has_method("city_heads"):
 		return ""
@@ -1548,7 +1548,7 @@ func _harvest_herb(herb: HerbNode) -> void:
 	SoundDB.play("ui.click")
 	print("Собрана трава: %s" % herb.item_key)
 
-## Великий маг города (капитан) под курсором.
+## The city great mage (captain) under the cursor.
 func _archmage_at_position(click_pos: Vector2) -> Node2D:
 	for n in npcs:
 		if not is_instance_valid(n):
@@ -1559,7 +1559,7 @@ func _archmage_at_position(click_pos: Vector2) -> Node2D:
 			return n
 	return null
 
-## Клик по магу: если рядом — панель, иначе подходим.
+## A click on the mage: if close — the panel, otherwise we approach.
 func _archmage_click(mage: Node2D) -> void:
 	if ui == null or not is_instance_valid(player) or not is_instance_valid(mage):
 		return
@@ -1591,9 +1591,9 @@ func _process_pending_archmage() -> void:
 		ui.open_archmage(str(ctx.get("city_id", "")), str(ctx.get("race", "")))
 
 
-## Контекст великого мага для панели: город и его раса. Раса берётся из
-## city_heads() по city_id NPC; запасной путь — по имени набора капитана
-## («city_druid_mage/t3» -> druid). Пусто — панель откатится на расу героя.
+## Great mage context for the panel: the city and its race. The race comes from
+## city_heads() by the NPC city_id; a fallback — by the captain's unit set name
+## ("city_druid_mage/t3" -> druid). Empty — the panel falls back to the hero's race.
 func _archmage_context(mage: Node) -> Dictionary:
 	var city_id := ""
 	if "city_id" in mage:
@@ -1608,7 +1608,7 @@ func _archmage_context(mage: Node) -> Dictionary:
 	return {"city_id": city_id, "race": race}
 
 
-## Глава города под курсором (NPC ролью "head").
+## The city head under the cursor (an NPC with the "head" role).
 func _city_head_at_position(click_pos: Vector2) -> Node2D:
 	for n in npcs:
 		if not is_instance_valid(n):
@@ -1620,7 +1620,7 @@ func _city_head_at_position(click_pos: Vector2) -> Node2D:
 	return null
 
 
-## Клик по главе: если рядом — панель квестов, иначе подходим (как у мага).
+## A click on the head: if close — the quest panel, otherwise we approach (as with the mage).
 func _city_head_click(head: Node2D) -> void:
 	if ui == null or not is_instance_valid(player) or not is_instance_valid(head):
 		return
@@ -1651,7 +1651,7 @@ func _process_pending_city_head() -> void:
 		ui.open_quests(cid)
 
 
-## Точка входа (дверь): проходимая клетка под южным краем корпуса здания.
+## The entrance point (door): a walkable cell under the southern edge of the building body.
 func _door_point(s: Dictionary) -> Vector2:
 	var def := StructureDB.get_by_id(int(s.get("type_id", 0)))
 	var fw := int(def.get("tile_width", 1))
@@ -1671,7 +1671,7 @@ func _door_point(s: Dictionary) -> Vector2:
 					return p
 	return Vector2(x * 32.0 + fw * 16.0, (y + th) * 32.0)
 
-## Когда герой подошёл к двери — «входим»: меню (функциональное) или остановка.
+## When the hero reaches the door — we "enter": a menu (functional) or a stop.
 func _process_pending_building() -> void:
 	if _pending_s.is_empty() or not is_instance_valid(player):
 		return
@@ -1683,18 +1683,18 @@ func _process_pending_building() -> void:
 	_pending_building = ""
 	_pending_s = {}
 	player.stop_movement()
-	# Декоративное (k==""): герой остаётся видимым у стены, меню нет.
+	# Decorative (k==""): the hero stays visible by the wall, no menu.
 	if k != "":
 		_open_building_kind(k, s)
 
-## Юнит под курсором (враг ИЛИ мирный НПЦ) по видимой области корпуса.
+## The unit under the cursor (an enemy OR a peaceful NPC) by the visible area of the body.
 func _hover_unit() -> Node2D:
 	if not is_instance_valid(player):
 		return null
 	var mouse := player.get_global_mouse_position()
-	# Отсечение (29.10): раньше точный хит-бокс считался для КАЖДОГО врага и
-	# НПЦ карты каждый кадр (160+28), хотя под курсором может быть только
-	# соседняя фигура. Дешёвое сравнение по центрам снимает почти всё.
+	# Culling (29.10): before, an exact hit box was computed for EVERY enemy and
+	# map NPC every frame (160+28), although only the neighbouring
+	# figure can be under the cursor. A cheap centre comparison removes almost all of it.
 	var reach_sq := 128.0 * 128.0
 	for e in enemies:
 		if is_instance_valid(e) and (e as Node2D).global_position.distance_squared_to(mouse) <= reach_sq \
@@ -1706,21 +1706,21 @@ func _hover_unit() -> Node2D:
 			return e
 	return null
 
-## ВЫСОТА спрайта юнита над его основанием (px) — то, насколько высоко надо
-## поднять эффект, чтобы он оказался над головой, а не внутри тела.
+## The HEIGHT of a unit sprite above its base (px) — how high one has to
+## raise an effect so it ends up above the head and not inside the body.
 ##
-## Берётся из UnitAnim.visual_height(): это реальная высота кадра с учётом
-## масштаба. Нельзя брать _unit_metrics() — это ФУТПРИНТ (сколько клеток
-## занимает юнит): для героя с tile_size 1 это 32 px, тогда как спрайт выше, и
-## эффект по этой высоте оказывался у персонажа внутри (жалоба игрока).
+## Taken from UnitAnim.visual_height(): that is the real frame height including
+## scale. Do not take _unit_metrics() — that is the FOOTPRINT (how many cells
+## the unit occupies): for a hero with tile_size 1 that is 32 px, while the sprite is taller, and
+## an effect at that height ended up inside the character (player report).
 ##
-## У всех четырёх типов юнитов (player/enemy/npc/mercenary) узел анимации
-## называется "UnitAnim".
+## In all four unit types (player/enemy/npc/mercenary) the animation node
+## is called "UnitAnim".
 ##
-## Возвращает высоту ФИГУРЫ, а не кадра: кадры у нас единого холста (64×64),
-## а фигура внутри занимает ~54 px, и над головой остаётся пустое поле.
-## Раньше здесь возвращался холст, и всё, что считается «от высоты» (ауры,
-## крест лечения, камера, точка каста), уезжало вверх/вниз на ~10 px.
+## Returns the FIGURE height, not the frame height: our frames share one canvas (64×64),
+## while the figure inside occupies ~54 px, and an empty field remains above the head.
+## Before, the canvas was returned here, and everything counted "from the height" (auras,
+## the healing cross, the camera, the cast point) drifted up/down by ~10 px.
 static func unit_visual_height(u: Node2D) -> float:
 	var r := unit_local_rect(u)
 	if r.size.y > 0.0:
@@ -1728,8 +1728,8 @@ static func unit_visual_height(u: Node2D) -> float:
 	return 32.0
 
 
-## Рамка фигуры в ЛОКАЛЬНЫХ координатах юнита: ноги ≈ 0, макушка — отрицательный y.
-## Источник — реальные непрозрачные пиксели текущего кадра.
+## The figure rect in the unit's LOCAL coordinates: feet ≈ 0, the crown is a negative y.
+## The source is the real opaque pixels of the current frame.
 static func unit_local_rect(u: Node2D) -> Rect2:
 	if not is_instance_valid(u):
 		return Rect2(Vector2(-12, -40), Vector2(24, 40))
@@ -1738,17 +1738,17 @@ static func unit_local_rect(u: Node2D) -> Rect2:
 		var r: Rect2 = anim.call("content_rect")
 		if r.size.x > 0.5 and r.size.y > 0.5:
 			return r
-	# Заглушка: 24×40 — прежняя приблизительная фигура.
+	# Stub: 24×40 — the previous approximate figure.
 	return Rect2(Vector2(-12, -40), Vector2(24, 40))
 
 
-## Кэш рамок содержимого текстур. Кадр 64×64 сканируется один раз.
+## Cache of texture content rects. A 64×64 frame is scanned once.
 static var _content_cache: Dictionary = {}
 
 
-## Рамка НЕПРОЗРАЧНОГО содержимого текстуры в её пикселях (кэшируется).
-## Альфа-порог 0.06: сглаженные края и почти прозрачный ореол не должны
-## растягивать рамку до всего холста.
+## The rect of the texture's OPAQUE content in its pixels (cached).
+## Alpha threshold 0.06: antialiased edges and an almost transparent halo must not
+## stretch the rect to the whole canvas.
 static func texture_content_rect(tex: Texture2D) -> Rect2:
 	if tex == null:
 		return Rect2()
@@ -1787,8 +1787,8 @@ static func texture_content_rect(tex: Texture2D) -> Rect2:
 	return out
 
 
-## Сколько пикселей зазора между ТЕЛАМИ нужно, чтобы достать ударом.
-## Копьё — 20, посох — 14, меч/топор — 10, палица — 8, кулак/когти — 10.
+## How many pixels of gap between BODIES are needed for a hit to reach.
+## Spear — 20, staff — 14, sword/axe — 10, mace — 8, fist/claws — 10.
 const REACH_BY_WEAPON := {
 	"club": 8.0, "axe": 10.0, "sword": 10.0, "pike": 20.0,
 	"staff": 14.0, "unarmed": 10.0, "bow": 10.0,
@@ -1796,26 +1796,26 @@ const REACH_BY_WEAPON := {
 const REACH_DEFAULT := 10.0
 
 
-## Длина удара конкретного юнита: оружие героя или типовая лапа монстра.
+## The strike length of a specific unit: the hero's weapon or a monster's standard paw.
 static func attack_reach(u: Node2D) -> float:
 	if is_instance_valid(u) and u is Player:
 		return float(REACH_BY_WEAPON.get(str(u.get("weapon")), REACH_DEFAULT))
 	return REACH_DEFAULT
 
-## Размер спрайта юнита (w, h). static: считается только по anim_set, своего
-## состояния не читает — вызывается и из Game, и из SpellAura.
+## Unit sprite size (w, h). static: computed only from anim_set, it does not read
+## its own state — called both from Game and from SpellAura.
 ##
-## ВНИМАНИЕ: это ФУТПРИНТ (сколько клеток занимает юнит), а НЕ высота спрайта.
-## Для высоты (куда вешать эффекты над головой) есть unit_visual_height().
+## WARNING: this is the FOOTPRINT (how many cells the unit occupies), NOT the sprite height.
+## For height (where to hang effects above the head) there is unit_visual_height().
 static func _unit_metrics(u: Node2D) -> Array:
 	var set_name := ""
 	if "anim_set" in u:
 		set_name = str(u.get("anim_set"))
 	if set_name == "" and u is Player:
 		set_name = (u as Player).anim_set_name()
-	# Размер спрайта юнита в пикселях. Раньше читались поля "w"/"h" из units_db.json,
-	# но их там НЕТ — срабатывала заглушка 128, и кольцо выделения было шириной 144 px
-	# независимо от юнита (для гнома — круг втрое шире него самого).
+	# Unit sprite size in pixels. Before, the "w"/"h" fields were read from units_db.json,
+	# but they are NOT there — the 128 stub kicked in, and the selection ring was 144 px wide
+	# regardless of the unit (for a gnome — a circle three times wider than the gnome).
 	var w := 32
 	var h := 32
 	if set_name != "":
@@ -1824,8 +1824,8 @@ static func _unit_metrics(u: Node2D) -> Array:
 		h = ts * 32
 	return [w, h]
 
-## Точка кольца выделения: центр тела юнита. Спрайт рисуется вверх от точки
-## «пола» и поднимается на рельефе — без учёта этого кольцо «висит в пустоте».
+## The selection ring point: the centre of the unit body. The sprite is drawn up from the
+## "floor" point and rises with the relief — without accounting for it the ring "hangs in the void".
 func _target_ring_pos(u: Node2D) -> Vector2:
 	var m := _unit_metrics(u)
 	var rise := 0.0
@@ -1833,8 +1833,8 @@ func _target_ring_pos(u: Node2D) -> Vector2:
 		rise = float(alm_map.call("relief_at_world", u.global_position))
 	return Vector2(u.global_position.x, u.global_position.y - float(m[1]) * 0.55 - rise)
 
-## Подсветка цели: враг под курсором / текущая цель атаки (красное кольцо)
-## или мирный НПЦ под курсором (жёлтое кольцо).
+## Target highlight: the enemy under the cursor / the current attack target (a red ring)
+## or a peaceful NPC under the cursor (a yellow ring).
 func _update_target_ring() -> void:
 	var target: Node2D = null
 	var hostile := false
@@ -1862,10 +1862,10 @@ func get_enemy_at_position(click_pos: Vector2) -> Node2D:
 			return enemy
 	return null
 
-## Свиток мага: клик выбрал цель. Враг — для урона/области/стены,
-## герой или союзник (НПЦ/наёмник) — для лечения/защиты/баффа.
-## Ключ предмета под курсором в открытом инвентаре ("" = панель закрыта или
-## курсор не над ячейкой). Нужен для назначения расходника на хоткей.
+## Mage scroll: the click selected a target. An enemy — for damage/area/wall,
+## the hero or an ally (NPC/mercenary) — for healing/defense/buffs.
+## The item key under the cursor in the open inventory ("" = the panel is closed or
+## the cursor is not over a cell). Needed to assign a consumable to a hotkey.
 func hovered_item_key() -> String:
 	if ui == null or not is_instance_valid(ui):
 		return ""
@@ -1875,8 +1875,8 @@ func hovered_item_key() -> String:
 	return str(panel.get("hovered_item_key"))
 
 
-## Применение расходника с хоткея. Зелье выпивается сразу, свиток входит в
-## прицеливание — ровно как клик по нему в инвентаре.
+## Using a consumable from a hotkey. A potion is drunk at once, a scroll enters
+## targeting — exactly like clicking it in the inventory.
 func _use_hotbar_item(item_key: String) -> void:
 	if item_key == "":
 		return
@@ -1899,7 +1899,7 @@ func _use_hotbar_item(item_key: String) -> void:
 		"Scroll", "SuperScroll":
 			var spell_name := str(item.get("type", ""))
 			Game.pending_scroll = {"spell": spell_name, "item_key": item_key}
-			# Курсор-прицел + подсказка, как при выборе свитка из инвентаря.
+			# Reticle cursor + tooltip, as when choosing a scroll from the inventory.
 			if ui != null and ui.has_method("_begin_scroll_targeting"):
 				ui._begin_scroll_targeting(item_key)
 			else:
@@ -1938,23 +1938,23 @@ func _resolve_scroll_click(world_position: Vector2) -> void:
 	else:
 		target = _ally_at_position(world_position)
 		if target == null:
-			# Аналогично книгам: щит/бафф накладывается на героя по умолчанию
+			# Same as with books: a shield/buff is applied to the hero by default
 			if SpellDB.kind_of(spell) == "buff":
 				target = player
 			else:
 				_flash_cast_error("Укажите героя или союзника для этого заклинания.")
 				return
 
-	# Дальность из базы (раньше не проверялась вообще)
+	# Range from the database (before, it was not checked at all)
 	var max_range := SpellDB.range_of(spell)
 	if max_range > 0.0 and target_kind != "self" \
 			and player.cast_origin().distance_to(world_position) > max_range:
 		_flash_cast_error("Слишком далеко: «%s» достаёт на %d м." % [spell, int(max_range / 32.0)])
 		return
 
-	# Предмет списывается ТОЛЬКО если эффект применился: раньше remove_item
-	# вызывался безусловно, и свитки «Scroll Fire Wall» просто исчезали.
-	# Сила свитка (50/100) берётся из его effects и заменяет навык героя.
+	# The item is spent ONLY if the effect was applied: before, remove_item
+	# was called unconditionally, and "Scroll Fire Wall" scrolls simply vanished.
+	# Scroll power (50/100) comes from its effects and replaces the hero's skill.
 	var item_key := str(Game.pending_scroll.get("item_key", ""))
 	var scroll_power := SpellDB.scroll_power_of(ItemDB.find(item_key))
 	var applied := false
@@ -1976,9 +1976,9 @@ func _flash_cast_error(msg: String) -> void:
 	if ui != null and ui.has_method("_flash_targeting_error"):
 		ui._flash_targeting_error(msg)
 
-## Заклинание из книги: клик выбрал цель. Атака/область/стена — по врагу или
-## точке, лечение/защита/бафф — по герою или союзнику. Мана/заряд списываются
-## только при успешном касте.
+## A spell from the book: the click selected a target. Attack/area/wall — at an enemy or
+## a point, healing/defense/buff — at the hero or an ally. Mana/charge are deducted
+## only on a successful cast.
 func _resolve_spell_click(world_position: Vector2) -> void:
 	if is_paused:
 		return
@@ -1987,7 +1987,7 @@ func _resolve_spell_click(world_position: Vector2) -> void:
 	var name := str(Game.pending_spell.get("name", ""))
 	if name == "":
 		return
-	# Защита: не кастовать в тот же кадр, что и выбор магии из книги
+	# Protection: do not cast in the same frame as selecting magic from the book
 	if Engine.get_process_frames() == Game._spell_targeting_frame:
 		return
 	var target_kind := SpellDB.target_of(name)
@@ -2014,7 +2014,7 @@ func _resolve_spell_click(world_position: Vector2) -> void:
 		"ally":
 			var ally := _ally_at_position(world_position)
 			if ally == null:
-				# Щиты/баффи удобно накладывать на себя, не целясь точно
+				# Shields/buffs are convenient to apply to yourself without aiming precisely
 				if SpellDB.kind_of(name) == "buff":
 					ally = player
 				else:
@@ -2034,8 +2034,8 @@ func _resolve_spell_click(world_position: Vector2) -> void:
 			ui._flash_targeting_error(msg)
 		return
 
-	# Дальность из базы: раньше поле range вообще не читалось, поэтому можно
-	# было кастовать через полкарты (включая телепорт).
+	# Range from the database: before, the range field was not read at all, so one could
+	# cast across half the map (teleport included).
 	var max_range := SpellDB.range_of(name)
 	if max_range > 0.0 and target_kind != "self":
 		var origin: Vector2 = player.cast_origin()
@@ -2050,7 +2050,7 @@ func _resolve_spell_click(world_position: Vector2) -> void:
 	if ui != null and ui.has_method("_finish_spell_targeting"):
 		ui._finish_spell_targeting()
 
-## Цель-союзник под курсором: сам герой, мирный НПЦ или наёмник.
+## An ally target under the cursor: the hero, a peaceful NPC or a mercenary.
 func _ally_at_position(world_position: Vector2) -> Node2D:
 	if is_instance_valid(player) and unit_hover_hit(player, world_position, 8.0):
 		return player
@@ -2062,7 +2062,7 @@ func _ally_at_position(world_position: Vector2) -> Node2D:
 			return m
 	return null
 
-## Отмена прицеливания (свиток или заклинание книги). НЕ тратится.
+## Cancel targeting (a scroll or a book spell). Nothing is spent.
 func cancel_targeting() -> void:
 	Game.pending_scroll = {}
 	Game.pending_spell = {}
@@ -2070,18 +2070,18 @@ func cancel_targeting() -> void:
 	if ui != null and ui.has_method("_cancel_targeting"):
 		ui._cancel_targeting()
 
-## Хит-бокс юнита в мире — по РЕАЛЬНОЙ фигуре.
+## A unit hit box in the world — by the REAL figure.
 ##
-## История: сначала бокс собирался из units_db `w/h` (128) + `sel_box`; там
-## `sel_box` почти нигде нет, и заглушка 96×96 давала «меч достаёт на 4–5
-## клеток». Потом добавили проверку «sel_box дефолтный при w>=128», но у ВСЕХ
-## наших наборов w=h=64, проверка не срабатывала, и юниты продолжали носить
-## бокс 96×96 — да ещё смещённый: `position + (-32,-64) + (16,16)` = от −16 до
-## +80 по X, то есть на 56 px вправо от центра.
+## History: first the box was built from units_db `w/h` (128) + `sel_box`; there
+## `sel_box` is almost nowhere, and the 96×96 stub gave "the sword reaches 4–5
+## cells". Then a check "sel_box is default when w>=128" was added, but ALL
+## our unit sets have w=h=64, the check did not fire, and units kept carrying
+## a 96×96 box — and a shifted one at that: `position + (-32,-64) + (16,16)` = from −16 to
+## +80 along X, that is 56 px to the right of the centre.
 ##
-## Теперь: явный `sel_box` берём, только если он реально лежит внутри кадра;
-## иначе — рамка тела по стойке (`UnitAnim.body_rect()`), а не по холсту и не
-## по кадру удара (меч/посох не должны раздувать тело).
+## Now: an explicit `sel_box` is taken only if it really lies inside the frame;
+## otherwise — the body rect by the idle pose (`UnitAnim.body_rect()`), not by the canvas and not
+## by the attack frame (a sword/staff must not inflate the body).
 static func unit_hit_rect(u: Node2D) -> Rect2:
 	var t0 := perf_begin()
 	var out := _unit_hit_rect_impl(u)
@@ -2110,7 +2110,7 @@ static func _unit_hit_rect_impl(u: Node2D) -> Rect2:
 			if inside:
 				var base := u.global_position + Vector2(-cw / 2.0, -float(ch))
 				return Rect2(base + Vector2(sb.position), Vector2(sb.size))
-	# Реальное тело: рамка стойки в локальных координатах + мировая позиция.
+	# The real body: the idle rect in local coordinates + the world position.
 	var body := unit_body_rect(u)
 	if body.size.x > 0.5 and body.size.y > 0.5:
 		return body
@@ -2118,7 +2118,7 @@ static func _unit_hit_rect_impl(u: Node2D) -> Rect2:
 	return Rect2(u.global_position + local.position, local.size)
 
 
-## Рамка ТЕЛА в мире: по кадру стойки, а не по текущему (кадр удара шире).
+## The BODY rect in the world: by the idle frame, not the current one (the attack frame is wider).
 static func unit_body_rect(u: Node2D) -> Rect2:
 	var t0 := perf_begin()
 	var out := _unit_body_rect_impl(u)
@@ -2137,13 +2137,13 @@ static func _unit_body_rect_impl(u: Node2D) -> Rect2:
 	var local := unit_local_rect(u)
 	return Rect2(u.global_position + local.position, local.size)
 
-## Пиксельный ховер: попадание по непрозрачному пикселю текущего кадра.
+## Pixel hover: a hit on an opaque pixel of the current frame.
 ##
-## unit_hit_rect строится из легаси sel_box/аппроксимации и у части наборов
-## не совпадает с видимым силуэтом (жалоба игрока: «надо целиться ниже»).
-## Здесь — точный тест по альфа-каналу; fallback — unit_hit_rect, если
-## спрайта/текстуры нет (битые наборы, смерть без кадров).
-static var _alpha_cache: Dictionary = {}   # Texture2D -> Dictionary{столбец x -> Dictionary{y: true}}
+## unit_hit_rect is built from the legacy sel_box/approximation and for some unit sets
+## does not match the visible silhouette (player report: "you have to aim lower").
+## Here is the exact alpha-channel test; the fallback is unit_hit_rect if
+## there is no sprite/texture (broken sets, death without frames).
+static var _alpha_cache: Dictionary = {}   # Texture2D -> Dictionary{column x -> Dictionary{y: true}}
 static func unit_hover_hit(u: Node2D, world_pos: Vector2, slack: float = 6.0) -> bool:
 	if not is_instance_valid(u):
 		return false
@@ -2156,7 +2156,7 @@ static func unit_hover_hit(u: Node2D, world_pos: Vector2, slack: float = 6.0) ->
 		tex = sprite.texture
 	if tex == null:
 		return unit_hit_rect(u).grow(slack).has_point(world_pos)
-	# Точка в локальных координатах спрайта (учитывает рельеф/позицию узла).
+	# A point in sprite local coordinates (accounts for the relief/node position).
 	var lp := sprite.to_local(world_pos)
 	var sx := sprite.scale.x
 	var sy := sprite.scale.y
@@ -2168,7 +2168,7 @@ static func unit_hover_hit(u: Node2D, world_pos: Vector2, slack: float = 6.0) ->
 	var h := tex.get_height()
 	if sprite.flip_h:
 		px = w - 1 - px
-	# Вне кадра — прежний rect с допуском (люфты, тени, широкие хвосты).
+	# Outside the frame — the previous rect with a tolerance (play, shadows, wide tails).
 	if px < -int(slack) or py < -int(slack) or px >= w + int(slack) or py >= h + int(slack):
 		return unit_hit_rect(u).grow(slack).has_point(world_pos)
 	var img := tex.get_image()
@@ -2183,7 +2183,7 @@ static func unit_hover_hit(u: Node2D, world_pos: Vector2, slack: float = 6.0) ->
 	var col: Dictionary = mask.get(cx, {})
 	if col.has(cy):
 		return true
-	# Непрозрачный пиксель не под курсором: допуск slack по 4 направлениям.
+	# The opaque pixel is not under the cursor: slack tolerance in 4 directions.
 	var s := int(ceil(slack))
 	for off in [[s, 0], [-s, 0], [0, s], [0, -s]]:
 		var nx: int = cx + int(off[0])
@@ -2193,7 +2193,7 @@ static func unit_hover_hit(u: Node2D, world_pos: Vector2, slack: float = 6.0) ->
 				return true
 	return false
 
-## Маска непрозрачных пикселей: столбец x -> множество y (порог альфы 8/255).
+## Opaque pixel mask: column x -> set of y (alpha threshold 8/255).
 static func _build_alpha_mask(img: Image) -> Dictionary:
 	var mask := {}
 	for x in range(img.get_width()):
@@ -2205,8 +2205,8 @@ static func _build_alpha_mask(img: Image) -> Dictionary:
 			mask[x] = col
 	return mask
 
-## Расстояние между КОРПУСАМИ юнитов (хит-бокс к хит-боксу; 0 при пересечении).
-## Для боя: юниты встают вплотную телами и атакуют, а не «издалека по центру».
+## Distance between unit BODIES (hit box to hit box; 0 when they intersect).
+## For combat: units stand body to body and attack, not "from afar at the centre".
 static func units_range(a: Node2D, b: Node2D) -> float:
 	perf_count("units_range_calls")
 	var ra := unit_hit_rect(a)
@@ -2219,20 +2219,20 @@ static func units_range(a: Node2D, b: Node2D) -> float:
 		rb.position.y - (ra.position.y + ra.size.y)))
 	return sqrt(dx * dx + dy * dy)
 
-## Добавить травму камере (экранная тряска). amount: 0.0–1.0.
+## Add camera trauma (screen shake). amount: 0.0–1.0.
 static func camera_trauma(amount: float) -> void:
 	_trauma = clampf(_trauma + amount, 0.0, 1.0)
 
 func _physics_process(delta):
-	# Камера в том же тике, что и герой: иначе на high-refresh
-	# lerp в _process «дёргает» картинку относительно physics-interpolated
-	# позиции юнита (жалоба игрока 07.10).
+	# The camera in the same tick as the hero: otherwise on high-refresh
+	# lerp in _process "jerks" the picture relative to the physics-interpolated
+	# unit position (player report 07.10).
 	if is_instance_valid(player) and camera:
-		# Камеру двигаем явно в physics-процессе — значит и обрабатывать её
-		# позицию она обязана в том же тике. process_callback = PHYSICS задан
-		# в _ready выше/в сцене; включение physics-интерполяции проекта
-		# заставляет движок сам "переопределять" камеру на physics-режим —
-		# это штатно и печатает WARNING. Глушим вывод вар на этом узле.
+		# We move the camera explicitly in the physics process — so it has to process its
+		# position in the same tick too. process_callback = PHYSICS is set
+		# in _ready above/in the scene; enabling the project physics interpolation
+		# makes the engine "override" the camera to physics mode itself —
+		# this is normal and prints a WARNING. We silence the warning on this node.
 		camera.position = camera.position.lerp(player.camera_focus(), 8.0 * delta)
 		if _trauma > 0.0:
 			_trauma = maxf(_trauma - 1.2 * delta, 0.0)
@@ -2262,15 +2262,15 @@ func _process_impl(delta):
 	_gray_respawn_tick(delta)
 	if is_instance_valid(player) and camera:
 		_autosave_tick(delta)
-		# Камера уже в _physics_process — здесь только UI/реген/таймеры.
+		# The camera is already in _physics_process — here only UI/regen/timers.
 	if is_instance_valid(ui) and is_instance_valid(player):
 		ui.update_ui(player, delta)
 	
-	# Регенерация героя: HP и мана по статам, а не жёсткая «+1 мана/с».
-	# Раньше мана качалась 1/с независимо от Spirit, а HP не регенерировался.
+	# Hero regeneration: HP and mana by stats, not a hardcoded "+1 mana/s".
+	# Before, mana ticked 1/s regardless of Spirit, and HP did not regenerate.
 	_regen_hero(delta)
 	
-	# Обработка режимов действий
+	# Handling of behaviour modes
 	_process_action_mode()
 	if Game.perf_enabled:
 		var th := Time.get_ticks_usec()
@@ -2288,8 +2288,8 @@ func _process_impl(delta):
 	_tick_world_clock(delta)
 
 
-## Календарь мира (28.10). Живёт здесь, а не в WorldBus._process: пауза уже
-## проверена выше (`is_paused`), а headless sim_runner не поднимает автолоады.
+## The world calendar (28.10). Lives here, not in WorldBus._process: the pause is already
+## checked above (`is_paused`), and the headless sim_runner does not raise autoloads.
 func _tick_world_clock(delta: float) -> void:
 	var bus := _world_bus()
 	if bus == null or not bus.has_method("tick_day"):
@@ -2297,8 +2297,8 @@ func _tick_world_clock(delta: float) -> void:
 	bus.call("tick_day", delta)
 
 
-## F3-лента мира: сектор/владелец/FPS, события SIM, болтовня НПЦ. F3
-## добавляет технические цифры. Размеры — доли вьюпорта.
+## F3 world feed: sector/owner/FPS, SIM events, NPC chatter. F3
+## adds the technical numbers. Sizes are viewport fractions.
 func _setup_world_feed() -> void:
 	if _world_feed_panel != null and is_instance_valid(_world_feed_panel):
 		return
@@ -2308,7 +2308,7 @@ func _setup_world_feed() -> void:
 	add_child(_world_feed_panel)
 
 
-## Регенерация героя раз в секунду: HP = 1 + Body/5, мана = 1 + Spirit/10.
+## Hero regeneration once per second: HP = 1 + Body/5, mana = 1 + Spirit/10.
 func _regen_hero(delta: float) -> void:
 	if not is_instance_valid(player):
 		return
@@ -2334,7 +2334,7 @@ func _check_portal() -> void:
 	var cell := Vector2i(int(int(player.global_position.x) / float(TILE)), int(int(player.global_position.y) / float(TILE)))
 	var portal := _portal_at(cell)
 	if portal.is_empty():
-		# Сошёл с портала — снова можно спрашивать.
+		# Stepped off the portal — it can be asked again.
 		_portal_armed = true
 		_portal_prompt_cell = Vector2i(-1, -1)
 		return
@@ -2346,7 +2346,7 @@ func _check_portal() -> void:
 	_show_portal_confirm(portal)
 
 
-## Портал под клеткой: новый формат с адресом или старый sidecar без адреса.
+## The portal under the cell: the new format with an address or the old sidecar without one.
 func _portal_at(cell: Vector2i) -> Dictionary:
 	var portals: Array = alm_map.call("get_portals") if alm_map.has_method("get_portals") else []
 	for raw in portals:
@@ -2359,8 +2359,8 @@ func _portal_at(cell: Vector2i) -> Dictionary:
 	return {}
 
 
-## Мировая позиция портала, который ведёт обратно в from_sector. Прибытие
-## через портал ставит героя сюда, а не на спавн у города.
+## The world position of the portal that leads back to from_sector. Arriving
+## through a portal puts the hero here, not at the spawn near the city.
 func _arrival_portal_pos(from_sector: String) -> Vector2:
 	if from_sector == "" or not is_instance_valid(alm_map):
 		return Vector2(-1, -1)
@@ -2415,11 +2415,11 @@ func _on_portal_answer(travel: bool, portal: Dictionary) -> void:
 
 func _on_portal_enter(target_sector: String = "") -> void:
 	if target_sector != "":
-		# Автосейв ДО смены сектора: иначе после телепортации точка «до портала» потеряна.
+		# Autosave BEFORE the sector change: otherwise the "before the portal" point is lost after teleporting.
 		autosave_now()
 		travel_to_sector(target_sector)
 		return
-	# Старая карта без адреса: цепочка start -> mid -> hard.
+	# An old map without an address: the chain start -> mid -> hard.
 	var next_zone := str(PORTAL_CHAIN.get(Game.map_zone, ""))
 	if next_zone == "":
 		print("Портал из зоны '%s' ведёт в никуда — конец маршрута" % Game.map_zone)
@@ -2428,20 +2428,20 @@ func _on_portal_enter(target_sector: String = "") -> void:
 	travel_to_zone(next_zone)
 
 
-## Куда ведёт портал: start -> mid -> hard. В hard/faction портала нет,
-## это конец маршрута (так и задумано игроком).
+## Where the portal leads: start -> mid -> hard. In hard/faction there is no portal,
+## it is the end of the route (as intended by the player).
 const PORTAL_CHAIN := {"start": "mid", "mid": "hard"}
 
 var _travelling := false
 var _world_feed_panel = null
-## Портал: после прибытия не срабатывает, пока герой не сойдёт с клетки.
+## Portal: after arriving it does not fire until the hero steps off the cell.
 var _portal_armed := true
-## Клетка, где уже спросили: стоя на ней, повторно не спрашиваем.
+## The cell where we already asked: standing on it, we do not ask again.
 var _portal_prompt_cell := Vector2i(-1, -1)
 var _portal_confirm = null
 var _portal_pause_before := false
 
-# --- Экран загрузки перехода (23.10) -----------------------------------------
+# --- Transition loading screen (23.10) ---------------------------------------
 var _loading_layer: CanvasLayer = null
 var _loading_view: Control = null
 var _loading_job = null
@@ -2487,7 +2487,7 @@ func _thread_generate_sector(seed_value: int, tier: String, sector: String, size
 		sector, size, ns, relief, job)
 
 
-## Переход по тиру — совместимая обёртка (тесты, старые вызовы).
+## Transition by tier — a compatibility wrapper (tests, old calls).
 func travel_to_zone(zone: String) -> void:
 	var wm := Game._world_map()
 	if wm.has(zone):
@@ -2500,7 +2500,7 @@ func travel_to_zone(zone: String) -> void:
 	travel_to_sector(sector)
 
 
-## Переход в соседний сектор по адресу портала (мир 4x3).
+## Transition to a neighbouring sector by portal address (the 4x3 world).
 func travel_to_sector(sector_id: String) -> void:
 	if _travelling or sector_id == "":
 		return
@@ -2520,8 +2520,8 @@ func travel_to_sector(sector_id: String) -> void:
 	var from_sector := Game.map_sector
 	_save_sector_fog(from_sector)
 
-	# Генерация — в фоне, с полосой прогресса. Карта 192x192 после фикса BFS
-	# занимает ~1.5 с, но и это не должно выглядеть зависанием.
+	# Generation runs in the background with a progress bar. A 192x192 map after the BFS fix
+	# takes ~1.5 s, but even that must not look like a freeze.
 	_show_loading(Loc.t("ui.loading.travel"))
 	GameConfig.load_all()
 	UnitDB.ensure_loaded()
@@ -2533,8 +2533,8 @@ func travel_to_sector(sector_id: String) -> void:
 	var size := int(info.get("size", 192))
 	var relief := str(info.get("relief", ""))
 	var new_path := ""
-	# Посещённый сектор берём из папки слота: карта уже с построенным миром и
-	# не должна перегенерироваться по сиду.
+	# A visited sector is taken from the slot folder: the map already has a built world and
+	# must not be regenerated from the seed.
 	if loaded_slot != "":
 		new_path = SaveSystem.restore_zone_map(loaded_slot, sector_id)
 		if new_path != "":
@@ -2568,14 +2568,14 @@ func travel_to_sector(sector_id: String) -> void:
 	if bus != null and bus.state != null and not bus.state.sectors.is_empty():
 		bus.state.discover_sector(sector_id)
 	_apply_sector_fog(sector_id)
-	# Папка слота держит карты ВСЕХ посещённых секторов (22.10): после перезапуска
-	# игра идёт из слота, и возврат не должен рождать карту с нулевым миром.
+	# The slot folder keeps the maps of ALL visited sectors (22.10): after a restart
+	# the game runs from the slot, and going back must not give birth to a map with an empty world.
 	if loaded_slot != "":
 		var store_err := SaveSystem.store_zone_map(loaded_slot, new_path)
 		if store_err != "":
 			push_warning("SaveSystem: карта сектора '%s' не легла в слот %s: %s" % [sector_id, loaded_slot, store_err])
 
-	# Прогрев: шейдеры и первые кадры карты компилируются/рисуются под оверлеем.
+	# Warm-up: shaders and the first map frames compile/draw under the overlay.
 	while Time.get_ticks_msec() - _loading_start_ms < 600:
 		await get_tree().process_frame
 	for _i in 3:
@@ -2586,7 +2586,7 @@ func travel_to_sector(sector_id: String) -> void:
 	print("Переход: сектор '%s' (%s), карта %s" % [sector_id, tier, new_path])
 
 
-## Подготовить текущий мир 4x3, если его ещё нет (новая игра / dev-карта).
+## Prepare the current 4x3 world if it does not exist yet (a new game / dev map).
 func _ensure_world_state() -> void:
 	var bus := _world_bus()
 	if bus == null or bus.state == null:
@@ -2594,18 +2594,18 @@ func _ensure_world_state() -> void:
 	if bus.state.sectors.is_empty() or int(bus.state.world_seed) != int(Game.world_seed):
 		var start_owner := MapGenerator.city_race_for_hero(Game.hero_race)
 		bus.state.init_world(Game.world_seed, start_owner)
-	# Четыре фракции обязательны (28.10): у нежити и друидов должен быть
-	# великий маг. Старые сейвы приходят с двумя — добиваем здесь, мир не трогаем.
+	# Four factions are mandatory (28.10): the undead and the druids must have
+	# a great mage. Old saves come with two — we add them here without touching the world.
 	if bus.state.has_method("ensure_race_factions"):
 		bus.state.ensure_race_factions()
-	# Календарь начинается заново: вход в игру и переход в другой сектор не
-	# должны «докручивать» день, накопленный прошлой сценой/сессией.
+	# The calendar starts over: entering the game and moving to another sector must not
+	# "wind up" the day accumulated by the previous scene/session.
 	if bus.has_method("reset_day_timer"):
 		bus.call("reset_day_timer")
 
 
-## Карта сектора для перехода: сначала из слота (посещённый сектор), потом из
-## Туман текущего сектора уезжает в состояние мира перед сменой карты.
+## Sector map for a transition: first from the slot (a visited sector), then from
+## The fog of the current sector goes into the world state before the map change.
 func _save_sector_fog(sector_id: String) -> void:
 	var bus := _world_bus()
 	if sector_id == "" or Game.fog == null or bus == null or bus.state == null:
@@ -2618,7 +2618,7 @@ func _save_sector_fog(sector_id: String) -> void:
 	bus.state.sectors[sector_id] = s
 
 
-## Туман нового сектора: пересобрать маску под размер карты и применить.
+## Fog of the new sector: rebuild the mask for the map size and apply it.
 func _apply_sector_fog(sector_id: String) -> void:
 	var bus := _world_bus()
 	if sector_id == "" or Game.fog == null or bus == null or bus.state == null:
@@ -2632,10 +2632,10 @@ func _apply_sector_fog(sector_id: String) -> void:
 		Game.pending_fog_rle = ""
 
 
-## Карта зоны для перехода. Если слот, из которого идёт игра, держит эту
-## зону рядом со старым состоянием мира (22.10: карта — целыми файлами в
-## папке сохранения), она возвращается оттуда, а не плодит карту по сиду с
-## новым состоянием мира.
+## The zone map for a transition. If the slot the game runs from keeps this
+## zone next to the old world state (22.10: the map is whole files in
+## the save folder), it comes back from there instead of breeding a map from the seed with
+## a new world state.
 func _zone_map_path(zone: String, seed_value: int) -> String:
 	if loaded_slot != "":
 		var from_slot := SaveSystem.restore_zone_map(loaded_slot, zone)
@@ -2644,18 +2644,18 @@ func _zone_map_path(zone: String, seed_value: int) -> String:
 	return MapGenerator.ensure_map(seed_value, zone, MapGenerator.MAPS_DIR)
 
 
-## Пересоздать узел Map и переселить на него героя и партию.
-## from_slot — карта пришла из папки этого слота (загрузка игры): тогда точка
-## входа — позиция героя из сейва, а не спавн новой карты.
-## map_seed_value — сид НОВОЙ карты (переход между секторами): его надо
-## применить ДО спавна стражи форпостов, иначе ключ захвата считается по
-## сиду прежней карты.
+## Recreate the Map node and move the hero and the party onto it.
+## from_slot — the map came from this slot's folder (a game load): then the entry
+## point is the hero position from the save, not the spawn of a new map.
+## map_seed_value — the seed of the NEW map (a transition between sectors): it must
+## be applied BEFORE spawning the outpost guards, otherwise the capture key is computed from
+## the previous map's seed.
 func _swap_map(new_path: String, zone: String, from_slot: bool = false,
 		sector: String = "", arrival_from: String = "",
 		map_seed_value: int = 0) -> void:
 	_clear_world_units()
-	# Зона меняется ДО создания карты: AlmMap._ready и спавн используют
-	# Game.map_zone, и он должен уже совпадать с новой картой.
+	# The zone changes BEFORE the map is created: AlmMap._ready and the spawn use
+	# Game.map_zone, and it must already match the new map.
 	Game.map_zone = zone
 	if sector != "":
 		Game.map_sector = sector
@@ -2673,28 +2673,28 @@ func _swap_map(new_path: String, zone: String, from_slot: bool = false,
 	add_child(fresh)
 	move_child(fresh, 0)
 	alm_map = fresh
-	# Узел Map новый, а UI переживает подмену: без перепривязки миникарта
-	# продолжала рисовать кэш прежней карты.
+	# The Map node is new while the UI survives the swap: without rebinding, the minimap
+	# kept drawing the cache of the previous map.
 	if is_instance_valid(ui) and ui.has_method("rebind_map"):
 		ui.rebind_map()
 	if from_slot and load_position_valid:
-		# Позиция из сейва и так лежит в Game — здесь нужен только флаг:
-		# если не найти её в кадре загрузки, герой встанет на спавн
-		# (прошлое поведение).
+		# The position from the save already sits in Game — here only a flag is needed:
+		# if it is not found during the loading frame, the hero stands at spawn
+		# (the previous behaviour).
 		pass
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_portal_armed = true
 	_portal_prompt_cell = Vector2i(-1, -1)
-	# Загрузка слота: герой встаёт там, где сохранился (если клетка проходима).
+	# Slot load: the hero stands where they were saved (if the cell is walkable).
 	if from_slot and load_position_valid:
 		_portal_armed = false
 		var saved_pos: Vector2 = load_position
 		if alm_map.call("is_walkable_world", saved_pos):
 			player.global_position = saved_pos
 		else:
-			# Клетка сохранилась непроходимой (под зданием/водой): ищем
-			# ближайшую открытую вокруг неё, а не отдаём героя спавну карты.
+			# The saved cell is not walkable (under a building/water): we look for
+			# the nearest open one around it instead of giving the hero to the map spawn.
 			var ts: int = int(alm_map.get("tile_size"))
 			var start := Vector2i(int(saved_pos.x / float(ts)), int(saved_pos.y / float(ts)))
 			var spot: Vector2 = _find_open_spot(start, ts)
@@ -2731,9 +2731,9 @@ func _swap_map(new_path: String, zone: String, from_slot: bool = false,
 		camera.make_current()
 
 
-## Снести всё, что принадлежит прежней карте: врагов, NPC и их мешки с лутом.
-## Без этого после перехода на карте остались бы юниты прошлой зоны, а
-## Game.enemies/npcs копились бы впустую.
+## Tear down everything belonging to the previous map: enemies, NPCs and their loot bags.
+## Without it, units of the previous zone would stay on the map after a transition, and
+## Game.enemies/npcs would pile up pointlessly.
 func _clear_world_units() -> void:
 	for u in Game.enemies:
 		var e: Node = u as Node
@@ -2745,21 +2745,21 @@ func _clear_world_units() -> void:
 		if is_instance_valid(node):
 			node.queue_free()
 	Game.npcs.clear()
-	# Мешки с лутом лежат отдельными узлами рядом с юнитами.
+	# Loot bags lie as separate nodes next to the units.
 	for child in get_children():
-		# Мешки лута переименованы в LootDrop (03.10), но группа осталась
-		# прежней — на неё завязана очистка при переходе между зонами.
+		# Loot bags were renamed to LootDrop (03.10), but the group kept its
+		# old name — the cleanup on zone transitions is tied to it.
 		if child.is_in_group("loot_bag") or child.name.begins_with("LootDrop"):
 			child.queue_free()
 	if is_instance_valid(player):
 		player.stop_movement()
 
-## --- Респавн Серых (03.10) --------------------------------------------------
+## --- Greys respawn (03.10) --------------------------------------------------
 ##
-## Замер: респавна не было НИКАКОГО. Убил всех в зоне — зона пустая навсегда,
-## и «карта скучная» со временем становилась только скучнее. Теперь держим
-## лимит: если живых меньше цели, через каждые N секунд появляется один зверь
-## вдали от героя.
+## Measurement: there was NO respawn at all. Killed everyone in the zone — the zone is empty forever,
+## and "the map is boring" only got more boring over time. Now we keep a
+## limit: if the living count is below the target, every N seconds one beast appears
+## far from the hero.
 var _gray_respawn_accum := 0.0
 
 func _alive_gray_count() -> int:
@@ -2791,8 +2791,8 @@ func _gray_respawn_tick(delta: float) -> void:
 	var cell := _gray_respawn_cell()
 	if cell.x < 0:
 		return
-	# Пул берётся из ТОЙ ЖЕ полосы тиров, что и при генерации карты. Если
-	# респавн брал бы пул напрямую, в стартовой зоне появились бы тиры 4-5.
+	# The pool comes from the SAME tier band as at map generation. If
+	# the respawn took the pool directly, tiers 4-5 would appear in the starting zone.
 	var pool: Array = MapGenerator.gray_pool_for_zone(Game.map_zone)
 	if pool.is_empty():
 		return
@@ -2803,7 +2803,7 @@ func _gray_respawn_tick(delta: float) -> void:
 	var e2 := Enemy.new()
 	e2.name = "Monster_" + set_name.get_file()
 	e2.anim_set = set_name
-	# Тир усиливает респавненного зверя так же, как при генерации карты.
+	# The tier strengthens a respawned beast the same way as at map generation.
 	var mults: Array = MapGenerator.gray_tier_mults(set_name)
 	e2.max_hp = int(round(float(randi_range(GameConfig.zonei(Game.map_zone, "gray_hp_min"),
 		GameConfig.zonei(Game.map_zone, "gray_hp_max"))) * float(mults[0])))
@@ -2814,7 +2814,7 @@ func _gray_respawn_tick(delta: float) -> void:
 	add_child(e2)
 	Game.enemies.append(e2)
 
-## Случайная проходимая клетка не ближе gray_respawn_min_dist от героя.
+## A random walkable cell not closer than gray_respawn_min_dist to the hero.
 func _gray_respawn_cell() -> Vector2i:
 	var min_d := maxi(4, GameConfig.geti("spawn", "gray_respawn_min_dist"))
 	var mw: int = int(alm_map.get("map_width"))
@@ -2839,12 +2839,12 @@ func _process_action_mode():
 	
 	match action_mode:
 		"follow":
-			# Идти за ближайшим союзником (пока за ближайшим NPC)
+			# Go to the nearest ally (for now the nearest NPC)
 			if action_target and is_instance_valid(action_target):
 				player.attack_target = action_target
 				player.state = "chase"
 		"attack":
-			# Атаковать ближайшего врага
+			# Attack the nearest enemy
 			if enemies.size() > 0:
 				var nearest = null
 				var min_dist = 9999.0
@@ -2858,7 +2858,7 @@ func _process_action_mode():
 					player.attack_target = nearest
 					player.state = "chase"
 		"guard":
-			# Стоять на месте и атаковать врагов в радиусе
+			# Stand still and attack enemies in radius
 			if player.state == "idle":
 				for e in enemies:
 					if is_instance_valid(e) and e.global_position.distance_to(player.global_position) < 150:
@@ -2866,18 +2866,18 @@ func _process_action_mode():
 						player.state = "chase"
 						break
 
-# === Сохранения ===
+# === Saves ===
 #
-# Меню само ничего не сохраняет: оно только сообщает о нажатии. Всё
-# сохранение и загрузка - здесь, потому что только у game.gd есть живой
-# игрок, WorldBus с состоянием мира и сцена, которую надо пересобрать.
+# The menu saves nothing itself: it only reports a press. All
+# saving and loading is here, because only game.gd has a live
+# player, a WorldBus with the world state and the scene to rebuild.
 
-## Открыть меню сохранений (Esc). Повторный вызов игнорируется.
+## Open the save menu (Esc). A repeated call is ignored.
 ##
-## Пока меню открыто, мир стоит на паузе (жалоба игрока 22.10: «вызвал меню
-## сохранения, сделал сохранение — персонаж бегает»). Пауза ставится и
-## снимается здесь, а не в SaveMenu: меню можно закрыть Esc, «В главное меню»
-## или завершением процесса, и во всех путях снятие должно быть в одном месте.
+## While the menu is open the world is paused (player report 22.10: "opened the save
+## menu, saved — and the character keeps running"). The pause is set and
+## removed here, not in SaveMenu: the menu can be closed with Esc, "To the main menu"
+## or by terminating the process, and in every path the removal must be in one place.
 func open_save_menu() -> void:
 	if _save_menu != null and is_instance_valid(_save_menu):
 		return
@@ -2895,8 +2895,8 @@ func open_save_menu() -> void:
 	add_child(_save_menu)
 
 
-## Мир на паузе, пока открыто меню сохранений. Герой мёртв — дерево уже
-## стоит на паузе по своей причине (player.gd corpse), её не снимаем.
+## The world is paused while the save menu is open. The hero is dead — the tree is already
+## paused for its own reason (player.gd corpse), we do not remove that one.
 func _set_menu_pause(on: bool) -> void:
 	if is_instance_valid(player) and player.state in ["dead", "decay", "corpse"]:
 		return
@@ -2904,20 +2904,20 @@ func _set_menu_pause(on: bool) -> void:
 	get_tree().paused = on
 
 
-## Снять паузу меню на путях, где SaveMenu не испускает closed: «В главное
-## меню», выход из игры, перезагрузка сцены при загрузке слота. Дерево на
-## паузе не создаёт узлы (instantiate в SAFE-режиме вернёт null), поэтому
-## без этого загрузка из меню не пересобрала бы мир.
+## Remove the menu pause on paths where SaveMenu does not emit closed: "To the main
+## menu", quitting the game, a scene reload when loading a slot. A paused
+## tree does not create nodes (instantiate in SAFE mode returns null), so
+## without it loading from the menu would not rebuild the world.
 func _menu_release_pause() -> void:
 	_set_menu_pause(false)
 
 
-## Собрать payload из живого состояния. world приходит снаружи, чтобы
-## тест мог подставить свой WorldState без поднятия сцены.
+## Build the payload from the live state. world comes from outside so the
+## test can substitute its own WorldState without raising the scene.
 func _build_save_payload() -> Dictionary:
 	var world_dict: Dictionary = {}
-	# WorldBus - это AUTOLOAD, а не GDExtension-синглтон, поэтому
-	# Engine.has_singleton() его не видит: берём узел из дерева сцены.
+	# WorldBus is an AUTOLOAD, not a GDExtension singleton, so
+	# Engine.has_singleton() does not see it: we take the node from the scene tree.
 	if is_inside_tree():
 		var bus = get_node_or_null("/root/WorldBus")
 		if bus != null and "state" in bus and bus.state != null:
@@ -2951,15 +2951,15 @@ func _load_from_slot(slot: String) -> void:
 	if res.is_empty():
 		_set_menu_status(tr("Слот пуст."))
 		return
-	# Сначала применяем героя и карту слота, потом пересобираем сцену:
-	# AlmMap читает Game.pending_map_path/map_seed/map_zone в _ready.
+	# First we apply the hero and the slot map, then rebuild the scene:
+	# AlmMap reads Game.pending_map_path/map_seed/map_zone in _ready.
 	SaveSystem.apply_payload(res.get("data", {}), player, slot)
 	loaded_slot = slot
 	_restart_scene(slot)
 
 
-## Удаление слота: папка слота становится пустой (решение игрока 22.10),
-## а не исчезает: в ней остаются hero/map/process без данных.
+## Deleting a slot: the slot folder becomes empty (player decision 22.10),
+## not gone: hero/map/process remain in it without data.
 func _delete_slot(slot: String) -> void:
 	SaveSystem.clear_slot(slot)
 	if _save_menu != null and is_instance_valid(_save_menu):
@@ -2968,9 +2968,9 @@ func _delete_slot(slot: String) -> void:
 
 
 func _quit_to_menu() -> void:
-	# Паузу обязательно снять: иначе главное меню откроется в остановленном
-	# дереве — без анимации фона и без реакции на ввод. Меню сохранений ставит
-	# паузу при открытии (22.10), и «В главное меню» не испускает closed.
+	# The pause must be removed: otherwise the main menu opens in a stopped
+	# tree — with no background animation and no reaction to input. The save menu sets
+	# the pause when opening (22.10), and "To the main menu" does not emit closed.
 	_menu_release_pause()
 	is_paused = false
 	get_tree().paused = false
@@ -2979,7 +2979,7 @@ func _quit_to_menu() -> void:
 	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 
-## Полный выход из процесса (кнопка «Выйти из игры» в Esc-меню).
+## Full exit from the process (the "Quit game" button in the Esc menu).
 func _quit_app() -> void:
 	_menu_release_pause()
 	_save_to_slot(SaveSystem.AUTOSAVE_SLOT)
@@ -2987,34 +2987,34 @@ func _quit_app() -> void:
 	get_tree().quit()
 
 
-## Сцена уступает место меню или процесс завершается: автосейв при сносе узла
-## больше не нужен. Без этого флага главное меню получало ДВЕ записи
-## автосейва подряд — оно само пишет его при загрузке слота (`main_menu.gd:_on_load_slot`)
-## и героя оно пересобирает только при старте новой игры: вторая запись
-## затирала то, что меню только что записало, старым состоянием сцены.
+## The scene gives way to the menu or the process is closing: an autosave on node removal
+## is no longer needed. Without this flag the main menu received TWO autosave
+## writes in a row — it writes one itself when loading a slot (`main_menu.gd:_on_load_slot`)
+## and it rebuilds the hero only when starting a new game: the second write
+## overwrote what the menu had just written with the old scene state.
 func _set_leaving_scene(on: bool) -> void:
 	_leaving_for_quit = on
 
 
-## Пересобрать игру из сохранённого состояния: мир кладём в WorldBus,
-## карту берём из папки слота и подменяем на живой сцене.
+## Rebuild the game from the saved state: the world goes into WorldBus,
+## the map comes from the slot folder and is swapped into the live scene.
 ##
-## change_scene_to_file здесь НЕ подходит: новая Main._ready сбрасывает
-## партию, а главное — осиротевшая корутина старой сцены падала на первом же
-## кадре новой (`data.tree is null`) и точка входа из сейва терялась.
-## Горячая замена карты (_swap_map) героя и партию сохраняет.
+## change_scene_to_file does NOT fit here: a new Main._ready resets
+## the party, and more importantly an orphaned coroutine of the old scene crashed on the very first
+## frame of the new one (`data.tree is null`) and the entry point from the save was lost.
+## Hot-swapping the map (_swap_map) preserves the hero and the party.
 func _restart_scene(slot: String) -> void:
-	# Дерево на паузе не создаёт узлы: меню сохранений ставит паузу.
+	# A paused tree does not create nodes: the save menu sets the pause.
 	_menu_release_pause()
 	_restore_world_from_slot(slot)
 	_clear_party_nodes()
 	if not is_instance_valid(player) or not is_instance_valid(alm_map):
 		get_tree().change_scene_to_file("res://scenes/main.tscn")
 		return
-	# Слот мог быть записан ДРУГИМ персонажем (класс/пол/раса/портрет):
-	# узел Player живёт в этой сцене и сам не пересобирается, поэтому
-	# перечитываем его класс-зависимое состояние до спавна юнитов карты:
-	# тогда и город соберётся с расой нового героя.
+	# The slot could have been written by ANOTHER character (class/sex/race/portrait):
+	# the Player node lives in this scene and is not rebuilt by itself, so
+	# we re-read its class-dependent state before spawning the map units:
+	# then even the city is built with the new hero's race.
 	if player.has_method("reload_hero_state"):
 		player.reload_hero_state()
 	var map_path := SaveSystem.world_map_path(slot)
@@ -3027,19 +3027,19 @@ func _restart_scene(slot: String) -> void:
 	await _swap_map(map_path, Game.map_zone, true, Game.map_sector)
 	_apply_sector_fog(Game.map_sector)
 	_restore_pending_party()
-	# HUD после подмены героя: книга магии (у воина/мага разные панели),
-	# золото и видимость нижней панели.
+	# HUD after the hero swap: the magic book (warrior/mage have different panels),
+	# gold and the visibility of the bottom panel.
 	_refresh_ui_after_hero_swap()
 
 
-## Обновить HUD после загрузки слота другого персонажа. Панели (инвентарь,
-## магазин и т.п.) создаются заново при каждом открытии и читают Game.*,
-## но уже открытые в момент загрузки показывали бы героя другого класса —
-## их закрываем (меню сохранений и так ставит игру на паузу).
+## Refresh the HUD after loading a slot of another character. The panels (inventory,
+## shop etc.) are created anew on every open and read Game.*,
+## but the ones open at load time would show a hero of another class —
+## we close them (the save menu already pauses the game anyway).
 func _refresh_ui_after_hero_swap() -> void:
 	if is_instance_valid(player):
 		Game.hero = player
-	# ui — @onready-типизированная ссылка на узел UI.
+	# ui — an @onready-typed reference to the UI node.
 	if not is_instance_valid(ui):
 		return
 	ui.close_all_panels()
@@ -3050,9 +3050,9 @@ func _refresh_ui_after_hero_swap() -> void:
 	ui.refresh_inventory()
 
 
-## Мир (SIM-состояние) из слота → WorldBus. Симулятор держит ссылку на
-## СТАРЫЙ WorldState, иначе после загрузки он продолжил бы тикать по
-## прежнему миру, а не по загруженному.
+## The world (SIM state) from the slot → WorldBus. The simulator holds a reference to the
+## OLD WorldState, otherwise after loading it would keep ticking the
+## previous world instead of the loaded one.
 func _restore_world_from_slot(slot: String) -> void:
 	var res := SaveSystem.load_slot(slot)
 	var data: Dictionary = res.get("data", {})
@@ -3065,7 +3065,7 @@ func _restore_world_from_slot(slot: String) -> void:
 	bus.state = restored
 	if "sim" in bus and bus.sim != null and "state" in bus.sim:
 		bus.sim.state = restored
-	# Старый сейв мог не знать про фракции нежити/друидов (28.10).
+	# An old save might not know about the undead/druid factions (28.10).
 	if bus.state.has_method("ensure_race_factions"):
 		bus.state.ensure_race_factions()
 	if bus.has_method("reset_day_timer"):
@@ -3077,7 +3077,7 @@ func _set_menu_status(text: String) -> void:
 		_save_menu.set_status(text)
 
 
-## Разовый автосейв (портал, выход из интерьера). Тот же слот, что и таймер.
+## One-off autosave (portal, leaving an interior). The same slot as the timer.
 func autosave_now() -> void:
 	if not is_instance_valid(player):
 		return
@@ -3088,8 +3088,8 @@ func autosave_now() -> void:
 		push_error("SaveSystem autosave: " + err)
 
 
-## Автосейв по таймеру. Пропускаем, если открыто меню сохранений (иначе
-## игрок жмёт «Сохранить» и тут же получает автосейв поверх).
+## Timer autosave. Skipped if the save menu is open (otherwise
+## the player presses "Save" and immediately gets an autosave on top).
 func _autosave_tick(delta: float) -> void:
 	_autosave_accum += delta
 	if _autosave_accum < autosave_interval():
@@ -3102,13 +3102,13 @@ func _autosave_tick(delta: float) -> void:
 	SaveSystem.save(SaveSystem.AUTOSAVE_SLOT, _build_save_payload())
 
 
-## Сохранить при закрытии окна и при выходе из игры. Вызывается из
-## project.godot (autoload-free), поэтому подписка выполняется здесь.
-## NOTIFICATION_PREDELETE намеренно НЕ используется: этот сигнал приходит
-## на КАЖДУЮ загрузку сцены и перезапуск (_restart_scene), где состояние уже
-## принадлежит новой сцене, а старый игрок уже уступил его сохранению.
-## Пропускается, если сцена сама сохранилась и уступает место меню
-## (см. _set_leaving_scene): иначе автосейв записывался бы дважды.
+## Save on window close and on quitting the game. Called from
+## project.godot (autoload-free), so the subscription is made here.
+## NOTIFICATION_PREDELETE is deliberately NOT used: that signal arrives
+## on EVERY scene load and restart (_restart_scene), where the state already
+## belongs to the new scene while the old player has already yielded it to the save.
+## Skipped if the scene saved itself and is giving way to the menu
+## (see _set_leaving_scene): otherwise the autosave would be written twice.
 func _notification(what: int) -> void:
 	if what != NOTIFICATION_WM_CLOSE_REQUEST:
 		return
