@@ -1,41 +1,41 @@
 extends CharacterBody2D
 class_name Mercenary
-## Наёмник из таверны: следует за героем, атакует врагов (Game.enemies),
-## не качается и не носит броню (как в оригинале). Смерть — из отряда.
+## Tavern mercenary: follows the hero, attacks enemies (Game.enemies),
+## does not level up and wears no armor (as in the original). Death removes it from the squad.
 
 @export var anim_set: String = "ork_mage_a52/t1"
 @export var max_hp: int = 70
 @export var damage: int = 6
 @export var move_speed: float = 90.0
-@export var spirit: int = 5                # базовое сопротивление магии
+@export var spirit: int = 5                # base magic resistance
 
 var current_hp: int
 var attack_cooldown: float = 0.0
-var _impact_timer := -1.0            # отсчёт до кадра удара (замах); <0 = нет удара в полёте
-var _pending_target: Node2D = null   # цель текущего замаха (урон — на кадре удара)
+var _impact_timer := -1.0            # countdown to the hit frame (swing); <0 = no hit in flight
+var _pending_target: Node2D = null   # target of the current swing (damage on the hit frame)
 var state: String = "idle"      # idle | dying | decay | corpse
-var lifespan: float = 0.0       # >0 — призванный миньон: исчезает по истечении времени
+var lifespan: float = 0.0       # >0 — summoned minion: disappears when the time runs out
 var _lifetime: float = 0.0
 var _corpse_timer := 0.0
 var _anim: UnitAnimBase = null
 var _path: Array = []
 var _repath: float = 0.0
 
-## --- Приказы отряда (28.10) -------------------------------------------------
-## Game.action_mode задаётся кнопками HUD (След./Атак./Охр./Стоп) и раньше
-## двигал ТОЛЬКО героя: наёмники всегда сами бежали за ближайшим врагом.
-## Теперь намерение выбирается по режиму, а движение остаётся прежним
-## (путь + steering): решение и движение разделены.
-const FOLLOW_GAP := 64.0        # держаться за героем на этой дистанции
-const FOLLOW_RADIUS := 240.0    # своего врага искать в этом радиусе
-const FOLLOW_LEASH := 320.0     # не гнаться за врагом дальше этого от героя
-const ATTACK_RADIUS := 480.0    # «Атака»: враг в этом радиусе от ГЕРОЯ
-const GUARD_RADIUS := 150.0     # «Охрана»: враг в этом радиусе от поста
-const GUARD_LEASH := 400.0      # герой ушёл дальше — пост переносится
-const STOP_REACH := 8.0         # «Стоп»: только ответка в пределах удара
+## --- Squad orders (28.10) ---------------------------------------------------
+## Game.action_mode is set by the HUD buttons (Follow/Attack/Guard/Stop) and used to
+## move ONLY the hero: mercenaries always ran to the nearest enemy themselves.
+## Now the intent is chosen by the mode, and movement stays the same
+## (path + steering): decision and movement are separated.
+const FOLLOW_GAP := 64.0        # stay behind the hero at this distance
+const FOLLOW_RADIUS := 240.0    # search for own enemies within this radius
+const FOLLOW_LEASH := 320.0     # do not chase an enemy farther than this from the hero
+const ATTACK_RADIUS := 480.0    # "Attack": enemy within this radius from the HERO
+const GUARD_RADIUS := 150.0     # "Guard": enemy within this radius from the post
+const GUARD_LEASH := 400.0      # the hero moved farther — the post moves along
+const STOP_REACH := 8.0         # "Stop": only retaliation within melee reach
 
-var _order: String = ""         # текущий режим ("" — ещё не читали)
-var _anchor := Vector2.ZERO     # пост охраны
+var _order: String = ""         # current mode ("" — not read yet)
+var _anchor := Vector2.ZERO     # guard post
 
 
 func _ready() -> void:
@@ -60,7 +60,7 @@ func _physics_process(delta: float) -> void:
 			return
 	_apply_relief_stand()
 
-	# Наёмник умер: падение → разложение (если есть) → исчезновение
+	# The mercenary died: fall → decay (if any) → disappear
 	if state == "dying" or state == "decay" or state == "corpse":
 		velocity = velocity.move_toward(Vector2.ZERO, 1800.0 * delta)
 		match state:
@@ -89,7 +89,7 @@ func _physics_process(delta: float) -> void:
 
 	_sync_order()
 	var target := _order_target()
-	# Кадр удара: урон наносится в момент соприкосновения, а не в начале замаха
+	# Hit frame: damage is applied on contact, not at the start of the swing
 	if _impact_timer >= 0.0:
 		_impact_timer -= delta
 		move_and_slide()
@@ -101,8 +101,8 @@ func _physics_process(delta: float) -> void:
 			_pending_target = null
 		return
 	if target != null:
-		# Дистанция боя — зазор между ТЕЛАМИ (та же мера, что у героя и врагов),
-		# иначе наёмник махал бы с полутора шагов по воздуху.
+		# Combat distance is the gap between BODIES (the same measure as for the hero and enemies),
+		# otherwise the mercenary would swing at the air from half a step away.
 		if Game.units_range(self, target) > Game.attack_reach(self):
 			_move_toward(target.global_position, delta)
 		else:
@@ -119,8 +119,8 @@ func _physics_process(delta: float) -> void:
 	else:
 		_anim.play(UnitAnim.Anim.IDLE)
 
-## Прочитать приказ героя. Смена режима ставит пост охраны на текущее место:
-## иначе «Охрана» после долгой ходьбы тянула бы наёмника назад к старой точке.
+## Read the hero's order. Changing the mode places the guard post at the current spot:
+## otherwise "Guard" after a long walk would pull the mercenary back to the old point.
 func _sync_order() -> void:
 	var mode := Game.action_mode
 	if mode == "" or mode == "none":
@@ -130,12 +130,12 @@ func _sync_order() -> void:
 	_order = mode
 	_anchor = global_position
 
-## Цель по приказу. Возвращает null — значит цель не выбрана, идём на пост.
+## Target by order. Returns null — no target chosen, so we head to the post.
 func _order_target() -> Node2D:
 	var hero: Node2D = Game.hero
 	match _order:
 		"stop":
-			# Стоять: бить только того, кто сам подошёл на удар.
+			# Hold: hit only whoever came within melee reach.
 			return _nearest_enemy_from(global_position,
 				Game.attack_reach(self) + STOP_REACH)
 		"guard":
@@ -145,14 +145,14 @@ func _order_target() -> Node2D:
 				return _nearest_enemy(ATTACK_RADIUS)
 			return _nearest_enemy_from(hero.global_position, ATTACK_RADIUS)
 		_:
-			# След.: своего врага — рядом, но не гнаться далеко от героя.
+			# Follow: own enemy nearby, but do not chase far from the hero.
 			var enemy := _nearest_enemy(FOLLOW_RADIUS)
 			if enemy != null and hero != null and is_instance_valid(hero) \
 					and enemy.global_position.distance_to(hero.global_position) > FOLLOW_LEASH:
 				return null
 			return enemy
 
-## Нет цели: держать строй по приказу.
+## No target: keep formation as ordered.
 func _hold_position(delta: float) -> void:
 	var hero: Node2D = Game.hero
 	match _order:
@@ -160,7 +160,7 @@ func _hold_position(delta: float) -> void:
 			velocity = Vector2.ZERO
 			_path.clear()
 		"guard":
-			# Герой ушёл дальше лиза — пост переезжает: охрана не бросает героя.
+			# The hero moved beyond the leash — the post moves: the guard does not abandon the hero.
 			if hero != null and is_instance_valid(hero) \
 					and hero.global_position.distance_to(_anchor) > GUARD_LEASH:
 				_anchor = global_position
@@ -173,7 +173,7 @@ func _hold_position(delta: float) -> void:
 				velocity = Vector2.ZERO
 				_path.clear()
 		_:
-			# След./Атака без врагов: стоять рядом с героем.
+			# Follow/Attack with no enemies: stand next to the hero.
 			if hero != null and is_instance_valid(hero) \
 					and global_position.distance_to(hero.global_position) > FOLLOW_GAP:
 				_move_toward(hero.global_position, delta)
@@ -223,12 +223,12 @@ func _attack(target: Node2D) -> void:
 	if not Game.enemies.has(target):
 		return
 	attack_cooldown = GameConfig.getf("combat", "attack_cooldown")
-	# Замах: урон и звук — в момент удара (_impact_timer обрабатывается в _physics_process)
+	# Swing: damage and sound on the hit frame (_impact_timer is processed in _physics_process)
 	_pending_target = target
 	_impact_timer = UnitDB.attack_delay(anim_set)
 
 func take_damage(dmg: int, _attacker: Node2D) -> int:
-	# Мёртвый наёмник урона не получает
+	# A dead mercenary takes no damage
 	if state == "dying" or state == "decay" or state == "corpse":
 		return 0
 	dmg = Game.shield_reduce(self, dmg)
@@ -246,7 +246,7 @@ func take_damage(dmg: int, _attacker: Node2D) -> int:
 		SoundDB.play_pain(UnitDB.unit_sound(anim_set))
 	return dmg
 
-## Восстановить HP (лечение, вампиризм). Возвращает реально восстановленное.
+## Restore HP (healing, vampirism). Returns the amount actually restored.
 func heal_amount(amount: int) -> int:
 	if amount <= 0 or current_hp >= max_hp:
 		return 0
@@ -257,7 +257,7 @@ func heal_amount(amount: int) -> int:
 	DamageNumber.show_at(global_position, healed, "heal")
 	return healed
 
-## --- Производные характеристики (как у врагов/героя) для Game.deal_damage ---
+## --- Derived stats (like enemies/hero) for Game.deal_damage ---
 func get_attack() -> int:
 	return int(damage / float(GameConfig.geti("combat", "enemy_attack_dmg_div"))) \
 		+ int(max_hp / float(GameConfig.geti("combat", "enemy_attack_hp_div"))) \
@@ -270,8 +270,8 @@ func get_defense() -> int:
 func get_absorption() -> int:
 	return int(max_hp / float(GameConfig.geti("combat", "enemy_absorption_div")))
 
-## Сопротивление в процентах. Раньше все get_protection_* были жёстко 0 —
-## наёмник получал полный урон магией по любой стихии.
+## Resistance in percent. Before, all get_protection_* were hardcoded 0 —
+## the mercenary took full magic damage of any element.
 func _resist(sphere: String) -> int:
 	return spirit * 2 + StatusEffects.resist_bonus(self, sphere)
 

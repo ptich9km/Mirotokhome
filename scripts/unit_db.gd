@@ -1,10 +1,10 @@
 class_name UnitDB
-## База юнитов из assets/units/units_db.json (сгенерирована из units.txt).
-## Даёт фазы движения/атаки/смерти, тайминги, размер и якорь по имени набора
+## Unit database from assets/units/units_db.json (generated from units.txt).
+## Provides move/attack/death phases, timings, size and anchor by unit set name
 ## ("heroes/swordsman", "monsters/orc", "humans/mage_st").
 
 const DB_PATH := "res://assets/units/units_db.json"
-const TICK := 0.05  # множитель тайминга (единицы "тиков" из units.txt)
+const TICK := 0.05  # timing multiplier (in "tick" units from units.txt)
 
 ## Loot families in summary order (tests/package_a_smoke.gd). Data, not a
 ## constant: a mod with a new family (say "demon") must reach the summary.
@@ -45,9 +45,9 @@ static func ensure_loaded() -> void:
 	f.close()
 	if parsed is Dictionary:
 		_db = parsed
-	# Mods: new sets and stat patches — before the index, so ids reach _by_id.
+	# Mods: new sets and stat patches — before the index, so ids land in _by_id.
 	ModLoader.overlay("units", _db)
-	# Индекс: ID юнита (из units.txt) -> имя набора (для спавна НПЦ из .alm)
+	# Index: unit ID (from units.txt) -> set name (for spawning NPCs from .alm)
 	_by_id = {}
 	for name in _db:
 		var ids: Variant = _db[name].get("ids", null)
@@ -55,34 +55,34 @@ static func ensure_loaded() -> void:
 			for uid in ids:
 				_by_id[int(uid)] = name
 
-## Данные набора по имени ("heroes/swordsman") или {}.
+## Set data by name ("heroes/swordsman") or {}.
 static func get_set(name: String) -> Dictionary:
 	ensure_loaded()
 	return _db.get(name, {})
 
-## Имя набора по ID юнита (type_id из секции units .alm) или "".
+## Set name by unit ID (type_id from the .alm units section) or "".
 static func set_name_for_id(unit_id: int) -> String:
 	ensure_loaded()
 	return str(_by_id.get(unit_id, ""))
 
-## Данные набора по ID юнита или {} (если ID неизвестен).
+## Set data by unit ID or {} (if the ID is unknown).
 static func get_set_by_id(unit_id: int) -> Dictionary:
 	return get_set(set_name_for_id(unit_id))
 
-## Агрессивный ли юнит: наборы монстров с палитрой 5 (орки, гоблины, звери)
-## атакуют игрока. Мирные жители/животные (палитра != 5) — не нападают.
-## Враждебность набора.
+## Is the unit aggressive: monster sets with palette 5 (orcs, goblins, beasts)
+## attack the player. Peaceful residents/animals (palette != 5) do not attack.
+## Set hostility.
 ##
-## Раньше здесь проверялось `begins_with("monsters/")` И `palette == 5`. После
-## удаления арта Аллодов II семейства `monsters/` не существует (11.10), а
-## враждебными станут риги Серых с совершенно другим префиксом. Поэтому
-## признак враждебности — САМ `palette == 5`, а не имя папки: он переживает
-## любую смену семейства. Сегодня поведение то же (palette 5 был только у
-## монстров), завтра риг Серых получит palette 5 и станет враждебным сам.
+## Before, this checked `begins_with("monsters/")` AND `palette == 5`. After
+## the Allods II art was removed, the `monsters/` family no longer exists (11.10), and
+## hostile units will be Grey rigs with a completely different prefix. So
+## the hostility sign is `palette == 5` ITSELF, not the folder name: it survives
+## any family change. Today the behavior is the same (palette 5 was only on
+## monsters), tomorrow the Grey rig gets palette 5 and becomes hostile by itself.
 static func is_hostile(name: String) -> bool:
 	return int(get_set(name).get("palette", 0)) == ContentRules.int_value("units.hostile_palette", 5)
 
-## Первый кадр набора (для статичного превью в редакторе/палитре).
+## First frame of the set (for a static preview in the editor/palette).
 static func preview_frame(name: String) -> Texture2D:
 	var o := get_set(name)
 	var folder := str(o.get("folder", name))
@@ -91,7 +91,7 @@ static func preview_frame(name: String) -> Texture2D:
 		prefix = "sprites"
 	return load(frame_path(folder, prefix, 1))
 
-## Все имена наборов с указанным префиксом ("humans/", "monsters/"), по алфавиту.
+## All set names with the given prefix ("humans/", "monsters/"), alphabetically.
 static func all_names(prefix: String = "") -> Array:
 	ensure_loaded()
 	var out: Array = []
@@ -105,20 +105,20 @@ static func has(name: String) -> bool:
 	ensure_loaded()
 	return _db.has(name)
 
-## Число кадров в наборе (sprites-00N.png).
+## Number of frames in the set (sprites-00N.png).
 static func frame_count(name: String) -> int:
 	return int(get_set(name).get("frames", 0))
 
 ## Path to a frame (1-based): res://assets/units/<folder>/<prefix>-NNN.png
-## Some sets use their own file name prefix (sprites | swordsman | ...).
-## A `folder` of the form `mod://<id>/assets/...` resolves into the mod folder —
-## that is how a mod can ship its own frame strip without copying it into res://.
+## Some sets have a different file-name part (sprites | swordsman | ...).
+## A `folder` like `mod://<id>/assets/...` resolves into the mod folder — so a mod can
+## bring its own frame strip without copying it into res://.
 static func frame_path(folder: String, prefix: String, frame: int) -> String:
 	if ModLoader.is_mod_path(folder):
 		return "%s/%s-%03d.png" % [ModLoader.resolve(folder), prefix, frame]
 	return "res://assets/units/%s/%s-%03d.png" % [folder, prefix, frame]
 
-## Префикс кадров набора ("sprites" | "swordsman" | ...) из базы.
+## Frame prefix of the set ("sprites" | "swordsman" | ...) from the database.
 static func frame_prefix(name: String) -> String:
 	var o := get_set(name)
 	var p := str(o.get("prefix", ""))
@@ -126,7 +126,7 @@ static func frame_prefix(name: String) -> String:
 		return p
 	return "sprites"
 
-## Фазы (число направлений x фаз в блоке), с fallback на значения по умолчанию.
+## Phases (number of directions x phases in a block), with a fallback to defaults.
 static func move_phases(name: String) -> int:
 	return int(get_set(name).get("move", 8))
 
@@ -145,11 +145,11 @@ static func idle_phases(name: String) -> int:
 static func decay_phases(name: String) -> int:
 	return int(get_set(name).get("decay", 0))
 
-## Число нарисованных направлений в файле (5 для героя с зеркалом правых).
+## Number of directions drawn in the file (5 for the hero with mirrored right ones).
 static func dirs(name: String) -> int:
 	return int(get_set(name).get("dirs", 8))
 
-## Тайминги (секунды) по фазам блока. Если расписания нет — равномерный дефолт.
+## Timings (seconds) per block phase. Without a schedule — a uniform default.
 static func block_times(name: String, key: String, phases: int) -> Array:
 	var o := get_set(name)
 	var raw: Variant = o.get(key, null)
@@ -163,7 +163,7 @@ static func block_times(name: String, key: String, phases: int) -> Array:
 		def.append(0.15)
 	return def
 
-## Порядок кадров в блоке (номера фаз). Если пусто — 0..phases-1 по порядку.
+## Frame order in the block (phase numbers). If empty — 0..phases-1 in order.
 static func block_frames(name: String, key: String, phases: int) -> Array:
 	var o := get_set(name)
 	var raw: Variant = o.get(key, null)
@@ -174,45 +174,44 @@ static func block_frames(name: String, key: String, phases: int) -> Array:
 		seq.append(i)
 	return seq
 
-# --- Поля, перенесённые из units.txt (полный порт) ---
+# --- Fields moved from units.txt (full port) ---
 
-## Хитбокс выделения юнита [x1,y1,x2,y2] (для клика/выбора).
+## Unit selection hitbox [x1,y1,x2,y2] (for click/selection).
 static func sel_box(name: String) -> Rect2i:
 	var o := get_set(name)
 	var raw: Variant = o.get("sel_box", null)
 	if raw is Array and raw.size() == 4:
 		return Rect2i(int(raw[0]), int(raw[1]), int(raw[2]) - int(raw[0]), int(raw[3]) - int(raw[1]))
-	# дефолт: почти весь спрайт
+	# default: almost the whole sprite
 	return Rect2i(16, 16, 96, 96)
 
-## Задержка атаки в тиках (из units.txt AttackDelay).
+## Attack delay in ticks (from units.txt AttackDelay).
 static func attack_delay(name: String) -> float:
 	return float(get_set(name).get("attack_delay", 4)) * TICK
 
-## Номер палитры спрайта (0..7; монстры 5, скелеты 1-2, люди 0).
+## Sprite palette number (0..7; monsters 5, skeletons 1-2, humans 0).
 static func palette(name: String) -> int:
 	return int(get_set(name).get("palette", 0))
 
-## Портрет юнита (имя из units.txt InfoPicture).
+## Unit portrait (name from units.txt InfoPicture).
 static func info_picture(name: String) -> String:
 	return str(get_set(name).get("info_picture", ""))
 
-## Размер юнита в клетках (1 = обычный, 2 = тролль/огр/катапульта, 3 = дракон).
+## Unit size in cells (1 = normal, 2 = troll/ogre/catapult, 3 = dragon).
 static func tile_size(name: String) -> int:
 	return int(get_set(name).get("tile_size", 1))
 
-## Семейство для лута: beast | insect | humanoid | undead | monstrous.
-## Пусто = семейство неизвестно (enemy.gd берёт таблицу `default`).
+## Family for loot: beast | insect | humanoid | undead | monstrous.
+## Empty = family unknown (enemy.gd uses the `default` table).
 static func loot_family(name: String) -> String:
 	return str(get_set(name).get("loot_family", ""))
 
-## Loot table for the victim `name` (family key of loot_tables.json).
+## Loot table for the victim `name` (family key from loot_tables.json).
 ##
-## Sources by priority: the explicit `loot_family` field in the base (present on
-## all `monsters/*` sets, written by tests/gen_gray_loot_family.py), then the
-## species from `units.loot_by_species` (a safety net for new sets without the
-## field). The tier suffix is cut before the lookup (`monsters/bee_t3` -> `bee`).
-## City sets, heroes and an empty name -> "".
+## Sources by priority: an explicit `loot_family` field in the database (written into all
+## `monsters/*` by tests/gen_gray_loot_family.py), then the species from LOOT_BY_SPECIES
+## (a safety net for new sets without the field). The tier suffix is cut before
+## matching (`monsters/bee_t3` -> `bee`). City sets, heroes and an empty name -> "".
 static func loot_family_of(name: String) -> String:
 	var explicit := str(get_set(name).get("loot_family", ""))
 	if explicit != "":
@@ -225,46 +224,46 @@ static func loot_family_of(name: String) -> String:
 		short = short.substr(0, tier_at)
 	return str(loot_by_species().get(short, ""))
 
-## Тир набора (1..5), 0 - если тира нет. Тиры Серых записывает
-## tests/gen_grey_tiers_db.py; tests/gray_tier_smoke сверяет поле с суффиксом
-## `_tN` в имени набора. Дроп сломанной вещи выбирает металл ПО ТИРУ
-## (enemy.gd:_broken_gear -> ItemDB.broken_materials), поэтому тир читается
-## здесь, а не разбирается из строки имени в каждом потребителе.
+## Set tier (1..5), 0 if there is no tier. Grey tiers are written by
+## tests/gen_grey_tiers_db.py; tests/gray_tier_smoke compares the field with the `_tN`
+## suffix in the set name. Broken item drops choose the metal BY TIER
+## (enemy.gd:_broken_gear -> ItemDB.broken_materials), so the tier is read
+## here, not parsed from the name string in every consumer.
 static func tier(name: String) -> int:
 	return int(get_set(name).get("tier", 0))
 
-## Босс или дракон? Только они роняют ЦЕЛУЮ вещь вместо сломанной
+## Boss or dragon? Only they drop an INTACT item instead of a broken one.
 ## ([craft] boss_intact_chance).
 ##
-## Поле `boss: 1` добавлено 07.10. До него признака босса не существовало
-## ВООБЩЕ, и tempting-кандидатом был tile_size (дракон 3, тролль 2) - но это
-## размер спрайта, а не «босс»: у humans/catapult1 тоже tile_size 2. Строить
-## на размере юнита значило заложить мину, которая выстрелит, когда появится
-## крупный обычный моб.
+## The `boss: 1` field was added on 07.10. Before it, the boss sign did not exist
+## AT ALL, and a tempting candidate was tile_size (dragon 3, troll 2) — but that is
+## the sprite size, not "boss": humans/catapult1 also has tile_size 2. Building
+## on the unit size would have planted a mine that fires when a large
+## regular mob appears.
 static func is_boss(name: String) -> bool:
 	return int(get_set(name).get("boss", 0)) != 0
 
-## Зеркалить ли спрайт юнита (Flip=1 — тролли, дракон, летающие).
+## Whether to mirror the unit sprite (Flip=1 — trolls, dragon, flyers).
 static func flip(name: String) -> bool:
 	return int(get_set(name).get("flip", 0)) != 0
 
-## Высота полёта в пикселях (Z — бат/дракон/саккуб парят над землёй).
+## Flight height in pixels (Z — bat/dragon/succubus hover above the ground).
 static func fly_z(name: String) -> int:
 	return int(get_set(name).get("z", 0))
 
-## Фазы анимации костей после смерти (BonePhases — у нежити).
+## Bone animation phases after death (BonePhases — for undead).
 static func bone_phases(name: String) -> int:
 	return int(get_set(name).get("bone", 0))
 
-## Тип снаряда дальнобойного юнита (-1 = не стреляет; 1.. = снаряд из проекта).
+## Ranged unit projectile type (-1 = does not shoot; 1.. = projectile from the project).
 static func projectile(name: String) -> int:
 	return int(get_set(name).get("projectile", -1))
 
-## Задержка выстрела (ShootDelay в тиках).
+## Shot delay (ShootDelay in ticks).
 static func shoot_delay(name: String) -> float:
 	return float(get_set(name).get("shoot_delay", 8)) * TICK
 
-## Точка вылета снаряда [x0,y0,x1,y1,...] — 8 пар на каждое направление.
+## Projectile launch point [x0,y0,x1,y1,...] — 8 pairs per direction.
 static func shoot_offset(name: String) -> Array:
 	var o := get_set(name)
 	var raw: Variant = o.get("shoot_offset", null)
@@ -272,8 +271,8 @@ static func shoot_offset(name: String) -> Array:
 		return raw
 	return []
 
-## Звуки юнита [атака, ?, боль1, боль2, смерть] — ключи sound_db.json
-## (например "voice.monster.wolf.attack"). Пустой массив = юнит молчит.
+## Unit sounds [attack, ?, pain1, pain2, death] — sound_db.json keys
+## (for example "voice.monster.wolf.attack"). An empty array = the unit is silent.
 static func unit_sound(name: String) -> Array:
 	var o := get_set(name)
 	var raw: Variant = o.get("sound", null)
@@ -281,8 +280,8 @@ static func unit_sound(name: String) -> Array:
 		return raw
 	return []
 
-## Сопротивление набора стихии (вычитается из урона магии). 0 = нет.
-## Таблица заполняется tests/gen_unit_resists.py в assets/units/units_db.json.
+## Set resistance to an element (subtracted from magic damage). 0 = none.
+## The table is filled by tests/gen_unit_resists.py in assets/units/units_db.json.
 static func resist_of(name: String, sphere: String) -> int:
 	var o := get_set(name)
 	var r: Variant = o.get("resist", null)

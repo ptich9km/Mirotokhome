@@ -1,80 +1,80 @@
 extends Node2D
 class_name AlmMap
-## Карта разработчиков из .alm: рельефный меш с высотами и освещением от солнца
-## (методика Allods16/repo jewalky): каждый тайл-квад поднят на высоту углов,
-## текстура растягивается, яркость считается от нормали квада и угла солнца.
-## Плюс: здания из секции id=4 (структуры) и препятствия из section id=3.
+## Developers' map from .alm: a relief mesh with heights and sun lighting
+## (Allods16/repo jewalky method): every tile quad is raised to the height of its corners,
+## the texture is stretched, brightness is computed from the quad normal and the sun angle.
+## Plus: buildings from section id=4 (structures) and obstacles from section id=3.
 
-## Смерть Серого на этой карте (22.10). Карта — родитель всех врагов, поэтому
-## сам враг в шину не лезет; QuestSystem подписан сюда один раз.
+## Death of a Grey on this map (22.10). The map is the parent of all enemies, so
+## the enemy itself does not reach into the bus; QuestSystem subscribes here once.
 signal enemy_died(unit: Enemy)
 
 @export var alm_path: String = ""
-@export var tile_size := 32   # свойство как у CustomMap (для миникарты и др.)
+@export var tile_size := 32   # same property as CustomMap (for the minimap and others)
 
 const TILE := 32
-# Высота меша на 1 единицу высоты карты (оригинал рисует 1:1)
+# Mesh height per 1 unit of map height (the original draws 1:1)
 const HEIGHT_SCALE := 1.0
-## Потолок раскрытий поиска пути. Жадный best-first на открытой местности
-## обычно ~O(длина пути); лимит — страховка от лабиринтов.
+## Expansion ceiling for the pathfinding search. Greedy best-first on open terrain
+## is usually ~O(path length); the limit is insurance against mazes.
 const BFS_MAX_CELLS := 4000
 
 var map_width: int = 0
 var map_height: int = 0
-var _terrain: PackedByteArray   # byte[0] — вариант автайла
-var _hflags: PackedByteArray    # byte[1] — тип terrain (файл-1: 0..3)
-var _heights: PackedByteArray   # int8 — рельеф (0..127)
-var _obstacles: PackedByteArray # uint8 — объекты (0=нет, >0=объект)
-var _structures: Array = []     # секция id=4 — здания (или sidecar .structures.json)
-var map_units: Array = []       # секция id=6 — юниты (или sidecar .npcs.json)
+var _terrain: PackedByteArray   # byte[0] — autotile variant
+var _hflags: PackedByteArray    # byte[1] — terrain type (file-1: 0..3)
+var _heights: PackedByteArray   # int8 — relief (0..127)
+var _obstacles: PackedByteArray # uint8 — objects (0=none, >0=object)
+var _structures: Array = []     # section id=4 — buildings (or the .structures.json sidecar)
+var map_units: Array = []       # section id=6 — units (or the .npcs.json sidecar)
 var _herbs: Array = []
-var _outposts: Array = []       # форпосты фракций (sidecar .outposts.json)
-var _nowalk: Dictionary = {}    # клетки «Нельзя пройти» (ручная разметка в редакторе)
-var _allowwalk: Dictionary = {} # клетки «Разрешить проход» — пускать сквозь препятствие
-var solar_angle: float = 0.785398  # угол солнца из info (.alm), default 45°
+var _outposts: Array = []       # faction outposts (sidecar .outposts.json)
+var _nowalk: Dictionary = {}    # "Impassable" cells (manual marking in the editor)
+var _allowwalk: Dictionary = {} # "Allow passage" cells — let units through an obstacle
+var solar_angle: float = 0.785398  # sun angle from info (.alm), default 45°
 
 var mesh: MeshInstance2D
-## Слой рельефа: мягкая смесь всех пар биомов (05.10).
-## MeshInstance2D в Godot 4.7 нет surface_override_material — отдельный узел.
+## Relief layer: a soft blend of all biome pairs (05.10).
+## MeshInstance2D in Godot 4.7 has no surface_override_material — hence a separate node.
 var blend_mesh: MeshInstance2D
 var _atlas: ImageTexture
 var _cell_uv := {}              # "f{v}-r{row}" -> Rect4(u0,v0,u1,v1)
-## Полосы интерьеров tile1..7 (6 вариантов), индекс = terrain type 0..6.
+## Interior strips tile1..7 (6 variants), index = terrain type 0..6.
 var _blend_strips: Array = []
-## Карты бленда.
-## primary/secondary — типы пары (nearest).
-## u_border: 0 — глубина, ~1 — граница; блюр ×1 (×3 размазывал шов на 2-3
-## клетки и давал «полосу чужого биома»). mix в шейдере: smoothstep по border.
+## Blend maps.
+## primary/secondary — the types of the pair (nearest).
+## u_border: 0 — depth, ~1 — border; blur ×1 (×3 smeared the seam over 2-3
+## cells and gave "a strip of the foreign biome"). The mix in the shader: smoothstep over border.
 var _blend_primary: ImageTexture
 var _blend_secondary: ImageTexture
 var _blend_border: ImageTexture
 var _blend_cells := 0
-## Чанк-рендер террейна (19.10): BlendMesh режется на квадраты CHUNK_CELLS,
-## видимые только в кадре камеры (+CHUNK_MARGIN). Фундамент карт 96x96.
+## Terrain chunk rendering (19.10): BlendMesh is cut into CHUNK_CELLS squares,
+## visible only inside the camera frame (+CHUNK_MARGIN). The map foundation is 96x96.
 const CHUNK_CELLS := 16
 const CHUNK_MARGIN := 96.0
-var _blend_chunks: Array = []     # чанки бленда: {node: MeshInstance2D, rect: Rect2}
+var _blend_chunks: Array = []     # blend chunks: {node: MeshInstance2D, rect: Rect2}
 var _atlas_cells := 0
 const ROAD_T := 3
 const MOUNTAIN_T := 1
 const WATER_T := 2
 const BIOME_COUNT := 7
-## Сколько клеток карты в одну плитку текстуры бленда (1 = 32px на клетку).
+## How many map cells fit into one blend texture tile (1 = 32px per cell).
 const BLEND_CELLS_PER_TEX := 1.0
 var _obstacle_db := {}          # .alm obstacle id -> {folder, w, h, cx, cy, phases}
-var obstacles_root: Node2D      # слой препятствий (y-sort)
-var buildings: Node2D           # слой зданий (y-sort)
+var obstacles_root: Node2D      # obstacle layer (y-sort)
+var buildings: Node2D           # building layer (y-sort)
 var herbs_root: Node2D
-var world_sort: Node2D          # общий y-sort: препятствия + здания (крона перекрывает фонтан)
-var _structure_hits: Array = [] # хитбоксы зданий {x0,x1,y0,y1,picture,type_id}
-var _structure_nav: Array = []   # навигационные футпринты зданий
-var _portal_cells: Array = []   # координаты порталов (Vector2i)
-var _portals: Array = []        # [{cell:Vector2i, to:String, dir:String}] — мир 4x3
+var world_sort: Node2D          # shared y-sort: obstacles + buildings (a crown overlaps the fountain)
+var _structure_hits: Array = [] # building hitboxes {x0,x1,y0,y1,picture,type_id}
+var _structure_nav: Array = []   # building navigation footprints
+var _portal_cells: Array = []   # portal coordinates (Vector2i)
+var _portals: Array = []        # [{cell:Vector2i, to:String, dir:String}] — the 4x3 world
 var _spawn_cell: Vector2i = Vector2i(-1, -1)
 var _portal_markers: Array = [] # PortalMarker instances
 var _spawn_marker: Node2D = null
 
-## Единый слой с y-сортировкой для препятствий и зданий: южнее — поверх.
+## A single y-sorted layer for obstacles and buildings: the more southern one is on top.
 func _ensure_world_sort() -> Node2D:
 	if world_sort == null:
 		world_sort = Node2D.new()
@@ -120,7 +120,7 @@ func _ready() -> void:
 	_load_portal_spawn()
 	print("AlmMap: %s %dx%d клеток, структур %d, солнце %s°" % [alm_path.get_file(), map_width, map_height, _structures.size(), str(rad_to_deg(solar_angle))])
 
-## Таблица препятствий: .alm obstacle id -> параметры спрайта (из objects.txt/obj.reg).
+## Obstacle table: .alm obstacle id -> sprite parameters (from objects.txt/obj.reg).
 func _load_obstacle_db() -> void:
 	var f := FileAccess.open("res://assets/map-objects/alm_objects.json", FileAccess.READ)
 	if f == null:
@@ -131,7 +131,7 @@ func _load_obstacle_db() -> void:
 	if parsed is Dictionary:
 		_obstacle_db = parsed
 
-## Препятствия (.alm obstacles): дерево/камень/статуя на клетках с id > 0.
+## Obstacles (.alm obstacles): a tree/stone/statue on cells with id > 0.
 func _build_obstacles() -> void:
 	if obstacles_root == null:
 		obstacles_root = Node2D.new()
@@ -157,9 +157,9 @@ func _build_obstacles() -> void:
 			ob.place_at(Vector2i(x, y), TILE, relief_at_tile(x, y))
 			obstacles_root.add_child(ob)
 
-## Здания из секции id=4 (structures): спрайты assets/structures/<папка>/house-NNN.png.
-## Сетка кадров 32x32: fw=TileWidth, fh=FullHeight; верхние (fh-th) рядов — выше земли.
-## Тень (houseb) и анимация фаз (Phases>1) — через StructureNode / StructureDB.
+## Buildings from section id=4 (structures): sprites assets/structures/<folder>/house-NNN.png.
+## Frame grid 32x32: fw=TileWidth, fh=FullHeight; the top (fh-th) rows are above the ground.
+## Shadow (houseb) and phase animation (Phases>1) — via StructureNode / StructureDB.
 func _build_structures() -> void:
 	if _structures.is_empty():
 		return
@@ -182,21 +182,21 @@ func _build_structures() -> void:
 		if node == null:
 			missing += 1
 			continue
-		# Позиция: клетка (X, Y) = левый-нижний угол корпуса; верх поднят на (fh-th) клеток
+		# Position: cell (X, Y) = the bottom-left corner of the body; the top is raised by (fh-th) cells
 		var x: float = st.get("x", 0.0)
 		var y: float = st.get("y", 0.0)
 		var dir := int(fj.get("fh", 1)) - int(fj.get("th", 1))
 		node.position = Vector2(x * TILE, (y - dir) * TILE)
 		buildings.add_child(node)
 		placed += 1
-		# Хитбокс здания в клетках: база — Selection-бокс (пиксели структуры),
-		# иначе корпус th рядов (+верхние (fh-th) визуальные ряды).
+		# Building hitbox in cells: the base is the Selection box (structure pixels),
+		# otherwise the body of th rows (+ the top (fh-th) visual rows).
 		var fw := int(fj.get("fw", 1))
 		var th := int(fj.get("th", 1))
 		var fh := int(fj.get("fh", th))
 		var sel: Rect2i = fj.get("sel", Rect2i())
 		if sel.size.x > 0 and sel.size.y > 0:
-			# Selection в пикселях исходного спрайта (fw*fh*32): переводим в клетки
+			# Selection in pixels of the source sprite (fw*fh*32): convert to cells
 			var tw := int(fj.get("fw", 1)) * 32
 			var thh := int(fj.get("fh", th)) * 32
 			var sx := int(x) + sel.position.x * fw / tw
@@ -257,7 +257,7 @@ func herb_at_position(world_position: Vector2) -> HerbNode:
 func get_herbs() -> Array:
 	return _herbs
 
-## Собрать Node2D-здание: whole_image (одна PNG) или сетка house-NNN + тень.
+## Build a Node2D building: whole_image (a single PNG) or a house-NNN grid + shadow.
 func _make_structure(job: Dictionary) -> Node2D:
 	var node := StructureNode.new()
 	node.folder = str(job["dir"])
@@ -272,7 +272,7 @@ func _make_structure(job: Dictionary) -> Node2D:
 	node.build()
 	return node
 
-## Описание здания: папка/префикс кадров, сетка fw x fh (из structures.txt).
+## Building description: folder/frame prefix, grid fw x fh (from structures.txt).
 var _structure_jobs := {}
 func _structure_frame_job(type_id: int, st: Dictionary) -> Dictionary:
 	if _structure_jobs.has(type_id):
@@ -307,7 +307,7 @@ func _structure_frame_job(type_id: int, st: Dictionary) -> Dictionary:
 	_structure_jobs[type_id] = job
 	return job
 
-## Данные структуры по TypeID: из структурированной БД (structure_db.json).
+## Structure data by TypeID: from the structured DB (structure_db.json).
 var _structure_defs := {}
 func _structure_def(type_id: int) -> Dictionary:
 	if _structure_defs.has(type_id):
@@ -323,23 +323,23 @@ func _structure_blocks_cell(cell: Vector2i) -> bool:
 			return true
 	return false
 
-## Публично: клетка внутри футпринта здания (для жёсткого запрета входа).
+## Public: is the cell inside a building footprint (for a hard entry ban).
 func is_structure_cell(cell: Vector2i) -> bool:
 	return _structure_blocks_cell(cell)
 
-## Публичная блокировка клетки (стены огня/земли на время жизни).
-## Снимается тем же вызовом с value=false.
+## Public cell blocking (walls of fire/earth for their lifetime).
+## Removed by the same call with value=false.
 func set_nowalk_cell(cell: Vector2i, value: bool) -> void:
 	if value:
 		_nowalk[cell] = true
 	else:
 		_nowalk.erase(cell)
 
-## Есть ли активная блокировка клетки.
+## Is there an active blocking on the cell.
 func is_nowalk_cell(cell: Vector2i) -> bool:
 	return _nowalk.has(cell)
 
-## Здание под курсором (клетка cell) — для ховера; возвращает Dictionary или {}.
+## The building under the cursor (cell) — for hover; returns a Dictionary or {}.
 func structure_at(cell: Vector2i) -> Dictionary:
 	for h in _structure_hits:
 		if cell.x >= int(h["x0"]) and cell.x <= int(h["x1"]) \
@@ -347,7 +347,7 @@ func structure_at(cell: Vector2i) -> Dictionary:
 			return h
 	return {}
 
-## Рельеф: настоящие высоты (для визуала и скорости движения).
+## Relief: real heights (for visuals and movement speed).
 func relief_at_tile(x: int, y: int) -> float:
 	if x < 0 or y < 0 or x >= map_width or y >= map_height:
 		return 0.0
@@ -370,15 +370,15 @@ func relief_at_world(pos: Vector2) -> float:
 	var bottom := lerpf(h01, h11, tx)
 	return lerpf(top, bottom, ty)
 
-# --- Текстуры: атлас всех используемых (файл, вариант, ряд) ---
+# --- Textures: an atlas of all used (file, variant, row) ---
 
 func _used_cells() -> Dictionary:
-	## Ключ "f{file}-v{variant}-r{row}" -> true. file 1..15, variant 0..15, row 0..nrows-1
+	## Key "f{file}-v{variant}-r{row}" -> true. file 1..15, variant 0..15, row 0..nrows-1
 	##
-	## Файлы 1..7 — интерьеры, 8..15 — переходы (variant = биом-владелец A,
-	## row = сосед B*2 + вариация). Ключ у них общий с интерьерами, потому что
-	## file_n и variant лежат в разных битах тайла и по отдельности не
-	## различаются — различает их сам file_n.
+	## Files 1..7 — interiors, 8..15 — transitions (variant = owner biome A,
+	## row = neighbour B*2 + variation). Their key is shared with interiors, because
+	## file_n and variant live in different tile bits and cannot be
+	## told apart on their own — file_n is what tells them apart.
 	var used := {}
 	for i in range(map_width * map_height):
 		var tile_id: int = _terrain[i] | (_hflags[i] << 8)
@@ -391,17 +391,17 @@ func _used_cells() -> Dictionary:
 
 func _build_atlas() -> void:
 	var used := _used_cells()
-	# Сгруппировать нужные ключи по паре (файл, вариант). BMP - это полоса
-	# из 14 рядов, и грузить её целиком ради одного ряда расточительно:
-	# раньше здесь загружались ВСЕ варианты всех 15 файлов (до ~190 картинок
-	# 32x448) и только ПОСЛЕ загрузки отбрасывались неиспользуемые.
+	# Group the needed keys by pair (file, variant). A BMP is a strip
+	# of 14 rows, and loading it whole for a single row is wasteful:
+	# before, ALL variants of all 15 files were loaded here (up to ~190 images
+	# of 32x448) and the unused ones were dropped only AFTER loading.
 	var want := {}  # file_n * 16 + variant -> true
 	for key in used:
 		var s: String = key
-		# Искать с индекса 1, а не 2: у файлов 1..7 номер однозначный и
-		# разделитель стоит ровно на позиции 2. С find("-", 2) он находился
-		# сам, substr отдавал пустую строку, интерьеры молча выпадали из
-		# атласа (12 ячеек вместо 482) и клетки просто не рисовались.
+		# Search from index 1, not 2: for files 1..7 the number is unambiguous and
+		# the separator sits exactly at position 2. With find("-", 2) it was found
+		# by itself, substr returned an empty string, interiors silently dropped out of
+		# the atlas (12 cells instead of 482) and the cells were simply not drawn.
 		var d1: int = s.find("-", 2)
 		var d2: int = s.find("-", d1 + 1)
 		if d1 < 0 or d2 < 0:
@@ -411,12 +411,12 @@ func _build_atlas() -> void:
 		var v: int = s.substr(d1 + 2, d2 - d1 - 2).to_int()
 		want[f * 16 + v] = true
 
-	# Соберём фактические (файл, вариант, ряд) с реальным числом рядов в файле
+	# Collect the actual (file, variant, row) with the real number of rows in the file
 	var cells: Array = []  # [key, Image32]
 	var key_to_cell := {}
-	# Файлы 1..7 — интерьеры (16 вариантов, у дороги tile4 всего 4),
-	# файлы 8..15 — переходы (7 вариантов = 7 биомов-владельцев).
-	# См. assets/maps/terrain_tiles_db.json.
+	# Files 1..7 — interiors (16 variants, the road tile4 has only 4),
+	# files 8..15 — transitions (7 variants = 7 owner biomes).
+	# See assets/maps/terrain_tiles_db.json.
 	var vmax_by_file := {1: 16, 2: 16, 3: 16, 4: 4, 5: 16, 6: 16, 7: 16,
 		8: 7, 9: 7, 10: 7, 11: 7, 12: 7, 13: 7, 14: 7, 15: 7}
 	var loaded := 0
@@ -435,23 +435,23 @@ func _build_atlas() -> void:
 		var nrows: int = int(img.get_height() / float(TILE))
 		for row in range(nrows):
 			var key := "f%d-v%d-r%d" % [file_n, variant, row]
-			# Дублей быть не может: want уникален по (файл, вариант),
-			# а ключ ряда дополнительно кодирует номер ряда.
+			# There can be no duplicates: want is unique by (file, variant),
+			# and the row key additionally encodes the row number.
 			if not used.has(key):
 				continue
 			var cell_img: Image = img.get_region(Rect2i(0, row * TILE, TILE, TILE))
 			cells.append([key, cell_img])
 			key_to_cell[key] = cells.size() - 1
 	print("AlmMap: загружено %d файлов тайлов из %d используемых пар" % [loaded, want.size()])
-	# Инвариант: каждая используемая клетка обязана попасть в атлас. Если
-	# клетка выпала (нет файла, неверный ряд, битый ключ), _build_relief_mesh
-	# молча пропустит её `continue` по нулевому UV, и в земле будет дыра.
-	# Проверялось на реальном баге: 12 ячеек вместо 482, и все тесты были
-	# зелёные - ловится только здесь.
+	# Invariant: every used cell must make it into the atlas. If a
+	# cell dropped out (missing file, wrong row, broken key), _build_relief_mesh
+	# would silently skip it via `continue` on a zero UV, and there would be a hole in the ground.
+	# Verified on a real bug: 12 cells instead of 482, and all tests were
+	# green — only this check catches it.
 	if cells.size() != used.size():
 		push_error("AlmMap: в атлас попало %d ячеек из %d используемых" % [cells.size(), used.size()])
 
-	# Собираем атлас 64x64 ячейки (до 4096)
+	# Build the atlas of 64x64 cells (up to 4096)
 	var atlas := Image.create(64 * TILE, 64 * TILE, false, Image.FORMAT_RGBA8)
 	atlas.fill(Color(0, 0, 0, 0))
 	_cell_uv.clear()
@@ -472,7 +472,7 @@ func _build_atlas() -> void:
 	_atlas = ImageTexture.create_from_image(atlas)
 	print("AlmMap: атлас %d ячеек" % cells.size())
 
-## Для отладки: сама текстура атласа.
+## For debugging: the atlas texture itself.
 func get_atlas_texture() -> ImageTexture:
 	return _atlas
 
@@ -481,17 +481,17 @@ func _uv_for_cell(file_n: int, variant: int, row: int) -> Vector4:
 	var r: Vector4 = _cell_uv.get(key, Vector4(0, 0, 0, 0))
 	return r
 
-# --- Рельефный меш с освещением ---
+# --- Relief mesh with lighting ---
 
 func _node_h(nx: int, ny: int) -> float:
-	## Высота узла сетки (угла клетки), с клампом к границам карты.
+	## Grid node (cell corner) height, clamped to the map borders.
 	var cx := clampi(nx, 0, map_width - 1)
 	var cy := clampi(ny, 0, map_height - 1)
 	return float(_heights[cy * map_width + cx]) * HEIGHT_SCALE
 
 func _cell_normal(x: int, y: int) -> Vector3:
-	## Нормаль квада (Allods16): u=(32,0,uz), v=(0,32,vz),
-	## где uz = h(x+1,y)-h(x,y), vz = h(x,y+1)-h(x,y). n = cross(u,v).
+	## Quad normal (Allods16): u=(32,0,uz), v=(0,32,vz),
+	## where uz = h(x+1,y)-h(x,y), vz = h(x,y+1)-h(x,y). n = cross(u,v).
 	var uz := _node_h(x + 1, y) - _node_h(x, y)
 	var vz := _node_h(x, y + 1) - _node_h(x, y)
 	# cross((32,0,uz),(0,32,vz)) = (-32*uz, -32*vz, 1024)
@@ -504,9 +504,9 @@ func _sun_dir() -> Vector3:
 	return s.normalized()
 
 func _brightness(x: int, y: int) -> float:
-	## Яркость клетки: |n·sun|*64+96, затем контраст (как в Allods16).
-	## В оригинале shade/4 — индекс яркостной палитры (0..64, 32 = норма),
-	## поэтому нормируем на 128: плоский террейн ~1.0, склоны темнее.
+	## Cell brightness: |n·sun|*64+96, then contrast (as in Allods16).
+	## In the original shade/4 is the index of the brightness palette (0..64, 32 = normal),
+	## so we normalise by 128: flat terrain ~1.0, slopes darker.
 	var n := _cell_normal(x, y)
 	var sun := _sun_dir()
 	var dot := absf(n.dot(sun))
@@ -521,7 +521,7 @@ func _build_relief_mesh() -> void:
 		mesh.z_index = -1
 		add_child(mesh)
 
-	# Поле биомов — как у пилота: type/6 + блюр ×3. Не «border 0/1».
+	# Biome field — as in the pilot: type/6 + blur ×3. Not "border 0/1".
 	var types := PackedInt32Array()
 	types.resize(map_width * map_height)
 	for i in range(types.size()):
@@ -540,7 +540,7 @@ func _build_relief_mesh() -> void:
 			prim_img.set_pixel(x, y, Color(float(t) / 6.0, 0, 0, 1))
 			sec_img.set_pixel(x, y, Color(float(pair["n"]) / 6.0, 0, 0, 1))
 			border_img.set_pixel(x, y, Color(float(pair["border"]), 0, 0, 1))
-	# Блюр ×1 — мягкая кромка без «полосы» на 2-3 клетки вглубь биома.
+	# Blur ×1 — a soft edge without a "strip" 2-3 cells deep into the biome.
 	border_img = _box_blur_rf(border_img)
 	_blend_primary = ImageTexture.create_from_image(prim_img)
 	_blend_secondary = ImageTexture.create_from_image(sec_img)
@@ -548,7 +548,7 @@ func _build_relief_mesh() -> void:
 
 	_build_blend_assets()
 
-	# ReliefMesh остаётся с материалом атласа (тесты/освещение ссылаются).
+	# ReliefMesh keeps the atlas material (tests/lighting reference it).
 	var amesh := ArrayMesh.new()
 	var mat := ShaderMaterial.new()
 	var shader := Shader.new()
@@ -563,7 +563,7 @@ void fragment() {
 	mesh.mesh = amesh
 	mesh.material = mat
 
-	# Материал и шейдер бленда — общие для всех чанков (19.10).
+	# Blend material and shader — shared by all chunks (19.10).
 	var mat_b := ShaderMaterial.new()
 	var sh_b := Shader.new()
 	sh_b.code = """shader_type canvas_item;
@@ -626,8 +626,8 @@ void fragment() {
 		mat_b.set_shader_parameter("u_t%d" % bi, _blend_strips[bi])
 	mat_b.set_shader_parameter("u_map_cells", Vector2(map_width, map_height))
 
-	# Чанки 16×16 клеток: тот же материал и UV всей карты, но каждый чанк —
-	# свой MeshInstance2D, который скрывается вне кадра камеры (19.10).
+	# Chunks of 16×16 cells: the same material and map-wide UVs, but every chunk is
+	# its own MeshInstance2D that is hidden outside the camera frame (19.10).
 	var chunks_x := int(ceil(map_width / float(CHUNK_CELLS)))
 	var chunks_y := int(ceil(map_height / float(CHUNK_CELLS)))
 	for cy in range(chunks_y):
@@ -651,7 +651,7 @@ void fragment() {
 					var p01 := Vector3(x * TILE, (y + 1) * TILE - h01, 0)
 					var p11 := Vector3((x + 1) * TILE, (y + 1) * TILE - h11, 0)
 					var br := _brightness(x, y)
-					# COLOR.a — только яркость (паттерн пилота). Типы — в текстурах.
+					# COLOR.a — brightness only (pilot pattern). Types — in the textures.
 					st_c.set_color(Color(1.0, 1.0, 1.0, br))
 					var u0 := float(x) / float(map_width)
 					var v0 := float(y) / float(map_height)
@@ -691,7 +691,7 @@ void fragment() {
 	print("AlmMap: меш собран (бленд=%d, полос=%d, чанков=%d)" % [
 		_blend_cells, _blend_strips.size(), _blend_chunks.size()])
 
-## Видимость чанков по камере: чанк вне кадра (+запас) не рисуется.
+## Chunk visibility by camera: a chunk outside the frame (+margin) is not drawn.
 func _process(_delta: float) -> void:
 	if _blend_chunks.is_empty():
 		return
@@ -714,8 +714,8 @@ func _process(_delta: float) -> void:
 			continue
 		node.visible = (c["rect"] as Rect2).intersects(view)
 
-## Пара (secondary, unused_border) — secondary = самый частый чужой сосед.
-## Сам mix в шейдере: по полю type/6 между tid и nid (формула пилота).
+## Pair (secondary, unused_border) — secondary = the most frequent foreign neighbour.
+## The mix itself in the shader: over the type/6 field between tid and nid (pilot formula).
 func _blend_pair(types: PackedInt32Array, x: int, y: int, t: int) -> Dictionary:
 	var counts := {}
 	var foreign := 0
@@ -741,7 +741,7 @@ func _blend_pair(types: PackedInt32Array, x: int, y: int, t: int) -> Dictionary:
 		return {"n": t, "border": 0.0}
 	return {"n": second, "border": 1.0}
 
-## Полосы интерьеров tile1..7 (по 6 вариантов) для всех биомов.
+## Interior strips tile1..7 (6 variants each) for all biomes.
 func _build_blend_assets() -> void:
 	if _blend_strips.size() == BIOME_COUNT:
 		return
@@ -757,7 +757,7 @@ func _build_blend_assets() -> void:
 		_blend_strips.append(strip)
 	print("AlmMap: blend-полосы: %d биомов" % _blend_strips.size())
 
-## Полоса из вариантов BMP32x448. Nearest — текстура не «плывёт».
+## A strip of BMP32x448 variants. Nearest — the texture does not "float".
 func _load_blend_strip(path: String) -> ImageTexture:
 	if not ResourceLoader.exists(path):
 		return null
@@ -785,20 +785,20 @@ func _box_blur_rf(src: Image) -> Image:
 			dst.set_pixel(x, y, Color(acc / 9.0, 0.0, 0.0, 1.0))
 	return dst
 
-## Мировая позиция спавна: из файла-якоря "<имя>.spawn.json" рядом с .alm
-## (ставится в редакторе карт) или центр карты (game.gd сам ищет проходимый тайл).
+## Spawn world position: from the anchor file "<name>.spawn.json" next to the .alm
+## (placed by the map editor) or the map centre (game.gd finds a walkable tile itself).
 func get_spawn_pos() -> Vector2:
 	var anchor := _load_spawn_anchor()
 	if anchor.x >= 0:
 		return Vector2(anchor.x * TILE + TILE / 2.0, anchor.y * TILE + TILE / 2.0)
 	return Vector2(map_width * TILE / 2.0, map_height * TILE / 2.0)
 
-## Выбор карты при старте. Порядок:
-##  1. Явно запрошенный путь (Game.pending_map_path) — редактор карт, загрузка сохранения.
-##  2. Карта по сиду (Game.map_seed != 0) — новая игра: генерируем или переиспользуем
-##     карту в user://maps/. Именно здесь появляются неповторимые карты.
-##  3. Запасной путь из main.tscn — dev-режим и автотесты. Без запрошенного сида
-##     игра всегда грузила бы один и тот же gen_smart_01.alm.
+## Map choice at start. Order:
+##  1. An explicitly requested path (Game.pending_map_path) — map editor, loading a save.
+##  2. Map by seed (Game.map_seed != 0) — new game: generate or reuse
+##     a map in user://maps/. This is exactly where unique maps appear.
+##  3. Fallback path from main.tscn — dev mode and autotests. Without a requested seed
+##     the game would always load the same gen_smart_01.alm.
 func _resolve_map_path() -> void:
 	var requested: String = Game.pending_map_path
 	if requested != "" and FileAccess.file_exists(requested):
@@ -822,9 +822,9 @@ func _resolve_map_path() -> void:
 			alm_path = generated
 			return
 		push_warning("AlmMap: не удалось получить карту по сиду %d" % Game.map_seed)
-	# 3. Запасной вариант — alm_path из сцены.
+	# 3. Fallback — alm_path from the scene.
 
-## Клетка спавна из файла-якоря рядом с .alm, или (-1,-1).
+## Spawn cell from the anchor file next to the .alm, or (-1,-1).
 func _load_spawn_anchor() -> Vector2i:
 	if alm_path.is_empty():
 		return Vector2i(-1, -1)
@@ -841,17 +841,17 @@ func _load_spawn_anchor() -> Vector2i:
 	return Vector2i(int(json.get("x", -1)), int(json.get("y", -1)))
 
 func _load_portal_spawn() -> void:
-	# Загрузка spawn из sidecar
+	# Load spawn from the sidecar
 	var sp := _load_spawn_anchor()
 	if sp.x >= 0:
 		_spawn_cell = sp
-		# Создаём маркер спавна
+		# Create the spawn marker
 		var pm := preload("res://scripts/portal_marker.gd").new()
 		pm.setup(sp, "spawn_marker")
 		pm.z_index = 10
 		add_child(pm)
 		_spawn_marker = pm
-	# Загрузка portal из sidecar
+	# Load portal from the sidecar
 	var portal_path: String = ""
 	if not alm_path.is_empty():
 		portal_path = alm_path.get_basename() + ".portal.json"
@@ -865,7 +865,7 @@ func _load_portal_spawn() -> void:
 				if (json as Dictionary).has("portals"):
 					records = (json as Dictionary).get("portals", []) as Array
 				else:
-					# Старый формат: один портал {x,y} без адреса.
+					# Old format: a single portal {x,y} without an address.
 					records = [json]
 				for raw in records:
 					if not (raw is Dictionary):
@@ -887,19 +887,19 @@ func _load_portal_spawn() -> void:
 func get_portal_cells() -> Array:
 	return _portal_cells
 
-## Порталы сектора: [{cell, to, dir}]. Пустой to — старый sidecar без адреса.
+## Sector portals: [{cell, to, dir}]. An empty to — an old sidecar without an address.
 func get_portals() -> Array:
 	return _portals
 
 func get_spawn_cell() -> Vector2i:
 	return _spawn_cell
 
-## Sidecar-файлы рядом с .alm — редактор сохраняет в них полное состояние
-## структур и НПЦ (сам .alm не перезаписывается):
-##   "<имя>.structures.json" — {"structures": [{x, y, type_id}]}
-##   "<имя>.npcs.json"       — {"npcs": [{x, y, set}]}
-## Если sidecar существует — он ПЕРЕКРЫВАЕТ секции 4/6 .alm (редактор копирует
-## их туда при первом открытии); иначе работают оригинальные секции.
+## Sidecar files next to the .alm — the editor saves the full state
+## of structures and NPCs into them (the .alm itself is not overwritten):
+##   "<name>.structures.json" — {"structures": [{x, y, type_id}]}
+##   "<name>.npcs.json"       — {"npcs": [{x, y, set}]}
+## If a sidecar exists — it OVERRIDES sections 4/6 of the .alm (the editor copies
+## them there on first open); otherwise the original sections are used.
 func _load_sidecars() -> void:
 	if alm_path.is_empty():
 		return
@@ -913,18 +913,18 @@ func _load_sidecars() -> void:
 	var h: Variant = _read_sidecar(base + ".herbs.json")
 	if h != null and h is Array:
 		_herbs = h
-	# Форпосты фракций (пакет B): отдельный sidecar, стражники при этом едут
-	# обычными записями .npcs.json с полем "outpost".
+	# Faction outposts (pack B): a separate sidecar, while the guards travel as
+	# ordinary .npcs.json records with an "outpost" field.
 	var op: Variant = _read_sidecar(base + ".outposts.json")
 	_outposts = op if op != null and op is Array else []
-	# Ручная разметка «Нельзя пройти» — редактор пишет её рядом с .alm
+	# Manual "Impassable" marking — the editor writes it next to the .alm
 	var n: Variant = _read_sidecar(base + ".nowalk.json")
 	_nowalk.clear()
 	if n != null and n is Array:
 		for pair in n:
 			if pair is Array and pair.size() >= 2:
 				_nowalk[Vector2i(int(pair[0]), int(pair[1]))] = true
-	# Ручная разметка «Разрешить проход» — пускать сквозь препятствие (дерево/камень)
+	# Manual "Allow passage" marking — let units through an obstacle (tree/stone)
 	var a: Variant = _read_sidecar(base + ".allowwalk.json")
 	_allowwalk.clear()
 	if a != null and a is Array:
@@ -932,8 +932,8 @@ func _load_sidecars() -> void:
 			if pair is Array and pair.size() >= 2:
 				_allowwalk[Vector2i(int(pair[0]), int(pair[1]))] = true
 
-## Прочитать sidecar: null — файла нет (использовать секции .alm),
-## иначе массив записей (пустой — сущностей нет).
+## Read a sidecar: null — the file is absent (use the .alm sections),
+## otherwise an array of records (empty — no entities).
 func _read_sidecar(path: String) -> Variant:
 	if not FileAccess.file_exists(path):
 		return null
@@ -960,20 +960,20 @@ func _read_sidecar(path: String) -> Variant:
 		return parsed
 	return []
 
-## Список юнитов карты для спавна: секция id=6 (.alm) или sidecar .npcs.json.
-## Записи: {x, y — клетки, type_id | set, player, hp_max}.
+## List of map units for spawning: section id=6 (.alm) or the .npcs.json sidecar.
+## Records: {x, y — cells, type_id | set, player, hp_max}.
 func get_units() -> Array:
 	return map_units
 
 
-## Форпосты фракций этой карты: [{id, faction, name, x, y}].
-## Пусто у карт без sidecar .outposts.json (военные .alm, старые карты).
+## Faction outposts of this map: [{id, faction, name, x, y}].
+## Empty for maps without an .outposts.json sidecar (military .alm, old maps).
 func outposts() -> Array:
 	return _outposts
 
 
-## Подключить врага к событию смерти карты (Game._spawn_monster).
-## Двойной коннект не возможен: сигнал исчезает вместе с узлом.
+## Connect an enemy to the map death event (Game._spawn_monster).
+## A double connect is impossible: the signal disappears together with the node.
 func watch_enemy(unit: Enemy) -> void:
 	if unit != null and is_instance_valid(unit) \
 			and not unit.died.is_connected(_on_enemy_died):
@@ -984,12 +984,12 @@ func _on_enemy_died(unit: Enemy) -> void:
 	enemy_died.emit(unit)
 
 
-## Главы городов этой карты: city_id -> {race, cells: [[x,y], ...]}.
+## City heads of this map: city_id -> {race, cells: [[x,y], ...]}.
 ##
-## Квесты (QuestSystem) спрашивают карту, а не sidecar: у карт генератора
-## city_id записан в каждой НПЦ-записи, у военных .alm его нет — тогда глава
-## без города получает стабильный id "c<x>y<y>" (одинаков при каждой загрузке),
-## а офферы такого города есть только у него самого.
+## Quests (QuestSystem) ask the map rather than the sidecar: for generator maps
+## city_id is written in every NPC record, for military .alm it is absent — then the head
+## without a city gets a stable id "c<x>y<y>" (the same on every load),
+## and such a city's offers exist only with it.
 func city_heads() -> Dictionary:
 	var out := {}
 	for rec in map_units:
@@ -1017,7 +1017,7 @@ func _cell_y(d: Dictionary) -> int:
 	return int(d.get("y", 0))
 
 
-## Раса города по набору НПЦ: "humans"/"ork"/"druid"/"necro".
+## City race by the NPC set: "humans"/"ork"/"druid"/"necro".
 func _race_of_record(d: Dictionary) -> String:
 	var set_name := str(d.get("set", ""))
 	if set_name == "" and d.has("type_id"):
@@ -1025,7 +1025,7 @@ func _race_of_record(d: Dictionary) -> String:
 	var race := MapGenerator.race_of_set(set_name)
 	return race if race != "" else MapGenerator.city_race_for_hero(Game.hero_race)
 
-## --- Запросы для движения и миникарты ---
+## --- Queries for movement and the minimap ---
 
 func _cell_of(pos: Vector2) -> Vector2i:
 	return Vector2i(int(int(pos.x) / float(TILE)), int(int(pos.y) / float(TILE)))
@@ -1053,40 +1053,40 @@ func is_walkable_world(pos: Vector2) -> bool:
 	var ty := int(int(pos.y) / float(TILE))
 	if tx < 0 or ty < 0 or tx >= map_width or ty >= map_height:
 		return false
-	# Ручная разметка «Нельзя пройти» (редактор) — приоритет над автоматикой
+	# Manual "Impassable" marking (editor) — takes priority over the automatic one
 	if _nowalk.has(Vector2i(tx, ty)):
 		return false
 	var i := ty * map_width + tx
 	var hf := _hflags[i]
-	# Спец-значения Nival (16..40 - вода/барьер в byte[1]) — непроходимы.
-	# Проверка живёт в WalkTable.is_special, потому что байты 23..30 -
-	# это наши переходные тайлы, а не Nival (см. комментарий там).
+	# Nival special values (16..40 — water/barrier in byte[1]) — impassable.
+	# The check lives in WalkTable.is_special, because bytes 23..30 are
+	# our transition tiles, not Nival ones (see the comment there).
 	if WalkTable.is_special(hf):
 		return false
 	var file_n := AlmLoader.terrain_file_of(hf)
 	if file_n < 0:
 		return false
-	# У переходного тайла поле variant хранит биом-владельца, а не номер
-	# текстуры, поэтому в WalkTable отдаём 0: иначе оверрайд вида "2-12"
-	# мог бы примениться к переходу с несуществующей текстурой 12.
+	# For a transition tile the variant field stores the owner biome, not the texture
+	# number, so we pass 0 to WalkTable: otherwise an override like "2-12"
+	# could apply to a transition with a non-existent texture 12.
 	var variant := 0
 	if file_n == (hf & 0xF) + 1:
 		variant = clampi((_terrain[i] >> 4) & 0xF, 0, 15)
-	# Таблица «цены прохода по текстуре» (WalkTable): вода (tile3) и
-	# переопределённые варианты с ценой 0 — непроходимы; горы/песок — проходимы
+	# "Passage cost by texture" table (WalkTable): water (tile3) and
+	# overridden variants with cost 0 are impassable; mountains/sand are walkable
 	if not WalkTable.walkable(file_n, variant):
 		return false
 	var allow := _allowwalk.has(Vector2i(tx, ty))
-	# Объект (дерево/камень из obstacles) — непроходимо (кроме allowwalk-разметки)
+	# An object (tree/stone from obstacles) — impassable (except manually allowwalk-marked cells)
 	if not allow and _obstacles.size() > i and _obstacles[i] > 0:
 		return false
-	# Здания (секция id=4) — непроходимы по навигационному футпринту
+	# Buildings (section id=4) — impassable by navigation footprint
 	if not allow and _structure_blocks_cell(Vector2i(tx, ty)):
 		return false
 	return true
 
-## Множитель скорости по текстуре клетки (WalkTable, как у разработчиков:
-## скорость = 8 / цена прохода). Дорога быстрее травы, песок/горы медленнее.
+## Speed multiplier by cell texture (WalkTable, as in the original:
+## speed = 8 / passage cost). The road is faster than grass, sand/mountains slower.
 func speed_factor_at_world(pos: Vector2) -> float:
 	var tx := int(int(pos.x) / float(TILE))
 	var ty := int(int(pos.y) / float(TILE))
@@ -1094,7 +1094,7 @@ func speed_factor_at_world(pos: Vector2) -> float:
 		return 1.0
 	return WalkTable.speed_at(_hflags[ty * map_width + tx], _terrain[ty * map_width + tx])
 
-## Тип клетки 0..3 для миникарты: 0 трава, 1 горы, 2 вода/барьер, 3 дорога.
+## Cell type 0..3 for the minimap: 0 grass, 1 mountains, 2 water/barrier, 3 road.
 func cell_type_at(tx: int, ty: int) -> int:
 	if tx < 0 or ty < 0 or tx >= map_width or ty >= map_height:
 		return 0
@@ -1103,8 +1103,8 @@ func cell_type_at(tx: int, ty: int) -> int:
 		return 2
 	return t
 
-## Причина непроходимости клетки («», если проходима) — для подсказки координат.
-## «Трава» может быть занята деревом/камнем (obstacles), зданием или разметкой.
+## Reason why a cell is impassable ("", if walkable) — for the coordinate tooltip.
+## "Grass" may be occupied by a tree/stone (obstacles), a building or a marking.
 func blocked_reason(cell: Vector2i) -> String:
 	if cell.x < 0 or cell.y < 0 or cell.x >= map_width or cell.y >= map_height:
 		return "вне карты"
@@ -1139,11 +1139,11 @@ func is_within_bounds(pos: Vector2, margin: float = 12.0) -> bool:
 	var max_y := map_height * TILE - margin
 	return pos.x >= min_x and pos.y >= min_y and pos.x <= max_x and pos.y <= max_y
 
-## --- Путь (pathfinding): BFS по сетке проходимости, обход препятствий ---
+## --- Path (pathfinding): BFS over the walkability grid, going around obstacles ---
 
-## Путь от from_world до to_world в мировых точках (центры клеток), без первой
-## клетки. Если цель непроходима — ищем путь к ближайшей проходимой рядом с ней
-## (клик по дереву/воде подводит героя к самому краю). Пустой — пути нет.
+## Path from from_world to to_world in world points (cell centres), without the first
+## cell. If the goal is impassable — look for a path to the nearest walkable cell next to it
+## (a click on a tree/water leads the hero right to the edge). Empty — no path.
 func find_path(from_world: Vector2, to_world: Vector2) -> Array:
 	if not Game.perf_enabled:
 		return _find_path_impl(from_world, to_world)
@@ -1157,14 +1157,14 @@ func find_path(from_world: Vector2, to_world: Vector2) -> Array:
 func _find_path_impl(from_world: Vector2, to_world: Vector2) -> Array:
 	var start := _cell_of(from_world)
 	var goal := _cell_of(to_world)
-	# Герой может стоять в клетке, которая по разметке непроходима (упёрся/склон):
-	# путь начинаем от ближайшей ПРОХОДИМОЙ клетки рядом, иначе «нельзя вернуться».
+	# The hero may stand in a cell that is impassable by marking (stuck/slope):
+	# start the path from the nearest WALKABLE cell nearby, otherwise "you cannot return".
 	if not _cell_walkable(start):
 		start = _nearest_walkable(start, 4)
 		if start.x < 0:
 			return []
 	if not _cell_walkable(goal):
-		# Цель непроходима: пробуем 4 соседей, берём ближайшего
+		# The goal is impassable: try the 4 neighbours, take the nearest one
 		var best: Vector2i = goal
 		var best_d := -1.0
 		for d in _DIRS_4:
@@ -1175,9 +1175,9 @@ func _find_path_impl(from_world: Vector2, to_world: Vector2) -> Array:
 					best_d = dist
 					best = n
 		if best_d < 0.0:
-			# Цель глубоко в объекте/воде (ни один из 4 соседей не проходим):
-			# идём к ближайшей суше спиралью, иначе клик превращается в «бег
-			# на месте» у кромки (пустая прямая трассировка в move_to_target).
+			# The goal is deep inside an object/water (none of the 4 neighbours is walkable):
+			# go to the nearest land in a spiral, otherwise the click turns into "running
+			# in place" at the edge (an empty straight trace in move_to_target).
 			var shore := _nearest_walkable(goal, 24)
 			if shore.x < 0:
 				return []
@@ -1185,9 +1185,9 @@ func _find_path_impl(from_world: Vector2, to_world: Vector2) -> Array:
 		else:
 			goal = best
 
-	# Жадный best-first по эвристике Чебышёва (целые «ведёрки» — O(1) извлечение).
-	# BFS мерился 360+ мс; линейный минимум по open — ещё ~50 мс. Вёдра срезают
-	# выборку до O(1) и держат длинный клик в единицах мс.
+	# Greedy best-first by the Chebyshev heuristic (integer "buckets" — O(1) extraction).
+	# BFS was measured at 360+ ms; a linear minimum over open — another ~50 ms. Buckets cut
+	# the selection down to O(1) and keep a long click in the units of ms.
 	var prev := {}
 	var g_cost := {start: 0.0}
 	var h0 := _heuristic(start, goal)
@@ -1201,7 +1201,7 @@ func _find_path_impl(from_world: Vector2, to_world: Vector2) -> Array:
 	var best_h := 1.0e18
 	var hit_limit := false
 	while true:
-		# Ближайшая непустая ведро
+		# The nearest non-empty bucket
 		while min_h < buckets.size() and (buckets[min_h] as Array).is_empty():
 			min_h += 1
 		if min_h >= buckets.size():
@@ -1255,7 +1255,7 @@ func _find_path_impl(from_world: Vector2, to_world: Vector2) -> Array:
 			return []
 		end_cell = best
 
-	# Восстановить путь и перевести в мировые точки (центры клеток)
+	# Reconstruct the path and convert it to world points (cell centres)
 	var cells: Array = []
 	var c := end_cell
 	var guard := 0
@@ -1279,14 +1279,14 @@ func _ensure_bucket(buckets: Array, h: int) -> void:
 		buckets.append([])
 
 
-## Эвристика: Чебышёв (допустима при 8-связности).
+## Heuristic: Chebyshev (admissible with 8-connectivity).
 func _heuristic(a: Vector2i, b: Vector2i) -> float:
 	return float(maxi(absi(a.x - b.x), absi(a.y - b.y)))
 
 func _cell_walkable(cell: Vector2i) -> bool:
 	return is_walkable_world(Vector2(cell.x * TILE + TILE / 2.0, cell.y * TILE + TILE / 2.0))
 
-## Ближайшая проходимая клетка (спираль радиуса r) или (-1,-1).
+## The nearest walkable cell (a spiral of radius r) or (-1,-1).
 func _nearest_walkable(cell: Vector2i, r: int) -> Vector2i:
 	if _cell_walkable(cell):
 		return cell

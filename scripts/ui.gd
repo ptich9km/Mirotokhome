@@ -19,15 +19,15 @@ var player: Player
 
 var minimap_image: Image
 var minimap_texture: ImageTexture
-var _minimap_base: Image = null   # кэш террейна+зданий (P3): не перерисовываем каждый тик
-var _minimap_map_id := 0          # id карты, для которой собран _minimap_base
+var _minimap_base: Image = null   # cache of terrain + buildings (P3): we do not redraw every tick
+var _minimap_map_id := 0          # id of the map _minimap_base was built for
 var _minimap_size := Vector2.ZERO
 var _minimap_timer := 0.0
-var _fog_img: Image = null        # кэш тумана для миникарты (19.10)
+var _fog_img: Image = null        # fog cache for the minimap (19.10)
 var _fog_dirty := true
 const MINIMAP_INTERVAL := 0.25
-## Кнопки HUD у миникарты: колонка 175 px, пять кнопок по 32 px = 168 px.
-## С текстом минимум был 248 px и ряд уезжал за правый край экрана (23.10).
+## HUD buttons by the minimap: a 175 px column, five 32 px buttons = 168 px.
+## With text the minimum was 248 px and the row went off the right edge of the screen (23.10).
 const HUD_CMD_SIZE := 32
 const HUD_CMD_ICON_DIR := "res://assets/ui/hud/cmd/"
 func setup_ui(p: Player):
@@ -52,28 +52,28 @@ func setup_ui(p: Player):
 	_update_gold(int(player.gold) if player != null else 0)
 	_update_bottom_panel_visibility()
 
-## Адаптивная раскладка: правая панель закреплена якорями справа в main.tscn,
-## нижние панели (магия/инвентарь) — по центру игрового окна любого разрешения.
+## Adaptive layout: the right panel is anchored to the right in main.tscn,
+## the bottom panels (magic/inventory) — centred in the game window at any resolution.
 func _layout_panels() -> void:
 	_update_bottom_panel_visibility()
 
-# Панель заклинаний с иконками
-const SPELL_CELL := 36              # ячейка магии = spellback.bmp (36x36)
-const SPELL_COLS := 12              # колонок в книге (как сетка 12 в tscn)
+# Spell panel with icons
+const SPELL_CELL := 36              # spell cell = spellback.bmp (36x36)
+const SPELL_COLS := 12              # columns in the book (same as the 12 grid in the tscn)
 ## Icon and cooldown veil inset inside a book cell: the art nearly touches the
 ## frame, as in the reference skill panels (WoW/Lineage/AION).
 const BOOK_ICON_INSET := 2.0
 const SPHERE_RU := {"Fire": "Огонь", "Water": "Вода", "Air": "Воздух",
 	"Earth": "Земля", "Astral": "Астрал"}
-var spell_buttons: Array = []       # ВСЕ ячейки (включая пустые квадратики)
-var _spell_buttons_filled: Array = []  # только ячейки с заклинаниями (аляйно с names)
+var spell_buttons: Array = []       # ALL cells (including the empty squares)
+var _spell_buttons_filled: Array = []  # only cells with spells (aligned with names)
 ## "Book is empty" hint: the warrior's book is scrolls from the inventory, the
 ## mage's is learned spells. Without text the empty panel looked like "B does not
 ## open the menu" (2026-10-30).
 var _book_empty_hint: Label = null
-## заклинание -> последнее показанное ЧИСЛО секунд кулдауна. Ключ нужен,
-## чтобы не трогать узлы каждый кадр: пока целое число не изменилось,
-## картинка та же.
+## spell -> last shown WHOLE number of cooldown seconds. The key exists so the
+## nodes are not touched every frame: while the integer has not changed, the
+## picture stays the same.
 var _cd_shown: Dictionary = {}
 var spells_visible: bool = true
 
@@ -85,12 +85,12 @@ func _setup_spells():
 	spell_grid.add_theme_constant_override("h_separation", 2)
 	spell_grid.add_theme_constant_override("v_separation", 2)
 
-## Rebuild the spell book: always 2 rows of 12 cells = 24 book spells, in the
-## order of the canonical spell table (internal archive of the project, not
-## published). Slot 1 (row 1, left cell) … slot 24 (row 2, 12th cell). Each spell
-## icon is the canonical book icon (assets/spells/spell_NN.png, sliced from
-## spellbook.bmp). Learned — the icon plus a tooltip with the name; not learned —
-## an empty spellback square that tells which magic is taught here.
+## Rebuild the spell book: always 2 rows of 12 cells = 24 book spells
+## (order in docs/rom2-ref/spells.txt). Slot 1 (1st row, left cell) … slot 24
+## (2nd row, 12th cell). Each spell icon is the canonical book icon
+## (assets/spells/spell_NN.png, cut from spellbook.bmp). Learned — icon +
+## a tooltip with the name; not learned — an empty spellback square with a tooltip
+## saying which magic is learned here.
 func refresh_spell_book() -> void:
 	if not is_instance_valid(player):
 		return
@@ -103,8 +103,8 @@ func refresh_spell_book() -> void:
 	_cd_shown.clear()
 	_clear_book_empty_hint()
 
-	# ВОИН: книга = свитки из склада. Маг свитки сюда НЕ берёт — они бы
-	# затирали книжную магию; у мага свиток живёт в складе и на хоткее.
+	# WARRIOR: the book = scrolls from the inventory. A mage does NOT take scrolls here — they would
+	# overwrite the book magic; for a mage a scroll lives in the inventory and on a hotkey.
 	if not player.has_mana:
 		_build_scroll_book()
 		if spell_buttons.is_empty():
@@ -113,16 +113,16 @@ func refresh_spell_book() -> void:
 		_refresh_auto_status()
 		return
 
-	# Каноничная таблица из 24 книжных заклинаний: порядок = порядок иконок
-	# assets/spells/spell_NN.png (нарезаны из spellbook.bmp, слот книги = индекс)
+	# The canonical table of 24 book spells: the order = the icon order
+	# assets/spells/spell_NN.png (cut from spellbook.bmp, the book slot = index)
 	var slots: Array = []
 	for i in range(SpellDB.BOOK_SPELLS.size()):
 		slots.append({
 			"name": str(SpellDB.BOOK_SPELLS[i]),
 			"icon": SpellDB.book_icon_path(i),
 		})
-	# Прочие выученные заклинания (их дают Книги Сфер — напр. Curse/Slow/Light)
-	# идут следом за каноничными 24, с иконкой свитка из базы.
+	# Other learned spells (given by Sphere Books — e.g. Curse/Slow/Light)
+	# go after the canonical 24, with the scroll icon from the database.
 	for name in player.known_spells:
 		if SpellDB.book_index(str(name)) < 0:
 			var ch := player.spell_charges(str(name))
@@ -280,7 +280,7 @@ func _make_spell_cell(name: String, icon: String, known: bool) -> void:
 	var sphere_color: Color = UiKit.SPHERE_COLORS.get(sphere_name, Color(0.5, 0.5, 0.5))
 
 	if not known:
-		# Empty slot of the book: a dimmed frame in the sphere colour.
+		# Empty book slot: a dimmed border in the element colour
 		var cell := PanelContainer.new()
 		cell.custom_minimum_size = Vector2(SPELL_CELL, SPELL_CELL)
 		var style := StyleBoxFlat.new()
@@ -328,7 +328,7 @@ func _make_spell_cell(name: String, icon: String, known: bool) -> void:
 		b.add_child(lbl)
 
 	b.pressed.connect(func(sn: String = name): _cast_spell_button(sn))
-	# RMB: make the spell the default for the mage's auto-cast (pack C).
+	# RMB: make the spell "default" for the mage's auto-cast (package C).
 	b.gui_input.connect(func(event: InputEvent, sn: String = name):
 		if event is InputEventMouseButton and event.pressed \
 				and event.button_index == MOUSE_BUTTON_RIGHT:
@@ -362,8 +362,9 @@ func _set_cooldown_visual(b: Button, left: float, total: float) -> void:
 	var cd := b.get_node_or_null("Cooldown") as Label
 	if cd != null:
 		cd.visible = on
-		# Whole seconds: "3" reads as "3 seconds left", while "2.7" blinks and
-		# says nothing. ceil keeps a positive remainder from showing 0.
+		# A whole number of seconds: "3" reads as "3 seconds left", while "2.7"
+		# flickers and says nothing. We show ceil so as not to show 0
+		# while there is a positive remainder.
 		cd.text = str(int(ceil(left))) if on else ""
 
 	# Veil recedes from the top: full height = full cooldown, zero = ready.
@@ -388,8 +389,8 @@ func _set_cooldown_visual(b: Button, left: float, total: float) -> void:
 		icon_node.modulate = Color(1, 1, 1, 1.0 - 0.35 * t)
 
 
-## Тултип заклинания. Раньше показывал только имя/сферу/заряды/ману —
-## было невозможно понять, что заклинание делает и насколько оно далеко.
+## Spell tooltip. Before it showed only name/sphere/charges/mana —
+## it was impossible to understand what the spell does and how far it reaches.
 func _spell_tooltip(spell_name: String, title: String, sphere: String, charges: int, mana: int) -> String:
 	var spell := SpellDB.get_spell(spell_name)
 	var lines: Array = [title, "Сфера: " + sphere]
@@ -398,7 +399,7 @@ func _spell_tooltip(spell_name: String, title: String, sphere: String, charges: 
 	elif player.has_mana:
 		lines.append("Мана: %d" % mana)
 
-	# Урон или лечение с учётом силы магии героя
+	# Damage or healing including the hero's spell power
 	var base := int(spell.get("damage", 0))
 	if base > 0:
 		lines.append("Урон: %d" % Game.spell_damage(player, spell_name, SpellDB.sphere_of(spell_name), base))
@@ -423,7 +424,7 @@ func _spell_tooltip(spell_name: String, title: String, sphere: String, charges: 
 	return "\n".join(lines)
 
 
-## Человеческие названия эффектов для тултипа.
+## Human-readable effect names for the tooltip.
 func _effect_labels(effects: Array) -> Array:
 	var out: Array = []
 	for e in effects:
@@ -445,9 +446,9 @@ func _effect_labels(effects: Array) -> Array:
 			_: out.append(m)
 	return out
 
-## Клик по заклинанию в книге: как у разработчиков — входим в режим
-## прицеливания (анимированный курсор cast/), магия улетает только по клику
-## на цель. Мана/заряд при этом НЕ списываются до попадания по цели.
+## Click on a spell in the book: as in the original — we enter targeting
+## mode (an animated cast/ cursor), the magic flies only on a click
+## on the target. Mana/charge are NOT deducted before hitting the target.
 func _cast_spell_button(name: String) -> void:
 	if Game.is_paused:
 		return
@@ -456,14 +457,14 @@ func _cast_spell_button(name: String) -> void:
 	_begin_spell_targeting(name)
 
 
-## ПКМ по заклинанию: авто-каст по умолчанию (обычно Heal).
-## Повторный ПКМ по тому же — снять. Ячейка подсвечивается рамкой ACCENT.
+## RMB on a spell: default auto-cast (usually Heal).
+## A repeated RMB on the same one — removes it. The cell is highlighted with an ACCENT frame.
 func _toggle_auto_spell(name: String) -> void:
 	if Game.auto_spell == name:
 		Game.auto_spell = ""
 	else:
 		Game.auto_spell = name
-	# Подсветка всех ячеек книги
+	# Highlight all book cells
 	for i in range(_spell_buttons_filled.size()):
 		var b = _spell_buttons_filled[i] as Button
 		if b == null or i >= _spell_button_names.size():
@@ -473,8 +474,8 @@ func _toggle_auto_spell(name: String) -> void:
 			_mark_auto_spell_cell(b, sn)
 		else:
 			_clear_auto_spell_mark(b)
-	# Цель лечения и баффов — теперь одна настройка (Esc → Настройки, «Магия»),
-	# поэтому ПКМ больше не цикл: он молча менял поведение авто-лечения.
+	# The healing and buff target is now a single setting (Esc → Settings, "Magic"),
+	# so RMB is no longer a cycle: it silently changed the auto-healing behaviour.
 	_refresh_auto_status()
 
 
@@ -518,8 +519,8 @@ func _clear_auto_spell_mark(b: Button) -> void:
 		badge.visible = false
 
 
-## Alt+ПКМ по книге: быстрый цикл уровня авто-волшебства (без окна настроек).
-## base → medium → max → base. Цель меняется в Esc → Настройки, «Магия».
+## Alt+RMB on the book: a quick cycle of the auto-magic level (without the settings window).
+## base → medium → max → base. The target is changed in Esc → Settings, "Magic".
 func _cycle_auto_buff_tier() -> void:
 	match Game.auto_buff_tier:
 		"base":
@@ -549,11 +550,10 @@ func _ensure_auto_status_label() -> void:
 	spell_panel.add_child(lab)
 
 
-## --- Warrior's book: scrolls from the inventory -----------------------------
+## --- Warrior book: scrolls from the inventory -----------------------------------------
 
-## A warrior does not learn magic: his "book" is the scrolls he carries. One
-## cell per scroll type, the inventory stays the owner (a scroll can be sold).
-## A mage never takes scrolls here — they would overwrite his book magic.
+## A warrior does not learn magic: their "book" is scrolls in the inventory. One cell per type,
+## the inventory stays the owner (the scroll can be sold). A mage does not take scrolls here.
 func _build_scroll_book() -> void:
 	var seen: Array = []
 	for raw in player.inventory:
@@ -581,7 +581,7 @@ func _build_scroll_book() -> void:
 		_make_scroll_cell(key, item, player.inventory.count(key))
 
 
-## Scroll cell: item icon, remaining count, auto-cast mark, cooldown veil.
+## Scroll cell: item icon, remainder, auto-cast mark.
 func _make_scroll_cell(item_key: String, item: Dictionary, count: int) -> void:
 	var spell := SpellDB.spell_from_scroll(item_key)
 	var sphere_name := SpellDB.sphere_of(spell)
@@ -656,7 +656,7 @@ func _make_scroll_cell(item_key: String, item: Dictionary, count: int) -> void:
 		Game.spell_cooldown(player, spell, SpellDB.scroll_power_of(item)))
 
 
-## ПКМ по свитку: ЕДИНСТВЕННЫЙ автокаст, и только на себя.
+## RMB on a scroll: the ONLY auto-cast, and self only.
 func _toggle_auto_scroll(item_key: String) -> void:
 	var spell := SpellDB.spell_from_scroll(item_key)
 	if spell == "":
@@ -691,7 +691,7 @@ func _refresh_auto_status() -> void:
 	lab.text = "Авто-волшебство: " + " · ".join(parts)
 
 
-## Названия уровней и целей для подписи и окна настроек.
+## Level and target names for the label and the settings window.
 static func _tier_name(tier: String) -> String:
 	match tier:
 		"medium":
@@ -711,27 +711,27 @@ static func _target_name(target: String) -> String:
 		_:
 			return "я и моя группа"
 
-# --- Прицеливание (свиток МАГА или заклинание книги) ---
-# Курсор-прицел рисует scripts/cursor_layer.gd (вариант cast) по состоянию
-# Game.pending_spell / Game.pending_scroll; системный курсор прячет он же.
+# --- Targeting (a MAGE's scroll or a book spell) ---
+# The targeting cursor is drawn by scripts/cursor_layer.gd (the cast variant) based
+# on Game.pending_spell / Game.pending_scroll; it also hides the system cursor.
 
 var _scroll_hint: Label = null
 var _error_hint_timer: SceneTreeTimer = null
 
-## Выбрано заклинание из книги: ждём цели. Книга закрывается, курсор-cast следует
-## за мышью. Выбор отменяется ПКМ/ESC, назначение на цифру — Ctrl+1..9.
+## A book spell is chosen: we wait for a target. The book closes, the cast cursor follows
+## the mouse. The choice is cancelled with RMB/ESC, assigning to a digit — Ctrl+1..9.
 func _begin_spell_targeting(name: String) -> void:
 	if not is_instance_valid(player) or not player.can_cast(name):
 		return
 	_cancel_targeting()
 	Game.pending_spell = {"name": name}
 	Game._spell_targeting_frame = Engine.get_process_frames()
-	spells_visible = false              # книга закрывается, остаётся курсор-прицел
+	spells_visible = false              # the book closes, the targeting cursor remains
 	_update_bottom_panel_visibility()
 	_update_targeting_hint(name, true)
 	SoundDB.play("ui.book_open")  # ibook
 
-## Заклинание применено по цели (вызывает Game). Сброс режима + обновление книги.
+## The spell was applied to the target (Game does it). Reset the mode + refresh the book.
 func _finish_spell_targeting() -> void:
 	_cancel_targeting()
 	refresh_spell_book()
@@ -739,7 +739,7 @@ func _finish_spell_targeting() -> void:
 	if is_instance_valid(_inventory_panel) and _inventory_panel.has_method("_refresh_stats"):
 		_inventory_panel._refresh_stats()
 
-## Быстрая клавиша 1..9: вход в прицеливание назначенного заклинания.
+## Hotkey 1..9: enter targeting of the assigned spell.
 func _quick_cast(spell: String) -> void:
 	if Game.is_paused:
 		return
@@ -748,8 +748,8 @@ func _quick_cast(spell: String) -> void:
 		return
 	_begin_spell_targeting(spell)
 
-## Ctrl+N: выбранная магия назначена на цифровую клавишу (подпись в книге +
-## подсказка). Выбранное заклинание остаётся активным для прицеливания.
+## Ctrl+N: the selected magic is assigned to a digit key (a label in the book +
+## a tooltip). The selected spell stays active for targeting.
 func _notify_hotbar_assigned(slot: int, spell: String) -> void:
 	refresh_spell_book()
 	if _scroll_hint != null and is_instance_valid(_scroll_hint):
@@ -757,9 +757,9 @@ func _notify_hotbar_assigned(slot: int, spell: String) -> void:
 			str(SpellDB.get_spell(spell).get("ru", spell)), slot + 1, slot + 1]
 		_scroll_hint.visible = true
 
-## Ошибка выбора цели (заклинание остаётся активным): показываем на
-## подсказке, затем возвращаем обычный текст подсказки.
-## Ctrl+N: предмет под курсором назначен на цифровую клавишу (зелье/свиток).
+## Target selection error (the spell stays active): we show it on
+## the tooltip, then return the usual tooltip text.
+## Ctrl+N: the item under the cursor is assigned to a digit key (potion/scroll).
 func _notify_item_assigned(slot: int, item_key: String) -> void:
 	if _scroll_hint == null or not is_instance_valid(_scroll_hint):
 		return
@@ -786,7 +786,7 @@ func _on_error_hint_timeout() -> void:
 	elif _scroll_hint != null and is_instance_valid(_scroll_hint):
 		_scroll_hint.visible = false
 
-## Маг дважды кликнул свиток в складе: ждём выбора цели (курсор-cast).
+## The mage double-clicked a scroll in the inventory: we wait for target selection (cast cursor).
 func _begin_scroll_targeting(item_key: String) -> void:
 	var spell := SpellDB.spell_from_scroll(item_key)
 	if spell == "" or not is_instance_valid(player):
@@ -795,7 +795,7 @@ func _begin_scroll_targeting(item_key: String) -> void:
 	_update_targeting_hint(spell, true)
 	SoundDB.play("ui.book_open")  # ibook
 
-## Свиток применён по цели (вызывает Game). Сброс режима + обновление книги.
+## The scroll was applied to the target (Game does it). Reset the mode + refresh the book.
 func _finish_scroll_targeting() -> void:
 	_cancel_targeting()
 	refresh_spell_book()
@@ -803,8 +803,8 @@ func _finish_scroll_targeting() -> void:
 	if is_instance_valid(_inventory_panel) and _inventory_panel.has_method("_refresh_stats"):
 		_inventory_panel._refresh_stats()
 
-## Отмена любого прицеливания (свиток/магия): цель НЕ тратится, курсор-прицел
-## снимается, системный курсор возвращается.
+## Cancel any targeting (scroll/magic): the charge is NOT spent, the targeting cursor
+## is removed, the system cursor returns.
 func _cancel_targeting() -> void:
 	Game.pending_scroll = {}
 	Game.pending_spell = {}
@@ -812,8 +812,8 @@ func _cancel_targeting() -> void:
 	if _scroll_hint != null and is_instance_valid(_scroll_hint):
 		_scroll_hint.visible = false
 
-## Подсказка над нижними панелями: что применить выбранным свитком/заклинанием
-## и как отменить/назначить быструю клавишу (как у разработчиков).
+## Hint above the bottom panels: what to apply with the selected scroll/spell
+## and how to cancel/assign a hotkey (as in the original).
 func _update_targeting_hint(spell: String, on: bool) -> void:
 	if _scroll_hint == null:
 		_scroll_hint = Label.new()
@@ -832,8 +832,8 @@ func _update_targeting_hint(spell: String, on: bool) -> void:
 	_scroll_hint.visible = on
 	if not on:
 		return
-	# Подсказка по цели берётся из поля target базы (enemy/ally/point/self),
-	# а не из kind — у debuff/raise цель враг, у wall/self — точка/себя.
+	# The target hint is taken from the database target field (enemy/ally/point/self),
+	# not from kind — a debuff/raise targets an enemy, wall/self — a point/self.
 	var target_kind := SpellDB.target_of(spell)
 	var dir_text := ""
 	match target_kind:
@@ -892,7 +892,7 @@ func _apply_hud_theme() -> void:
 func _setup_action_buttons():
 	if not is_instance_valid(hud_cmd_row):
 		return
-	# Компакт-ряд у миникарты. Статы теперь в инвентаре — кнопки «Статы» нет.
+	# Compact row by the minimap. Stats are in the inventory now — there is no "Stats" button.
 	var inv_btn := Button.new()
 	inv_btn.name = "InvBtn"
 	inv_btn.theme_type_variation = &"HudCmd"
@@ -911,8 +911,8 @@ func _setup_action_buttons():
 		"Охранять место: бить в радиусе поста, не убегать (отряд тоже)",
 		"Стоять на месте и только отвечать на удар (отряд тоже)",
 	]
-	# Короткие подписи — ТОЛЬКО запасной вариант, если PNG не на месте: кнопка
-	# 32 px, полная подпись в неё не влезает. Смысл сохраняет tooltip.
+	# Short labels are ONLY a fallback if the PNG is missing: the button is
+	# 32 px, a full label does not fit into it. The tooltip keeps the meaning.
 	var cmd_short := ["Сл", "Ат", "Ох", "Ст"]
 	var cmd_modes := ["follow", "attack", "guard", "stop"]
 	var cmd_icons := ["follow", "attack", "guard", "stop"]
@@ -933,8 +933,8 @@ func _setup_action_buttons():
 	_set_action_mode(Game.action_mode if Game.action_mode != "" else "follow")
 
 
-## Иконка HUD-кнопки. Подпись остаётся запасным вариантом: если PNG нет
-## (новая машина/сборка без арта), кнопка не становится пустой.
+## HUD button icon. The label stays a fallback: if there is no PNG
+## (a new machine/a build without art), the button does not become empty.
 func _apply_cmd_icon(button: Button, icon_name: String, fallback_text: String) -> void:
 	var path := "%s%s.png" % [HUD_CMD_ICON_DIR, icon_name]
 	var tex: Texture2D = null
@@ -974,10 +974,10 @@ func _set_action_mode(mode: String):
 		cmd_buttons[active].set_pressed_no_signal(true)
 
 func _toggle_stats_view():
-	# Статы теперь в инвентаре — HUD-toggle не нужен.
+	# Stats are in the inventory now — no HUD toggle needed.
 	pass
 
-# --- Карточки наведения (стилизованные, через UiKit.make_hover_card) ---------
+# --- Hover cards (styled, via UiKit.make_hover_card) ---------
 
 var _item_card: PanelContainer = null
 var _slot_card: PanelContainer = null
@@ -990,7 +990,7 @@ func _ensure_card(_kind: String) -> PanelContainer:
 	card.theme = theme
 	return card
 
-## Строки карточки предмета: имя, качество/материал/тип, боевые статы, вес/цена.
+## Item card lines: name, quality/material/type, combat stats, weight/price.
 func _item_card_lines(item: Dictionary) -> Array:
 	var lines: Array = [str(item.get("name_ru", item.get("key", "Предмет")))]
 	var sub: Array[String] = []
@@ -1022,7 +1022,7 @@ func _item_card_lines(item: Dictionary) -> Array:
 	lines.append("Вес %.1f · Цена %d" % [float(item.get("weight", 0.0)), int(item.get("price", 0))])
 	return lines
 
-## Карточка предмета на ячейке инвентаря (мышь + фокус).
+## Item card on an inventory cell (mouse + focus).
 func _attach_item_card(cell: Control, item: Dictionary) -> void:
 	if not is_instance_valid(cell) or item.is_empty():
 		return
@@ -1046,7 +1046,7 @@ func _attach_item_card(cell: Control, item: Dictionary) -> void:
 		if _item_card != null:
 			UiKit.hide_hover_card(_item_card))
 
-## Карточка слота экипировки: читает надетый предмет в момент наведения.
+## Equipment slot card: reads the worn item at the moment of hovering.
 func _attach_slot_card(cell: Control, slot: String) -> void:
 	if not is_instance_valid(cell):
 		return
@@ -1078,9 +1078,9 @@ func _show_slot_card(cell: Control, slot: String) -> void:
 func _hide_slot_card() -> void:
 	if _slot_card != null:
 		UiKit.hide_hover_card(_slot_card)
-# --- Тултипы мира: hover + Alt -----------------------------------------------
-## GDD 06.10: hover 0.6 с → база (имя+фракция / здание / лут);
-## Alt → полная карточка юнита (HP/бой/резисты). Hold ЛКМ не используется.
+# --- World tooltips: hover + Alt -----------------------------------------------
+## GDD 06.10: hover 0.6 s → the base (name+faction / building / loot);
+## Alt → the full unit card (HP/combat/resists). LMB hold is not used.
 
 const WORLD_HOVER_DELAY := 0.6
 var _world_card: PanelContainer = null
@@ -1128,7 +1128,7 @@ func _update_world_tooltip(delta: float) -> void:
 
 	if _world_card_shown and alt == _world_card_alt:
 		return
-	# Alt переключил режим — пересобрать карточку
+	# Alt switched the mode — rebuild the card
 	if _world_card_shown:
 		_world_card_shown = false
 		if _world_card != null:
@@ -1155,7 +1155,7 @@ func _reset_world_tooltip() -> void:
 		UiKit.hide_hover_card(_world_card)
 
 
-## Полная карточка юнита (Alt): HP, урон, броня, сопротивления.
+## Full unit card (Alt): HP, damage, armour, resistances.
 func _unit_tooltip_full(target: Array) -> Array:
 	var lines: Array = target[1].duplicate()
 	var e: Node2D = _world_hover_unit
@@ -1191,8 +1191,8 @@ func _unit_tooltip_full(target: Array) -> Array:
 	return lines
 
 
-## Цель под курсором: [ключ, строки]. "" — цели нет.
-## Юнит: ключ "u…", база — имя+фракция. Здание/лут — hover без Alt.
+## The target under the cursor: [key, lines]. "" — no target.
+## Unit: the key "u…", the base — name+faction. Building/loot — hover without Alt.
 func _world_hover_target() -> Array:
 	var world := player.get_global_mouse_position()
 	_world_hover_unit = null
@@ -1215,8 +1215,8 @@ func _world_hover_target() -> Array:
 	return ["", []]
 
 
-## Здание: structure_at по клетке + соседние (футпринт 3×3 не всегда покрывает
-## точку клика, если хитбокс шире одной клетки).
+## Building: structure_at by cell + neighbours (a 3×3 footprint does not always cover
+## the click point if the hitbox is wider than one cell).
 func _structure_at_world(cell: Vector2i, _world: Vector2, _ts: int) -> Dictionary:
 	if alm_map == null or not alm_map.has_method("structure_at"):
 		return {}
@@ -1241,11 +1241,11 @@ func _unit_tooltip_lines(e: Node2D) -> Array:
 	var lines: Array = []
 	var set_name := str(e.anim_set) if "anim_set" in e else ""
 	var set_data := UnitDB.get_set(set_name)
-	# `name_ru` — человеческое имя набора («Свирепый волк», «Владыка волков»).
-	# Раньше здесь брался только `desc`, а у Серых это английская строка вида
-	# «Monster wolf, Gemini Nano Banana strips…», то есть игрок видел в тултипе
-	# служебный текст. Фатальным дефектом это не было: подпись всё равно была
-	# непустой, и `set_name` как запасной путь не срабатывал.
+	# `name_ru` — the human-readable set name (a Russian display name like "Vicious wolf", "Lord of wolves").
+	# Before, only `desc` was taken here, and for Greys that is an English string like
+	# "Monster wolf, Gemini Nano Banana strips…", that is the player saw service
+	# text in the tooltip. It was not a fatal defect: the label was still
+	# non-empty, and `set_name` as a fallback path did not trigger.
 	var name := str(set_data.get("name_ru", ""))
 	if name == "":
 		name = str(set_data.get("desc", ""))
@@ -1281,14 +1281,14 @@ func _loot_tooltip_lines(lb: LootDrop) -> Array:
 		lines.append("Пусто")
 	return lines
 
-## Фракция по набору анимаций юнита (см. §8.2 AGENTS.md).
+## Faction by the unit's animation set (see §8.2 of AGENTS.md).
 ##
-## Семейства `humans/` и `heroes/` (арт Аллодов II) удалены 11.10 вместе с
-## ассетами, и их ветки убраны: они ссылались бы в пустоту и подставляли бы
-## подпись удалённой фракции. Ветка `rig/` — пилотный риг героя.
+## The `humans/` and `heroes/` families (Allods II art) were removed on 11.10 together with
+## the assets, and their branches were deleted: they would point into the void and substitute
+## the label of a removed faction. The `rig/` branch is the pilot hero rig.
 func _faction_of_set(set_name: String) -> String:
-	# Городские наборы city_* — раса города (09.10). Подпись должна быть из
-	# lore world.json, иначе в тултипе писало «Прохожий».
+	# City sets city_* — the city race (09.10). The label must come from
+	# lore world.json, otherwise the tooltip said "Passer-by".
 	var city_race := MapGenerator.race_of_set(set_name)
 	if city_race != "":
 		var label := str(Lore.faction(city_race).get("label", ""))
@@ -1308,13 +1308,13 @@ func _faction_of_set(set_name: String) -> String:
 	return "Серые"
 
 func _setup_minimap():
-	# Защита от повторного вызова: раньше setup_ui вызывал это дважды
-	# (напрямую и через _setup_spells) — создавался дубликат узла MinimapTex.
+	# Guard against a repeated call: before, setup_ui called this twice
+	# (directly and via _setup_spells) — a duplicate MinimapTex node was created.
 	if minimap_rect.get_node_or_null("MinimapTex") != null:
 		return
 	minimap_rect.color = Color(0, 0, 0, 0)  # MINIMAP transparent
-	# TextureRect для миникарты: размер задаётся под рамку при отрисовке
-	# (см. _draw_minimap), чтобы картинка не вылезала за MinimapRect.
+	# TextureRect for the minimap: the size is set to the frame when drawing
+	# (see _draw_minimap), so the picture does not spill out of MinimapRect.
 	var tex_rect = TextureRect.new()
 	tex_rect.name = "MinimapTex"
 	tex_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
@@ -1323,26 +1323,26 @@ func _setup_minimap():
 	minimap_image = null
 	_minimap_base = null
 	minimap_texture = null
-	# Туман (19.10): подписка на маску - фог-слой миникарты
-	# перерисовывается только при изменении, а не каждый тик.
+	# Fog (19.10): subscribing to the mask — the minimap fog layer
+	# is redrawn only on change, not every tick.
 	var fog_node: Node = get_tree().get_first_node_in_group("fog")
 	if fog_node != null and not fog_node.updated.is_connected(_on_fog_updated):
 		fog_node.updated.connect(_on_fog_updated)
 	_fog_dirty = true
 
-## Точки юнитов двигаются, поэтому миникарта не полностью статична, но полный
-## перебор всей карты каждый кадр (65k клеток на Beach) — лишний. Обновляем
-## с фиксированным шагом.
+## Unit dots move, so the minimap is not fully static, but a full
+## traversal of the whole map every frame (65k cells on Beach) is overkill. We update
+## at a fixed step.
 func _update_minimap(delta: float) -> void:
 	_minimap_timer -= delta
 	if _minimap_timer <= 0.0:
 		_minimap_timer = MINIMAP_INTERVAL
 		_draw_minimap()
 
-## Перепривязать миникарту к текущей карте. Сцена и узел UI живут дольше
-## одной карты (`_swap_map` при загрузке слота/портале создаёт новый узел
-## Map), поэтому кэш террейна и тумана обнуляется: иначе после загрузки
-## слота на миникарте оставалась карта прежней игры.
+## Rebind the minimap to the current map. The scene and the UI node live longer
+## than one map (`_swap_map` on load slot/portal creates a new Map
+## node), so the terrain and fog cache is reset: otherwise after loading
+## a slot the minimap kept the map of the previous game.
 func rebind_map() -> void:
 	alm_map = get_tree().get_first_node_in_group("alm_map")
 	_minimap_base = null
@@ -1360,16 +1360,16 @@ func _draw_minimap():
 	if mw == 0:
 		return
 
-	# Рисунок квадратный, но вписываем его в МЕНЬШУЮ сторону рамки: раньше
-	# сторона бралась по высоте, а рамка уже её по ширине, и картинка
-	# вылезала за границы панели на 4 px (23.10).
+	# The drawing is square, but we fit it into the SMALLER side of the frame: before
+	# the side was taken by height, while the frame was already smaller in width, and the picture
+	# spilled 4 px out of the panel (23.10).
 	var msize: Vector2 = minimap_rect.size
 	var h := int(min(msize.x, msize.y))
 	var w := h
 	if h <= 0:
 		return
 
-	# Первый кадр или смена размера рамки — пересоздаём изображение/текстуру.
+	# First frame or a frame size change — recreate the image/texture.
 	var square_size := Vector2(w, h)
 	if minimap_image == null or minimap_texture == null or _minimap_size != square_size:
 		_minimap_size = square_size
@@ -1389,9 +1389,9 @@ func _draw_minimap():
 	var scale_y := float(h) / float(mh)
 	var fog_on := Game.fog != null and Game.fog.enabled
 
-	# P3: террейн+здания кэшируются; каждый тик только копируем базу + точки.
-	# Кэш привязан к id карты: _swap_map подменяет узел Map, и без этого
-	# проверка «размер тот же» оставляла старый биом (жалоба 23.10).
+	# P3: terrain+buildings are cached; every tick we only copy the base + the dots.
+	# The cache is tied to the map id: _swap_map substitutes the Map node, and without this
+	# the "same size" check kept the old biome (report 23.10).
 	var map_id: int = alm_map.get_instance_id()
 	if _minimap_base != null and _minimap_map_id != map_id:
 		_minimap_base = null
@@ -1411,7 +1411,7 @@ func _draw_minimap():
 				for py in range(sy, mini(ey + 1, h)):
 					for px in range(sx, mini(ex + 1, w)):
 						_minimap_base.set_pixel(px, py, color)
-		# Здания (серые квадраты 2×2) — тоже в базу
+		# Buildings (grey 2×2 squares) — also into the base
 		if alm_map.has_method("structure_at") and alm_map.map_width > 0:
 			for ty in range(0, mh, 4):
 				for tx in range(0, mw, 4):
@@ -1427,14 +1427,14 @@ func _draw_minimap():
 
 	minimap_image.blit_rect(_minimap_base, Rect2(0, 0, w, h), Vector2.ZERO)
 
-	# Фог-слой (19.10): черное и приглушенное поверх террейна.
+	# Fog layer (19.10): black and dimmed over the terrain.
 	if fog_on:
 		if _fog_dirty or _fog_img == null or _fog_img.get_width() != w:
 			_rebuild_fog_layer(w, h)
 		if _fog_img != null:
 			minimap_image.blend_rect(_fog_img, Rect2(0, 0, w, h), Vector2.ZERO)
 
-	# Игрок (белая точка)
+	# The player (a white dot)
 	var px := int(ptx * scale_x)
 	var py := int(pty * scale_y)
 	for dy in range(-1, 2):
@@ -1443,7 +1443,7 @@ func _draw_minimap():
 			if xx >= 0 and xx < w and yy >= 0 and yy < h:
 				minimap_image.set_pixel(xx, yy, MINIMAP_HERO)
 
-	# Враги (красные точки)
+	# Enemies (red dots)
 	for enemy in Game.enemies:
 		if is_instance_valid(enemy):
 			var etx: int = int(enemy.global_position.x) / alm_map.tile_size
@@ -1454,7 +1454,7 @@ func _draw_minimap():
 			if exx >= 0 and exx < w and eyy >= 0 and eyy < h:
 				minimap_image.set_pixel(exx, eyy, MINIMAP_ENEMY)
 
-	# NPC (жёлтые = нейтральные, зелёные = союзники/стражи)
+	# NPCs (yellow = neutral, green = allies/guards)
 	for npc in Game.npcs:
 		if is_instance_valid(npc):
 			var ntx: int = int(npc.global_position.x) / alm_map.tile_size
@@ -1468,7 +1468,7 @@ func _draw_minimap():
 					nc = MINIMAP_NPC_GUARD
 				minimap_image.set_pixel(nxx, nyy, nc)
 
-	# Маркеры событий/квестов (19.10): всегда видны, поверх фога.
+	# Event/quest markers (19.10): always visible, over the fog.
 	if MinimapMarkers.instance != null:
 		_draw_minimap_markers(w, h, mw, mh)
 
@@ -1477,8 +1477,8 @@ func _draw_minimap():
 	if tex_rect2:
 		tex_rect2.texture = minimap_texture
 
-## Фог-слой миникарты: готовая мини-картинка тумана (1px/клетку) из FogOfWar,
-## масштабируется под рамку; перестройка только по сигналу updated (19.10).
+## Minimap fog layer: a ready mini-image of the fog (1px/cell) from FogOfWar,
+## scaled to the frame; rebuilt only on the updated signal (19.10).
 func _rebuild_fog_layer(w: int, h: int) -> void:
 	_fog_dirty = false
 	if Game.fog == null or Game.fog.mini_img == null:
@@ -1490,9 +1490,9 @@ func _rebuild_fog_layer(w: int, h: int) -> void:
 func _on_fog_updated() -> void:
 	_fog_dirty = true
 
-## Маркеры событий и будущих квестов: крестик 3x3, поверх фога
-## (решение игрока - маркеры всегда видны). Бой пульсирует,
-## в последний отрезок жизни мигает.
+## Event and future quest markers: a 3x3 cross, over the fog
+## (player's decision — markers are always visible). Combat pulses,
+## and blinks in the last stretch of its life.
 func _draw_minimap_markers(w: int, h: int, mw: int, mh: int) -> void:
 	var sx := float(w) / float(mw)
 	var sy := float(h) / float(mh)
@@ -1515,7 +1515,7 @@ func _draw_minimap_markers(w: int, h: int, mw: int, mh: int) -> void:
 				var yy := cy + dy
 				if xx >= 0 and xx < w and yy >= 0 and yy < h:
 					minimap_image.set_pixel(xx, yy, col)
-# Цвета миникарты: игровые данные (биомы/юниты), не палитра UI-панелей.
+# Minimap colours: game data (biomes/units), not the UI panel palette.
 const MINIMAP_NPC_GUARD := Color(0.2, 0.8, 0.2, 1.0)
 const MINIMAP_NPC_CIV := Color(1.0, 0.85, 0.2, 1.0)
 const MINIMAP_ENEMY := Color(1.0, 0.2, 0.2, 1.0)
@@ -1547,7 +1547,7 @@ const MINIMAP_ALM := {  # MINIMAP biome colors
 	0: Color(0.25, 0.55, 0.25, 1.0),    # MINIMAP grass
 }
 
-# Цвет клетки для миникарты: CustomMap -> тип (0-8), .alm -> terrain_type
+# Cell colour for the minimap: CustomMap -> type (0-8), .alm -> terrain_type
 func _minimap_color_at(tx: int, ty: int) -> Color:
 	if alm_map is CustomMap:
 		var t: int = alm_map.tile_id_at(Vector2i(tx, ty))
@@ -1564,7 +1564,7 @@ func update_ui(p: Player, delta: float = 0.0):
 		return
 	_update_world_tooltip(delta)
 
-	# Отладочные координаты: позиция героя, курсора, клетки, тайл и проходимость.
+	# Debug coordinates: hero position, cursor, cell, tile and walkability.
 	if show_coords:
 		var lines := "КООРДИНАТЫ\n"
 		lines += "Герой: %d, %d px\n" % [int(p.global_position.x), int(p.global_position.y)]
@@ -1584,8 +1584,8 @@ func update_ui(p: Player, delta: float = 0.0):
 			lines += "Проход мыши: %s\n" % ("да" if walk_m else "НЕТ")
 			if mc.x >= 0 and mc.y >= 0 and mc.x < alm_map.map_width and mc.y < alm_map.map_height:
 				var t: int = alm_map.cell_type_at(mc.x, mc.y)
-				# Горы и вода НЕПРОХОДИМЫ с 05.10 (WalkTable.walkable), раньше
-				# здесь стояло «проходимо, медленно» — отладочный тултип врал.
+				# Mountains and water are IMPASSABLE since 05.10 (WalkTable.walkable), before
+				# "passable, slow" stood here — the debug tooltip lied.
 				var names := ["Трава (tile1)", "Горы (tile2 — непроходимо)",
 					"Вода (tile3 — непроходимо)", "Дорога (tile4)"]
 				lines += "Тайл мыши: %s\n" % (names[t] if t >= 0 and t < names.size() else str(t))
@@ -1598,7 +1598,7 @@ func update_ui(p: Player, delta: float = 0.0):
 					lines += "Флаг: %d (0 зем/1 холм/2 вода/3 выс/4 барьер)\n" % fl
 		coords_label.text = lines
 
-	# Подсветка кнопок книги заклинаний: доступно/недостаточно маны или зарядов
+	# Highlighting book buttons: available/not enough mana or charges
 	for i in range(_spell_buttons_filled.size()):
 		var button = _spell_buttons_filled[i] as Button
 		if button == null:
@@ -1607,7 +1607,7 @@ func update_ui(p: Player, delta: float = 0.0):
 			var sn: String = str(_spell_button_names[i])
 			var scroll_key := str(button.get_meta("scroll_item", ""))
 			if scroll_key != "":
-				# Свиток воина: доступен, пока он есть в складе и не на кулдауне.
+				# Warrior scroll: available while it is in the inventory and not on cooldown.
 				var have := player.has_item(scroll_key)
 				var cd_left := float(player.cast_cooldowns.get(sn, 0.0))
 				var usable := have and cd_left <= 0.0 and player.state != "casting"
@@ -1642,14 +1642,14 @@ func _process_impl(_delta):
 	else:
 		pause_label.visible = false
 
-	# Обратный отсчёт кулдаунов в книге магии. Раньше кулдаун был только в
-	# тултипе, и игрок спамил клавиши, не понимая, почему заклинание не
-	# срабатывает. Обновляем каждый кадр, но только когда что-то изменилось:
-	# 24 клетки, лупать их без надобности — лишняя работа в каждом кадре.
+	# Cooldown countdown in the magic book. Before, the cooldown was only in the
+	# tooltip, and the player spammed keys without understanding why the spell does not
+	# trigger. We update every frame, but only when something changed:
+	# 24 cells, looping over them needlessly is extra work in every frame.
 	_update_cooldowns()
 
-	# Подпись «Авто-волшебство» обновляем только при смене настроек: их меняют
-	# либо в Esc → Настройки (раздел «Магия»), либо Alt+ПКМ по книге.
+	# The "Auto-magic" label is updated only when the settings change: they are changed
+	# either in Esc → Settings (the "Magic" section) or with Alt+RMB on the book.
 	if _auto_shown_tier != Game.auto_buff_tier or _auto_shown_target != Game.auto_targets \
 			or _auto_shown_spell != Game.auto_spell:
 		_auto_shown_tier = Game.auto_buff_tier
@@ -1672,7 +1672,7 @@ func _update_cooldowns() -> void:
 			continue
 		var spell_name := str(_spell_button_names[i])
 		var left := float(player.cast_cooldowns.get(spell_name, 0.0))
-		# Считать округлённые секунды: показывать «0.3 с» бессмысленно.
+		# Count rounded seconds: showing "0.3 s" is pointless.
 		var shown := int(ceil(left))
 		# Cache per CELL, not per spell: two scrolls of the same spell (Scroll Heal
 		# and SuperScroll Heal) carry different power and therefore different
@@ -1700,16 +1700,16 @@ func toggle_spells():
 		refresh_spell_book()
 	_update_bottom_panel_visibility()
 
-## Магия (B) — нижняя панель. Инвентарь теперь в модальном окне.
+## Magic (B) — the bottom panel. The inventory is a modal window now.
 func _update_bottom_panel_visibility():
 	spell_panel.visible = spells_visible
 	bottom_panel.visible = spells_visible
 	if not spells_visible:
 		return
 
-	# BottomPanel центрирован якорями (anchor_left=0.5, anchor_right=0.5),
-	# ширина 720px задаётся offset_left=-360, offset_right=360 в tscn.
-	# Здесь только вертикальная позиция (bottom-up от нижнего края).
+	# BottomPanel is centred by anchors (anchor_left=0.5, anchor_right=0.5),
+	# the 720px width is set by offset_left=-360, offset_right=360 in the tscn.
+	# Here only the vertical position (bottom-up from the bottom edge).
 	var vh := get_viewport().get_visible_rect().size.y
 
 	var n := spell_buttons.size()
@@ -1726,7 +1726,7 @@ func _update_bottom_panel_visibility():
 	bottom_panel.offset_top = vh - spell_h
 	bottom_panel.offset_bottom = vh
 
-# --- Экономика (P0): панели магазина / школы / таверны ---
+# --- Economy (P0): shop / school / tavern panels ---
 
 var _shop: ShopPanel = null
 var _alchemy: AlchemyPanel = null
@@ -1737,21 +1737,21 @@ var _quests: QuestPanel = null
 var _world_map = null
 var _workshop: WorkshopPanel = null
 var _inventory_panel: InventoryPanel = null
-var _interior_pos := Vector2.ZERO   # позиция героя перед входом в здание
+var _interior_pos := Vector2.ZERO   # the hero's position before entering the building
 var _in_interior := false
-## Узлы HUD, которые прячем на время интерьера. Раньше они оставались видимыми:
-## вокруг модального окна было видно «воду» и объекты мира, а кнопка «Закрыть»
-## интерьера попадала в полосу склада.
+## HUD nodes we hide during an interior. Before they stayed visible:
+## "water" and world objects were visible around the modal window, and the "Close"
+## button of the interior landed in the inventory strip.
 const _HUD_NODES := ["BottomPanel", "MinimapPanel", "HudSide", "CoordsLabel", "PauseLabel"]
 
-## Вход в здание: герой «уходит внутрь» (скрыт на карте), выходит при закрытии.
+## Entering a building: the hero "goes inside" (hidden on the map), comes out on close.
 func _enter_interior() -> void:
 	if not is_instance_valid(player):
 		return
 	if not Game.pending_scroll.is_empty() or not Game.pending_spell.is_empty():
-		_cancel_targeting()   # прицеливание внутри здания не нужно
+		_cancel_targeting()   # no targeting needed inside a building
 	_interior_pos = player.global_position
-	player.stop_movement()          # не «ускакивает» по старой цели, пока в меню
+	player.stop_movement()          # does not "gallop off" after the old target while in the menu
 	player.visible = false
 	_in_interior = true
 	for path in _HUD_NODES:
@@ -1769,10 +1769,10 @@ func _exit_interior() -> void:
 			node2.visible = true
 	if is_instance_valid(player):
 		player.visible = true
-		# Точка выхода: исходная позиция, но на ПРОХОДИМОЙ клетке (не «в здании»)
+		# Exit point: the original position, but on a WALKABLE cell (not "inside a building")
 		player.global_position = _clamp_to_walkable(_interior_pos)
 		player.reset_physics_interpolation()
-	# Автосейв после выхода из здания: игрок мог провести в лавке минуты.
+	# Autosave after leaving the building: the player could spend minutes in the shop.
 	_request_autosave()
 
 
@@ -1781,7 +1781,7 @@ func _request_autosave() -> void:
 	if scene != null and scene.has_method("autosave_now"):
 		scene.call("autosave_now")
 
-## Ближайшая проходимая точка рядом с запрошенной (спираль по клеткам).
+## The nearest walkable point next to the requested one (a spiral over the cells).
 func _clamp_to_walkable(from: Vector2) -> Vector2:
 	var map_node = get_tree().get_first_node_in_group("alm_map")
 	if map_node == null or not map_node.has_method("is_walkable_world"):
@@ -1799,9 +1799,9 @@ func _clamp_to_walkable(from: Vector2) -> Vector2:
 					return p
 	return from
 
-## Общий обработчик закрытия любой панели: показать героя у здания.
+## Shared close handler for any panel: show the hero by the building.
 func _on_panel_closed() -> void:
-	Game.cursor_context = ""   # курсор обратно обычный
+	Game.cursor_context = ""   # the cursor back to normal
 	_shop = null
 	_alchemy = null
 	_school = null
@@ -1812,8 +1812,8 @@ func _on_panel_closed() -> void:
 	_quests = null
 	_exit_interior()
 
-## Закрыть все открытые панели-интерьеры (загрузка слота другого героя:
-## открытая кукла показывала бы класс/склад прежнего персонажа).
+## Close all open interior panels (loading a slot of another hero:
+## an open paper-doll would show the class/inventory of the previous character).
 func close_all_panels() -> void:
 	var panels: Array = [_shop, _alchemy, _school, _inn, _workshop,
 		_inventory_panel, _archmage, _quests, _world_map]
@@ -1823,12 +1823,12 @@ func close_all_panels() -> void:
 		p.close()
 	_on_panel_closed()
 
-## Открыта ли какая-то панель-интерьер (клики не должны двигать героя по карте).
+## Is any interior panel open (clicks must not move the hero on the map).
 func is_editor_open() -> bool:
 	return is_instance_valid(_shop) or is_instance_valid(_alchemy) or is_instance_valid(_school) or is_instance_valid(_inn) or is_instance_valid(_workshop) or is_instance_valid(_inventory_panel) or is_instance_valid(_archmage) or is_instance_valid(_quests) or is_instance_valid(_world_map)
 
-## Курсор над каким-либо элементом интерфейса (панель/кнопка/книга/инвентарь)?
-## Клик по UI не должен читаться как движение/атака по карте.
+## Is the cursor over any interface element (panel/button/book/inventory)?
+## A click on the UI must not read as movement/attack on the map.
 func is_pointer_over_ui(screen_pos: Vector2) -> bool:
 	for child in get_children():
 		if child is Control and _control_contains(child, screen_pos):
@@ -1836,14 +1836,14 @@ func is_pointer_over_ui(screen_pos: Vector2) -> bool:
 	return false
 
 func _control_contains(c: Control, p: Vector2) -> bool:
-	# Вся цепочка родителей должна быть видимой (скрытые панели не блокируют)
+	# The whole parent chain must be visible (hidden panels do not block)
 	var cur: Control = c
 	while cur is Control:
 		if not cur.visible:
 			return false
 		cur = cur.get_parent() as Control
-	# Узлы с MOUSE_FILTER_IGNORE не перехватывают клики (фон панелей),
-	# но их дети-виджеты (кнопки и т.п.) по-прежнему блокируются отдельно.
+	# Nodes with MOUSE_FILTER_IGNORE do not intercept clicks (panel backgrounds),
+	# but their child widgets (buttons etc.) are still blocked separately.
 	var hit := c.mouse_filter != Control.MOUSE_FILTER_IGNORE \
 		and Rect2(c.global_position, c.size).has_point(p)
 	for ch in c.get_children():
@@ -1851,12 +1851,12 @@ func _control_contains(c: Control, p: Vector2) -> bool:
 			return true
 	return hit
 
-## Магазин: купля/продажа (клик по зданию Shop).
+## Shop: buying/selling (click on a Shop building).
 func open_shop(city_race: String = "") -> void:
 	if _shop != null and is_instance_valid(_shop):
 		return
 	_enter_interior()
-	Game.cursor_context = "buy"   # курсор-монета с кошельком
+	Game.cursor_context = "buy"   # a coin cursor with a purse
 	_shop = ShopPanel.new()
 	_shop.setup(player, city_race)
 	_shop.closed.connect(_on_panel_closed)
@@ -1876,7 +1876,7 @@ func open_alchemy() -> void:
 	_alchemy.inventory_changed.connect(_on_inventory_changed)
 	add_child(_alchemy)
 
-## Школа тренировок: навыки за золото (клик по Training School).
+## Training school: skills for gold (click on Training School).
 func open_school() -> void:
 	if _school != null and is_instance_valid(_school):
 		return
@@ -1886,7 +1886,7 @@ func open_school() -> void:
 	_school.closed.connect(_on_panel_closed)
 	add_child(_school)
 
-## Таверна: наём наёмников и разговоры (клик по Inn).
+## Tavern: hiring mercenaries and conversations (click on Inn).
 func open_inn(city_race: String = "") -> void:
 	if _inn != null and is_instance_valid(_inn):
 		return
@@ -1896,10 +1896,10 @@ func open_inn(city_race: String = "") -> void:
 	_inn.closed.connect(_on_panel_closed)
 	add_child(_inn)
 
-## Великий маг (капитан): военная плата (клик по магу в центре города).
-## Великий маг города (28.10): панель открывается для ГОРОДА, а не для расы
-## героя. city_id/race передаёт game.gd по клику на капитана; без них панель
-## работает по-старому (раса героя) — так её зовут тесты.
+## Great mage (captain): military pay (click on the mage in the city centre).
+## The city great mage (28.10): the panel opens for a CITY, not for the hero's
+## race. city_id/race are passed by game.gd on a click on the captain; without them the panel
+## works the old way (the hero's race) — that is how the tests call it.
 func open_archmage(city_id: String = "", city_race: String = "") -> void:
 	if _archmage != null and is_instance_valid(_archmage):
 		if city_id == "" or str(_archmage.get("_city_id")) == city_id:
@@ -1912,24 +1912,24 @@ func open_archmage(city_id: String = "", city_race: String = "") -> void:
 	_archmage.inventory_changed.connect(_on_inventory_changed)
 	add_child(_archmage)
 
-## Мастерская: кузнец / портной / (мастер - третьим пакетом).
-## Раньше здесь была кузница, и она НЕ коннектила inventory_changed, в отличие
-## от архмага и инвентаря. Сегодня вреда ноль - панели не открываются
-## одновременно, а переплавка золото не трогает, - но как только появилась
-## третья вкладка с расходованием ресурсов, склад под витриной остался бы
-## старым. Один коннект, консистентно с остальными.
+## Workshop: blacksmith / tailor / (the master arrives in the third package).
+## Before, a forge stood here, and it did NOT connect inventory_changed, unlike
+## the archmage and the inventory. Today the harm is nil - the panels do not open
+## at the same time, and smelting does not touch gold, - but as soon as the
+## third tab with resource spending appeared, the inventory under the showcase would stay
+## stale. One connection, consistent with the rest.
 func open_workshop() -> void:
 	if _workshop != null and is_instance_valid(_workshop):
 		return
 	_enter_interior()
-	Game.cursor_context = "work"  # курсор-молот
+	Game.cursor_context = "work"  # a hammer cursor
 	_workshop = WorkshopPanel.new()
 	_workshop.setup(player)
 	_workshop.closed.connect(_on_panel_closed)
 	_workshop.inventory_changed.connect(_on_inventory_changed)
 	add_child(_workshop)
 
-## Инвентарь и экипировка: модальное окно. Повторное нажатие I — закрыть.
+## Inventory and equipment: a modal window. Pressing I again — closes it.
 func open_inventory_panel() -> void:
 	if _inventory_panel != null and is_instance_valid(_inventory_panel):
 		_inventory_panel.close()
@@ -1942,9 +1942,9 @@ func open_inventory_panel() -> void:
 	add_child(_inventory_panel)
 
 
-## Квесты главы города (22.10): офферы, взятые задания, сдача, отмена.
-## city_id пустой — журнал без города (хоткей W): видно только взятое.
-## Повторное W закрывает панель, как I закрывает инвентарь.
+## City head quests (22.10): offers, accepted tasks, turn-in, cancel.
+## city_id empty — the journal without a city (hotkey W): only accepted ones are visible.
+## Pressing W again closes the panel, as I closes the inventory.
 func open_quests(city_id: String = "") -> void:
 	if _quests != null and is_instance_valid(_quests):
 		if city_id == "" or str(_quests.get("city_id")) == city_id:
@@ -1959,8 +1959,8 @@ func open_quests(city_id: String = "") -> void:
 	add_child(_quests)
 
 
-## Карта мира 4x3 (23.10). Хоткей M, повторное нажатие закрывает.
-## Переход только порталами: здесь нет fast travel.
+## World map 4x3 (23.10). Hotkey M, pressing again closes it.
+## Travel only through portals: there is no fast travel here.
 func open_world_map() -> void:
 	if _world_map != null and is_instance_valid(_world_map):
 		_world_map.close()
@@ -1983,8 +1983,8 @@ func _on_inventory_changed() -> void:
 	if is_instance_valid(_inventory_panel) and _inventory_panel.has_method("_refresh_stats"):
 		_inventory_panel._refresh_stats()
 	_update_gold(int(player.gold) if player != null else 0)
-	# У воина книга магии — это склад со свитками: купил/подобрал свиток —
-	# ячейка должна появиться сразу, а не после переоткрытия игры.
+	# For a warrior the magic book is the inventory with scrolls: bought/picked up a scroll —
+	# the cell must appear at once, not after restarting the game.
 	if is_instance_valid(player) and not player.has_mana:
 		refresh_spell_book()
 

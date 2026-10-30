@@ -1,5 +1,5 @@
 class_name PortalMarker extends Node2D
-## Анимированный маркер на карте: portal (телепорт) или spawn (стартовая точка).
+## Animated map marker: portal (teleport) or spawn (start point).
 
 const TILE := 32
 
@@ -17,7 +17,7 @@ func setup(pos: Vector2i, type: String) -> void:
 	cell = pos
 	_type = type
 	_load_frames()
-	# Позиция: центр клетки, якорь — низ спрайта
+	# Position: cell center, anchor at the bottom of the sprite
 	position = Vector2(pos.x * TILE + TILE / 2, pos.y * TILE + TILE / 2)
 
 func _load_frames() -> void:

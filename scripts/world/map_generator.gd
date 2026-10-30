@@ -1,67 +1,67 @@
 class_name MapGenerator
 extends RefCounted
-## Умный генератор .alm на основе паттернов оригинальных карт Nival
-## (корпус удалён 29.10; паттерны зафиксированы в shapes_db/transition_db).
-## Noise → terrain → переходы из transition_db → высоты → дороги → объекты.
+## Smart .alm generator based on the patterns of the original Nival maps
+## (the corpus was removed on 29.10; the patterns are fixed in shapes_db/transition_db).
+## Noise → terrain → transitions from transition_db → heights → roads → objects.
 ##
-## Вызывается из игры по сиду: `MapGenerator.new().generate(seed, zone, dir)`.
-## CLI-обёртка для пакетной генерации — tests/gen_smart_map.gd.
+## Called from the game by seed: `MapGenerator.new().generate(seed, zone, dir)`.
+## The CLI wrapper for batch generation is tests/gen_smart_map.gd.
 ##
-## Инвариант потоков случайности: каждый поток = `seed + (старая константа - BASE_SEED)`.
-## Смещения подобраны так, чтобы потоки трав и алхимии оставались ИЗОЛИРОВАННЫМИ от
-## основного потока — иначе изменение числа трав сдвинуло бы расстановку НПЦ и Серых.
-## При seed == BASE_SEED генератор обязан выдать байт-в-байт прежний gen_smart_01.alm.
+## Randomness stream invariant: every stream = `seed + (old constant - BASE_SEED)`.
+## The offsets are chosen so the grass and alchemy streams stay ISOLATED from
+## the main stream — otherwise changing the herb count would shift the NPC and Grey layout.
+## With seed == BASE_SEED the generator must produce the old gen_smart_01.alm byte for byte.
 
 const DB_PATH := "res://assets/maps/transition_db.json"
 const SHAPES_PATH := "res://assets/maps/shapes_db.json"
-## Каталог генерируемых карт в user:// — res:// в экспортированной игре только для чтения.
+## Directory of generated maps in user:// — res:// is read-only in an exported game.
 const MAPS_DIR := "user://maps/"
-## Размер карты по умолчанию. В стресс-режиме ([stress] enabled=1)
-## перекрывается stress.map_size (игрок 07.10: 1000×1000).
+## Default map size. In stress mode ([stress] enabled=1)
+## it is overridden by stress.map_size (player 07.10: 1000×1000).
 var W := 192
 var H := 192
-## Сид, которым вызывался генератор до появления параметризации. Служит опорой для
-## смещений потоков и эталоном для регрессионной проверки идентичности карты.
+## The seed the generator was called with before parameterisation appeared. It is the anchor for
+## the stream offsets and the reference for the map identity regression check.
 const BASE_SEED := 4242
-## Смещения RNG-потоков относительно основного. ВАЖНО: это РАЗНОСТЬ старой
-## константы и BASE_SEED, а не сама константа: stream_seed = seed + смещение.
+## RNG stream offsets relative to the main one. IMPORTANT: this is the DIFFERENCE between the old
+## constant and BASE_SEED, not the constant itself: stream_seed = seed + offset.
 const STREAM_HERBS := 4400       ## 8642 - 4242
 const STREAM_ALCHEMY := 3058     ## 7300 - 4242 (+ city_index)
 const STREAM_OBJECTS := -3465    ## 777 - 4242 (_obj_noise.seed)
-const STREAM_TERRAIN := -4200    ## 42 - 4242 (rng.seed и elev_noise.seed)
+const STREAM_TERRAIN := -4200    ## 42 - 4242 (rng.seed and elev_noise.seed)
 const STREAM_JITTER := 5757      ## 9999 - 4242 (jitter_noise.seed)
 const STREAM_INTERIOR := -4235   ## 7 - 4242 (_interior_noise.seed)
 const STREAM_INTERIOR_HI := -4143 ## 99 - 4242 (_interior_hi.seed)
-const STREAM_POI := -3042        ## 1200 - 4242 (точки интереса, 03.10)
+const STREAM_POI := -3042        ## 1200 - 4242 (points of interest, 03.10)
 
-## Куда писать результат (задаётся в generate()).
+## Where to write the result (set in generate()).
 var _out_dir: String = ""
-## Базовое имя файлов без расширения: <basename>.alm + sidecar-ы с тем же префиксом.
+## Base file name without extension: <basename>.alm + sidecars with the same prefix.
 var _basename: String = "gen_smart_01"
-## Имя карты, записываемое ВНУТРЬ заголовка .alm (поле name, смещение 68). Не путать
-## с именем файла: для воспроизводства прежнего gen_smart_01.alm нужны оба = "gen_smart_01".
+## The map name written INSIDE the .alm header (the name field, offset 68). Not to be confused
+## with the file name: reproducing the old gen_smart_01.alm needs both = "gen_smart_01".
 var _map_name: String = "gen_smart_01"
-## Сид текущей генерации.
+## Seed of the current generation.
 var _seed: int = BASE_SEED
-## Профиль зоны: start | mid | hard | faction.
+## Zone profile: start | mid | hard | faction.
 var _zone: String = "mid"
-## Мир 4x3 (23.10): id сектора ("s41"), его соседи (id) и рельеф.
+## World 4x3 (23.10): sector id ("s41"), its neighbours (ids) and the relief.
 var _sector: String = ""
 var _neighbors: Array = []
 var _relief: String = "plains"
 var _portals_out: Array = []
-## Фоновая загрузка (23.10): прогресс для экрана загрузки, может быть null.
+## Background loading (23.10): progress for the loading screen, may be null.
 var _job = null
-## Статистика последней генерации для F3-панели (мс по фазам, источник).
+## Statistics of the last generation for the F3 panel (ms per phase, source).
 static var last_stats: Dictionary = {}
 const STAT_PHASES := ["start", "terrain", "cities", "roads", "relief", "portals",
 	"city", "objects", "herbs", "greys", "tiles", "heights", "save"]
 var _stats_t0 := 0
 var _stats_last := 0
 var _stats_phases: Dictionary = {}
-## Раса героя, переданная явно (поток не должен зависеть от Game.hero_race).
+## Hero race passed explicitly (the stream must not depend on Game.hero_race).
 var _race_hint: String = ""
-## Тип A -> tile-файл для .alm (песок/грязь/почва — свои BMP-файлы)
+## Type A -> tile file for .alm (sand/mud/soil — their own BMP files)
 const TERRAIN_FILE := {0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7}
 ## 8-bit peer mask bit order — must match tests/analyze_shapes.gd
 const SHAPE_DIRS := [
@@ -77,13 +77,13 @@ var _field := PackedFloat32Array()
 var _water_thr: float = 0.0
 var _mountain_thr: float = 0.0
 
-# Спавн (структуры/npc sidecar-ами): зарезервированные клетки и выходные записи.
-var _reserved := {}           # Vector2i -> true (здания, спавн, портал)
+# Spawn (structures/npc via sidecars): reserved cells and output records.
+var _reserved := {}           # Vector2i -> true (buildings, spawn, portal)
 var _structures_out: Array = []   # {x, y, type_id}
 var _npcs_out: Array = []         # {x, y, set, role, patrol, post, hp_max, damage}
 var _herbs_out: Array = []        # {x, y, item, icon}
-var _gray_cells := {}             # "x,y" -> true, занятые Серыми клетки (03.10)
-var _interest_out: Array = []     # {x, y, kind, label, members} — якоря точек интереса
+var _gray_cells := {}             # "x,y" -> true, cells taken by Greys (03.10)
+var _interest_out: Array = []     # {x, y, kind, label, members} — points-of-interest anchors
 var _obj_noise: FastNoiseLite
 
 # Transition DB
@@ -93,88 +93,89 @@ var _interior: Dictionary = {}
 var _shapes: Dictionary = {}
 # Interior base textures per type: "0" -> {tiles: [{file,variant,row,w}...], total}
 var _base_int: Dictionary = {}
-# Универсальный «краевой» row на тип (самый частый среди border-масок).
+# Universal "edge" row per type (the most frequent one among border masks).
 var _edge_rows := {}
-# Шум для интерьера (пер-клеточный, без жёстких worley-чанков).
+# Noise for the interior (per-cell, without hard worley chunks).
 var _interior_noise: FastNoiseLite
 var _interior_hi: FastNoiseLite
-# Сдвиг домена шума на тип, чтобы типы не копировали друг друга.
+# Noise domain shift per type so the types do not copy each other.
 const _NOISE_OFFSETS := {0: 1234, 1: 5678, 2: 9012, 3: 3456, 4: 7890, 5: 2345, 6: 6789}
 var _stat_exact := 0
 var _stat_subset := 0
 var _stat_rules := 0
 var _stat_transition := 0
 
-## Порядок направлений перехода. Должен совпадать с directions.order
-## в assets/maps/terrain_tiles_db.json и с gen_transition_tiles.py:
-## file_n = 8 + индекс в этом массиве.
+## Transition direction order. Must match directions.order
+## in assets/maps/terrain_tiles_db.json and gen_transition_tiles.py:
+## file_n = 8 + index in this array.
 const _TRANSITION_DIR_ORDER := ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
-## Базовое имя файлов карты: map_<seed>_<sector>[_<race>] для секторов мира,
-## map_<seed>_<zone>[_<race>] для старых вызовов/тестов.
+## Base map file name: map_<seed>_<sector>[_<race>] for world sectors,
+## map_<seed>_<zone>[_<race>] for old calls/tests.
 static func map_basename(seed_value: int, zone: String, race: String = "",
 		sector: String = "") -> String:
 	var tail: String = ("_" + race) if race != "" else ""
 	var tag: String = sector if sector != "" else zone
 	return "map_%d_%s%s" % [seed_value, tag, tail]
 
-## Версия генератора. Записывается в .npcs.json и проверяется при загрузке.
+## Generator version. Written into .npcs.json and checked on load.
 ##
-## ЗАЧЕМ. Замер 03.10: подняли плотность Серых с 15 до 71 на карту, но в игре
-## оставалось 15. Причина: `ensure_map` переиспользовал УЖЕ СГЕНЕРИРОВАННУЮ карту
-## из user://maps/, а её .npcs.json был датирован 28.09 — то есть создан до
-## изменения настроек. Настройки влияли только на новые карты, а старых в
-## user://maps/ лежало 58 файлов.
+## WHY. Measurement 03.10: Grey density was raised from 15 to 71 per map, but in game
+## it stayed at 15. Reason: `ensure_map` reused an ALREADY GENERATED map
+## from user://maps/, and its .npcs.json was dated 28.09 — that is, created before
+## the settings change. The settings only affected new maps, and 58 old files
+## lay in user://maps/.
 ##
-## Теперь при несовпадении версии карта перегенерируется сама. Меняешь
-## city_gap, плотность Серых или правила разведения — поднимаешь GEN_VERSION.
-## 05.10: v7 — односторонний переход t < n (двойной берег).
-## v8 — сглаживание осиротевших клеток 1×1/1×2 + бленд смежных биомов.
-## v9 — здания городов из арта Alice (structure_id 200..206).
-## v10 — футпринт Alice 3×3 (4×3 не влезал в овал, inn/house не ставились).
+## Now, on a version mismatch, the map regenerates itself. You change
+## city_gap, the Grey density or the spacing rules — you bump GEN_VERSION.
+## 05.10: v7 — one-way transition t < n (double shore).
+## v8 — smoothing of orphaned 1×1/1×2 cells + blending of adjacent biomes.
+## v9 — city buildings from the Alice art (structure_id 200..206).
+## v10 — Alice 3×3 footprint (4×3 did not fit the oval, inn/house were not placed).
 ##
-## v26 (15.10) — Серые получили настоящий арт: monsters/wolf, monsters/bee,
-## monsters/dragon. До этого в пуле стояла подмена monsters/hero_dummy (арт
-## героя, чтобы было на чём тестировать бой). Бамп обязателен: sidecar старой
-## версии лежит на диске и `ensure_map` вернул бы его как свежий.
+## v26 (15.10) — the Greys got real art: monsters/wolf, monsters/bee,
+## monsters/dragon. Before that the pool held the stand-in monsters/hero_dummy (the
+## hero art, so there was something to test combat on). The bump is mandatory: a sidecar of the old
+## version lies on disk and `ensure_map` would return it as fresh.
 ##
-## v25 (14.10) — ВРЕМЕННО наполнены пулы Серых набором `monsters/hero_dummy`
-## (арт героя, palette=5). Игроку нужно было проверить в игре анимацию удара и
-## смерти героя, а монстров в проекте нет: весь арт Аллодов удалён.
+## v25 (14.10) — TEMPORARILY filled the Grey pools with the `monsters/hero_dummy` set
+## (hero art, palette=5). The player needed to check the hero strike and
+## death animation in game, and the project has no monsters: all Allods art was removed.
 ##
-## v24 (11.10) — ПУСТЫЕ ПУЛЫ СЕРЫХ. Весь арт Аллодов II удалён, вместе с ним
-## удалены 41 набор `monsters/*`. Без бампа этого номера уже сгенерированные
-## карты продолжают ссылаться на удалённые наборы: sidecar лежит на диске, и
-## `ensure_map` вернул бы его как свежий. Это тот же класс, что и любой другой
-## смысловой бамп здесь — кэш карты молча переживает удаление данных.
-# 27: тиры Серых — полосы по зонам, респавн читает ту же полосу.
-# 28: добавлены людоед и тролль (9 видов вместо 7). Без бампа старые карты в
-# user:// остались бы без них.
-# 29: добавлена суккуб (10 видов). У неё `attack: 0` — фазы удара нет по
-# решению игрока, урон при этом наносится как у всех.
-# 30: туман войны + чанки террейна (19.10).
-# 31 (23.10): мир 4x3 — карта сектора со своим размером (96..192) и порталами
-# по каждой границе с соседом. Старые карты без сектора остаются совместимы.
-# 32 (28.10): форпосты фракций (пакет B) — 3 лагеря на карту вне стартовой зоны,
-# sidecar .outposts.json и стража с бирками.
-# 33 (29.10): арт Аллодов удалён из игры — ids 1..179 снесены, форпосты стоят из
-# наших seedream-построек, вместо костра проп. Без бампа старые карты в user://
-# ссылались бы на удалённые папки (здания молча исчезали бы).
-# 34 (30.10): вариация кромки и выбор interior-текстуры берутся из собственного
-# `_cell_hash` вместо `hash(Vector2i)` — карты те же по смыслу, но другие по
-# байтам; без бампа `ensure_map` вернул бы старые .alm с диска.
+## v24 (11.10) — EMPTY GREY POOLS. All Allods II art was removed, and with it
+## 41 `monsters/*` sets were deleted. Without this bump already generated maps
+## keep pointing at removed sets: the sidecar sits on disk and `ensure_map`
+## would return it as fresh. Same class as any other meaningful bump here:
+## the map cache silently outlives deleted data.
+# 27: grey tiers - bands per zone, respawn reads the same band.
+# 28: cannibal and troll added (9 species instead of 7). Without the bump old
+# maps in user:// would be left without them.
+# 29: succubus added (10 species). She has `attack: 0` - no attack phase by the
+# player's decision, while damage is dealt like everyone else.
+# 30: fog of war + terrain chunks (19.10).
+# 31 (23.10): 4x3 world - a sector map with its own size (96..192) and portals
+# on every border with a neighbour. Old maps without a sector stay compatible.
+# 32 (28.10): faction outposts (package B) - 3 camps per map outside the start
+# zone, .outposts.json sidecar and guards with tags.
+# 33 (29.10): Allods art removed from the game - ids 1..179 dropped, outposts
+# stand from our seedream buildings, a prop instead of the campfire. Without the
+# bump old maps in user:// would point at removed folders (buildings would
+# silently disappear).
+# 34 (30.10): edge variation and interior texture choice are taken from our own
+# `_cell_hash` instead of `hash(Vector2i)` - maps are the same in meaning but
+# different in bytes; without the bump `ensure_map` would return old .alm files.
 const GEN_VERSION := 34
 
-## Путь к карте по сиду. Если карта уже сгенерирована той же версией генератора —
-## переиспользуем её, иначе генерируем заново. Пустая строка при ошибке.
+## Path to the map by seed. If the map is already generated by the same generator version —
+## we reuse it, otherwise we generate anew. An empty string on error.
 ##
-## Наличие .npcs.json проверяется не просто «для аккуратности»: если запись оборвалась
-## на середине, .alm может существовать, а sidecar-ы — нет, и карта загрузится
-## без зданий, НПЦ и трав.
+## The presence of .npcs.json is checked not just "for tidiness": if the write was cut
+## in the middle, .alm may exist while the sidecars do not, and the map would load
+## without buildings, NPCs and herbs.
 static func ensure_map(seed_value: int, zone: String = "mid", dir: String = MAPS_DIR,
 		race: String = "", sector: String = "", size: int = 0,
 		neighbors: Array = [], relief: String = "", job = null) -> String:
-	# race пустой -> берём расу героя: расы городов зависят от неё (10.10).
+	# race empty -> take the hero race: city races depend on it (10.10).
 	if race == "":
 		race = _hero_faction()
 	var base: String = map_basename(seed_value, zone, race, sector)
@@ -195,12 +196,12 @@ static func ensure_map(seed_value: int, zone: String = "mid", dir: String = MAPS
 		sector, size, neighbors, relief, job)
 
 
-## Раса героя -> id фракции для города. Пусто, если для неё нет CITY_POPULATION
-## (страховка на будущее: раса в hero_race может появиться раньше арта).
+## Hero race -> faction id for the city. Empty if there is no CITY_POPULATION for it
+## (a safeguard for the future: a race may appear in hero_race before its art).
 static func _hero_faction() -> String:
 	return city_race_for_hero(Game.hero_race)
 
-## Версия, записанная в sidecar (-1 = файла нет или поле нечитаемо).
+## Version recorded in the sidecar (-1 = no file or the field is unreadable).
 static func _saved_gen_version(npcs_path: String) -> int:
 	var f := FileAccess.open(npcs_path, FileAccess.READ)
 	if f == null:
@@ -212,12 +213,12 @@ static func _saved_gen_version(npcs_path: String) -> int:
 		return -1
 	return int((parsed as Dictionary).get("gen_version", -1))
 
-## Сгенерировать карту по сиду. Возвращает путь к .alm (пустая строка при ошибке).
-## dir — каталог с завершающим слэшем (обычно "user://maps/").
-## basename_override — имя файлов без расширения; пусто = "map_<seed>_<zone>".
-## map_name_override — имя карты внутри заголовка .alm; пусто = basename.
-##   Оверрайды нужны регрессионному тесту идентичности, чтобы побайтово воспроизвести
-##   прежний gen_smart_01.alm (см. BASE_SEED).
+## Generate a map by seed. Returns the path to .alm (an empty string on error).
+## dir — a directory with a trailing slash (usually "user://maps/").
+## basename_override — file name without extension; empty = "map_<seed>_<zone>".
+## map_name_override — the map name inside the .alm header; empty = basename.
+##   The overrides are needed by the identity regression test to reproduce
+##   the old gen_smart_01.alm byte for byte (see BASE_SEED).
 func generate(seed_value: int, zone: String = "mid", dir: String = "res://assets/maps/gen/",
 		basename_override: String = "", map_name_override: String = "",
 		race: String = "", sector: String = "", size: int = 0,
@@ -255,8 +256,8 @@ func generate(seed_value: int, zone: String = "mid", dir: String = "res://assets
 	return _out_dir + _basename + ".alm"
 
 
-## Стресс-режим движка: размер карты и счётчики контента из [stress].
-## В обычной игре enabled=0 — поведение не меняется.
+## Engine stress mode: map size and content counters from [stress].
+## In a normal game enabled=0 — the behaviour does not change.
 func _apply_stress_overrides() -> void:
 	var enabled := GameConfig.geti("stress", "enabled") != 0
 	if not enabled:
@@ -294,12 +295,12 @@ func _load_db() -> void:
 	print("SHAPES: %d entries, base textures for %d types" % [_shapes.size(), _base_int.size()])
 	_compute_edge_rows()
 
-## «Краевой» row на тип: самый частотный row среди форм с >=1 кардинальным
-## битом (N/E/S/W) и >= MIN_CELLS клеток. Для травы/гор это «универсальный
-## край» (row 4 в анализе pvm-карт), для воды/дороги — свои краевые rows.
+## "Edge" row per type: the most frequent row among shapes with >=1 cardinal
+## bit (N/E/S/W) and >= MIN_CELLS cells. For grass/mountains this is the "universal
+## edge" (row 4 in the pvm map analysis), for water/road — their own edge rows.
 func _compute_edge_rows() -> void:
 	const MIN_CELLS := 20
-	var cardinal_bits := 0x55  # биты N, E, S, W (0,2,4,6)
+	var cardinal_bits := 0x55  # bits N, E, S, W (0,2,4,6)
 	var rows_by_type := {}  # t -> {row: total_weight}
 	for key in _shapes:
 		var parts: Array = String(key).split(":")
@@ -345,9 +346,9 @@ func _get_rule(type_a: int, dir: String, type_b: int) -> Dictionary:
 	# Fallback to base direction
 	return _rules.get("%d:%s:%d" % [type_a, dir, type_b], {})
 
-# === Генерация ===
+# === Generation ===
 
-## Прогресс для экрана загрузки. job может быть null (тесты, dev).
+## Progress for the loading screen. job may be null (tests, dev).
 func _report(percent: int, phase: int) -> void:
 	var now := Time.get_ticks_msec()
 	_stats_phases[str(phase)] = now - _stats_last
@@ -370,57 +371,57 @@ func _generate() -> void:
 	_outposts_out.clear()
 	_outpost_reach.clear()
 
-	# 1. Почва Voronoi (база, без гор/воды/дороги)
+	# 1. Voronoi soil (the base, without mountains/water/road)
 	_place_terrain(n)
 	_report(12, 1)
 
 	var rng := rng_from_seed(_seed)
 
-	# 2. Города: овалы ~11×11 дорогой (type 3), по профилю зоны
+	# 2. Cities: ovals ~11×11 of road (type 3), by the zone profile
 	_place_cities(rng)
 	_report(28, 2)
 
-	# 3. Дороги: MST по городам + A*-коридоры ширины 2
+	# 3. Roads: MST over the cities + width-2 A* corridors
 	_connect_cities(rng)
 	_report(42, 3)
 
-	# 4. Горы/вода поверх экстремумов рельефа, не перетирая дорогу (3)
+	# 4. Mountains/water over the terrain extremes, without overwriting the road (3)
 	_place_mountains_water()
-	# 4b. Убрать «осиротевшие» клетки 1×1 / 1×2 чужого биома внутри поля.
+	# 4b. Remove "orphaned" 1×1 / 1×2 cells of a foreign biome inside the field.
 	_smooth_isolated_terrain()
 	_report(50, 4)
 
-	# 5. Portal + Spawn маркеры (у города №0)
+	# 5. Portal + Spawn markers (at city #0)
 	_place_portal_spawn()
 	_report(56, 5)
 
-	# 6. City content: здания + НПЦ городов (после известных спавна/портала)
+	# 6. City content: buildings + city NPCs (after spawn/portal are known)
 	_place_city_content(rng)
 	_report(66, 6)
 
-	# 6b. Мелкий декор вокруг городов (бочки/ящики/фонари seedream)
+	# 6b. Small decor around the cities (seedream barrels/boxes/lamps)
 	_place_city_props(rng)
 
-	# 6c. Форпосты фракций (пакет B): 3 лагеря вне городов, в стартовой зоне 0.
-	# Свой поток RNG — деревья/травы/Серые не сдвигаются от появления лагерей.
+	# 6c. Faction outposts (package B): 3 camps outside the cities, in the starting zone 0.
+	# Their own RNG stream — trees/herbs/Greys do not shift when camps appear.
 	_place_outposts(rng_from_seed(_seed + STREAM_OUTPOSTS))
 
-	# 7. Деревья/объекты (заполняют _obstacles, обходя города/дороги/спавн)
+	# 7. Trees/objects (fill _obstacles, going around cities/roads/spawn)
 	_place_objects(rng)
 	_report(78, 7)
 
-	# 8. Травы: отдельные collectible-узлы, не препятствия
+	# 8. Herbs: separate collectible nodes, not obstacles
 	_place_herbs(rng_from_seed(_seed + STREAM_HERBS))
 	_report(84, 8)
 
-	# 9. Серые: кластеры у дорог и в лесу (только на не-занятых клетках)
+	# 9. Greys: clusters near roads and in the forest (only on unoccupied cells)
 	_place_greys(rng)
 	_report(90, 9)
 
-	# 9b. Точки интереса вне городов: статичные группы NPC. Выключено по
-	# умолчанию (interest_points = 0 во всех зонах), включает игрок.
-	# Отдельный поток RNG, чтобы включение точек интереса НЕ сдвигало
-	# деревья, травы и Серых — иначе старая карта менялась бы целиком.
+	# 9b. Points of interest outside the cities: static NPC groups. Disabled by
+	# default (interest_points = 0 in every zone), the player enables them.
+	# A separate RNG stream so that enabling points of interest does NOT shift
+	# trees, herbs and Greys — otherwise an old map would change entirely.
 	_place_interest_points(rng_from_seed(_seed + STREAM_POI))
 
 	# 10. Tiles with transitions from DB
@@ -449,8 +450,8 @@ func rng_from_seed(s: int) -> RandomNumberGenerator:
 	r.seed = s
 	return r
 
-# === Профили зон: число городов по сложности ===
-# Профиль зоны задаётся параметром generate() в поле _zone (start | mid | hard | faction).
+# === Zone profiles: the number of cities by difficulty ===
+# The zone profile is set by the generate() parameter in the _zone field (start | mid | hard | faction).
 const ZONE_CITY_COUNTS := {
 	"start": [1, 1],
 	"mid": [1, 3],
@@ -458,15 +459,15 @@ const ZONE_CITY_COUNTS := {
 	"faction": [2, 3],
 }
 
-# Геометрия города.
-# CITY_RADIUS — половина овала дороги: 8 даёт овал 17×17 (было 7 -> 15×15,
-# и дома на 4-6 клетках не помещались в кольцо, здания вытеснялись наружу).
-# CITY_GAP — свободных клеток вокруг каждого здания (была 1, дома слипались).
+# City geometry.
+# CITY_RADIUS — half the road oval: 8 gives a 17×17 oval (it was 7 -> 15×15,
+# and houses on 4-6 cells did not fit into the ring, buildings were pushed outside).
+# CITY_GAP — free cells around every building (it was 1, houses stuck together).
 const CITY_RADIUS := 8
 const CITY_GAP := 2
 
-## Радиус и зазор города — из конфига [spawn]. Константы выше остались
-## запасным значением и перекрытием для тестов, которые подставляют свои.
+## City radius and gap — from config [spawn]. The constants above remain
+## a fallback value and an override for tests that substitute their own.
 static func city_radius() -> int:
 	var v := GameConfig.geti("spawn", "city_radius")
 	return CITY_RADIUS if v <= 0 else v
@@ -483,33 +484,33 @@ static func herb_min_distance() -> int:
 	var v := GameConfig.geti("spawn", "herb_min_distance")
 	return HERB_MIN_DISTANCE if v <= 0 else v
 
-## Выступ здания вверх для КАЖДОГО проверяемого футпринта (full_height − h).
-## Передаётся в _footprint_fits через поле: GDScript не даёт передавать его
-## аргументом без засорения сигнатуры у всех вызывающих.
+## Building protrusion upwards for EVERY footprint being checked (full_height − h).
+## Passed into _footprint_fits through a field: GDScript does not allow passing it
+## as an argument without polluting the signature of every caller.
 var _pending_vis_rows: int = 0
 
-# Серые (монстры palette=5 — UnitDB.is_hostile) по зоне: кластеры у дорог и в лесах.
+# Greys (palette=5 monsters — UnitDB.is_hostile) by zone: clusters near roads and in forests.
 #
-# ПУЛЫ ПУСТЫ — и это НЕ ошибка, а следствие решения игрока от 11.10: весь арт
-# Аллодов II удалён из репозитория, вместе с ним удалены 41 набор `monsters/*`.
-# Подставлять вместо них городских стражников (`city_*`) нельзя: это мирные
-# NPC, и такой подставой мы бы тихо соврали, что монстры есть.
+# THE POOLS ARE EMPTY — and this is NOT a bug but a consequence of the player's decision on 11.10: all
+# Allods II art was removed from the repository, and with it the 41 `monsters/*` sets.
+# Substituting city guards (`city_*`) instead is not allowed: those are peaceful
+# NPCs, and such a substitution would silently lie that monsters exist.
 #
-# ЧТО БУДЕТ, когда появятся риги Серых: набор рига подключается по тому же
-# пути, что и любой другой — записью в units_db.json и папкой
-# assets/units/rig/<набор>/. Списки ниже ожидают обычные ключи наборов, менять
-# код спавна не потребуется, только заполнить эти пути.
+# WHAT WILL HAPPEN when Grey rigs appear: a rig set is wired in the same
+# way as any other — by a record in units_db.json and a folder
+# assets/units/rig/<set>/. The lists below expect ordinary set keys, the spawn
+# code will not need changes, only these paths have to be filled in.
 const GRAY_POOL_EMPTY: Array = []
 
-# 15.10: настоящий арт Серых. Сделаны тем же конвейером, что и герой
-# (tests/gen_monster_strip.py + tests/extract_monster_nb.py), модель
-# google/gemini-nano-banana-2.1 — она единственная держит одно и то же животное
-# между вызовами. seedream-5-0-flash втрое дешевле ($0.018 против $0.059), но
-# на контрольном опыте стойка и бег вышли РАЗНЫМИ зверьями.
+# 15.10: real Grey art. Made with the same pipeline as the hero
+# (tests/gen_monster_strip.py + tests/extract_monster_nb.py), model
+# google/gemini-nano-banana-2.1 — it is the only one that keeps the same animal
+# between calls. seedream-5-0-flash is three times cheaper ($0.018 vs $0.059), but
+# in the control run the idle and the run came out as DIFFERENT beasts.
 #
-# monsters/succubus НЕ включён: полосы `move` и `die` не успели сгенерироваться,
-# квота Gemini кончилась на два вызова раньше. Набор появится, как только
-# добьём эти две полосы.
+# monsters/succubus is NOT included: the `move` and `die` strips were not generated
+# in time, the Gemini quota ran out two calls earlier. The set will appear as soon as
+# we finish those two strips.
 const GRAY_POOL_TEST: Array = [
 	"monsters/wolf", "monsters/dino", "monsters/squirrel",
 	"monsters/bee", "monsters/bat", "monsters/ghost", "monsters/dragon",
@@ -527,11 +528,11 @@ const GRAY_POOL_TEST: Array = [
 static func gray_species() -> Array:
 	return ContentRules.list("spawn.gray_species")
 
-# Полоса тиров по зонам (решение игрока): чем глубже, тем опаснее вид.
-#  start   1-2  новичок не встречает элит
-#  mid     2-3  обычная охота, первые древние
-#  hard    3-4  опасные, легендарные
-#  faction 4-5  элиты и владыки
+# Tier band by zone (player's decision): the deeper you go, the more dangerous the species.
+#  start   1-2  a beginner meets no elites
+#  mid     2-3  ordinary hunting, the first ancients
+#  hard    3-4  dangerous, legendary
+#  faction 4-5  elites and lords
 const GRAY_TIER_BAND := {
 	"start": [1, 2],
 	"mid": [2, 3],
@@ -539,8 +540,8 @@ const GRAY_TIER_BAND := {
 	"faction": [4, 5],
 }
 
-# Усиление за тир поверх статов зоны (формула из §13, пакет C).
-# Тир 1 — x1.0, тир 5 — hp x2.4, урон x2.0.
+# Boost per tier on top of the zone stats (the formula from §13, package C).
+# Tier 1 — x1.0, tier 5 — hp x2.4, damage x2.0.
 const GRAY_TIER_HP_STEP := 0.35
 const GRAY_TIER_DMG_STEP := 0.25
 
@@ -549,7 +550,7 @@ static func gray_set_name(species: String, tier: int) -> String:
 	return "monsters/%s" % species if tier <= 1 else "monsters/%s_t%d" % [species, tier]
 
 
-## Zone set pool: all species × the tiers of its band (existing sets only).
+## The zone's set pool: all species × the tiers of its band.
 static func gray_pool_for_zone(zone: String) -> Array:
 	var band: Array = GRAY_TIER_BAND.get(zone, GRAY_TIER_BAND["mid"])
 	var out: Array = []
@@ -561,21 +562,21 @@ static func gray_pool_for_zone(zone: String) -> Array:
 	return out
 
 
-## [hp_mult, dmg_mult] для тира. Тир берётся из units_db.json, а не разбирается
-## из имени: имя — это строка, база — источник истины.
+## [hp_mult, dmg_mult] for a tier. The tier comes from units_db.json, not parsed
+## from the name: the name is a string, the database is the source of truth.
 static func gray_tier_mults(set_name: String) -> Array:
 	var tier := int(UnitDB.get_set(set_name).get("tier", 1))
 	var step := float(maxi(tier - 1, 0))
 	return [1.0 + GRAY_TIER_HP_STEP * step, 1.0 + GRAY_TIER_DMG_STEP * step]
 
-# Числа зон (количество Серых, hp, урон) живут в `assets/config/game.cfg`
-# и читаются через `GameConfig.zonei`, а не здесь. Прежний `GRAY_ZONE`
-# держал вторую копию этих чисел и пул наборов; и то и другое заменено
-# на `GRAY_TIER_BAND` + `gray_pool_for_zone`.
+# The zone numbers (Grey count, hp, damage) live in `assets/config/game.cfg`
+# and are read through `GameConfig.zonei`, not here. The former `GRAY_ZONE`
+# held a second copy of those numbers and the set pool; both were replaced
+# by `GRAY_TIER_BAND` + `gray_pool_for_zone`.
 
-# Здания в городах: функциональные + жильё + декор (folder -> StructureDB).
-# 10.10: арт seedream (tests/extract_seedream_buildings.py), папки *_sN.
-# Старые Alice-папки (shop3/inn4/...) остались на диске, но в пулах не используются.
+# City buildings: functional + housing + decor (folder -> StructureDB).
+# 10.10: seedream art (tests/extract_seedream_buildings.py), folders *_sN.
+# The old Alice folders (shop3/inn4/...) remained on disk but are not used in the pools.
 const SHOP_FOLDERS := ["shop_s1"]
 const ALCHEMY_FOLDERS := ["druidshop_s1"]
 const INN_FOLDERS := ["inn_s1", "inn_s2"]
@@ -583,9 +584,9 @@ const TRAIN_FOLDERS := ["train_s1"]
 const BLACKSMITH_FOLDERS := ["blacksmith_s1"]
 
 ## Housing and decor by city race (keys = faction id in world.json).
-## Every race has its own building style — an orc city does not look human.
-## 2026-10-29: moved to data (`map.house_folders` / `map.decor_folders`) — a mod
-## with a new building set or a new faction needs no code change.
+## Every race has its own building style - an orc city does not look human.
+## 29.10: moved into data (`map.house_folders` / `map.decor_folders`) —
+## a mod with a new building set or a new faction needs no code changes.
 static func house_folders() -> Dictionary:
 	return ContentRules.dict("map.house_folders")
 
@@ -593,29 +594,28 @@ static func house_folders() -> Dictionary:
 static func decor_folders() -> Dictionary:
 	return ContentRules.dict("map.decor_folders")
 
-## Small map decor (seedream, alm_objects.json IDs 193-199).
-## Placed around cities: barrels/crates/sacks near buildings, lanterns along
-## roads. The list lives in data (`map.city_props`); lantern 197 is placed by a
-## dedicated branch next to roads.
+## Small map decor (seedream, alm_objects.json ID 193-199).
+## Placed around the cities: barrels/boxes/sacks by the buildings, lamps along the roads.
+## The list is in data (`map.city_props`); lamp 197 is placed separately along the roads.
 const LANTERN_PROP_ID := 197
 
-## Зоны, в которых генератор ставит портал.
+## Zones where the generator places a portal.
 ##
-## 03.10: было только ["start"], и игрок решил добавить "mid" — без этого
-## выход из зоны новичка ведёт в никуда и зон становится ровно одна.
-## ВАЖНО: `_drop_portal_json()` вызывается для зон из этого списка и стирает
-## старый sidecar. Если добавить зону в список и забыть убрать вызов, то
-## генератор сотрёт портал, который сам же только что поставил.
+## 03.10: it was only ["start"], and the player decided to add "mid" — without that
+## the exit from the beginner zone leads nowhere and there is exactly one zone.
+## IMPORTANT: `_drop_portal_json()` is called for the zones from this list and wipes
+## the old sidecar. If you add a zone to the list and forget to remove the call, the
+## generator will erase the portal it has just placed.
 const ZONES_WITH_PORTAL := ["start", "mid"]
 
-# НПЦ городов.
-## Раса города -> наборы спрайтов. Ключи = id фракций в assets/lore/world.json
-## (там же label/race/archmage). Тир = роль: граждане t0/t1, стражи t1/t2,
-## капитан-великий-маг t3.
-## У каждой расы два набора (маг + воин) - это осознанно: в городе должны быть
-## и простые жители, и те, кто держит оружие, а не 16 копий одного силуэта.
-## 10.10 (позже): нежить тоже получила атлас (city_necro_mage/city_necro_warrior),
-## поэтому necro теперь полноценный город, а не откат на первую доступную расу.
+# City NPCs.
+## City race -> sprite sets. Keys = faction ids in assets/lore/world.json
+## (label/race/archmage live there too). Tier = role: citizens t0/t1, guards t1/t2,
+## captain-great-mage t3.
+## Every race has two sets (mage + warrior) - deliberately: a city should have
+## both ordinary residents and those who bear arms, not 16 copies of one silhouette.
+## 10.10 (later): the undead also got an atlas (city_necro_mage/city_necro_warrior),
+## so necro is now a full city instead of a fallback to the first available race.
 const CITY_POPULATION := {
 	"humans": {
 		"guards": ["city_human_mage/t1", "city_human_warrior/t2"],
@@ -642,13 +642,13 @@ const CITY_POPULATION := {
 		"head": "city_necro_mage/t2",
 	},
 }
-## Расы, между которым�� города делятся по кругу. necro исключена, пока нет
-## арта (см. CITY_POPULATION). Стартовая зона - первая раса, не "hero":
-## при "hero" не было бы ни одного NPC в городе новичка.
+## Races that cities are dealt to in a circle. necro is excluded while there is no
+## art (see CITY_POPULATION). The starting zone gets the first race, not "hero":
+## with "hero" there would be no NPC at all in the beginner city.
 const CITY_RACES := ["humans", "ork", "druid", "necro"]
 
-# Объекты по биому: seedream-спрайты (alm_objects.json ID 200-211).
-# Старые аллодовские ID 1-192 из пулов убраны (папки удалены с диска).
+# Objects by biome: seedream sprites (alm_objects.json ID 200-211).
+# The old Allods IDs 1-192 were removed from the pools (the folders were deleted from disk).
 const TREE_GRASS := [200, 201, 202, 205, 210, 211]   # oak, oak2, pine, bush_berry, rock, rock2
 const TREE_SOIL := [203, 204, 205, 210, 211]         # birch, willow, bush_berry, rock, rock2
 const TREE_SAND := [206, 207, 210]                   # palm, cactus, rock
@@ -667,74 +667,74 @@ const HERB_TARGET_COUNTS := {"start": 70, "mid": 90, "hard": 110, "faction": 100
 const HERB_REGION_GRID := 4
 const HERB_MIN_DISTANCE := 4
 
-## Разведение Серых по карте (03.10). GRAY_MIN_DISTANCE — минимальная
-## дистанция между любыми двумя Серыми, иначе кластеры жмутся в угол.
-## GRAY_REGION_GRID — на сколько частей делим карту для отчёта о покрытии.
+## Grey spacing across the map (03.10). GRAY_MIN_DISTANCE — the minimum
+## distance between any two Greys, otherwise clusters bunch up in a corner.
+## GRAY_REGION_GRID — how many parts we split the map into for the coverage report.
 const GRAY_MIN_DISTANCE := 4
 const GRAY_REGION_GRID := 3
-const GRAY_MIN_SPAWN_DISTANCE := 14   # не тыкать зверя прямо в лицо новичку
+const GRAY_MIN_SPAWN_DISTANCE := 14   # do not poke a beast right into a beginner's face
 
-## Тематические встречи (пакет D, 07.10): улей, логово, стая — как в Аллодах.
+## Thematic encounters (package D, 07.10): hive, lair, pack — as in Allods.
 ##
-## СПИСОК ПУСТ, как и пулы GRAY_ZONE: все наборы `monsters/*` удалены вместе с
-## артом Аллодов II (11.10). Логика расстановки и сами виды встреч не тронуты —
-## они оживут, как только появятся риги Серых, и для этого достаточно вернуть
-## записи сюда. До тех пор ни одна стая не ставится, и это видно в отчёте
-## генератора (`gray_count=0`), а не как падение.
+## THE LIST IS EMPTY, like the GRAY_ZONE pools: all `monsters/*` sets were removed with
+## the Allods II art (11.10). The placement logic and the encounter kinds themselves are untouched —
+## they will come alive as soon as Grey rigs appear, and for that it is enough to put
+## the records back here. Until then no pack is placed, and this is visible in the generator
+## report (`gray_count=0`), not as a crash.
 ##
-## Что сюда вернётся (набор -> вид встречи):
+## What will come back here (set -> encounter kind):
 ##   bee  -> bee_hive       wolf  -> wolf_pack     spider -> spider_den
 ##   squirrel -> squirrel_herd  orc/goblin -> orc_camp
 ##   ogre -> ogre_lair      troll -> troll_lair    bat    -> bat_swarm
 const ENCOUNTER_KINDS: Array = []
 
-## --- Форпосты фракций (пакет B переработки ковки, 28.10) -------------------
+## --- Faction outposts (package B of the forging rework, 28.10) -------------------
 ##
-## Решение игрока: по ТРИ захватываемых форпоста на карту, в стартовой зоне
-## фракционных воинов нет вовсе (там только Серые). Форпост — это маленький
-## лагерь вне города: шатёр расы, костёр и 3–6 стражников с бирками в луте.
+## The player's decision: THREE capturable outposts per map; in the starting zone
+## there are no faction warriors at all (only Greys there). An outpost is a small
+## camp outside the city: the race's tent, a campfire and 3-6 guards with tags in their loot.
 ##
-## Почему свои поток RNG как у трав/POI: добавление форпостов не должно
-## сдвигать деревья, травы и Серых — иначе каждая старая карта менялась бы
-## целиком. STREAM_OUTPOSTS занимает свой диапазон.
+## Why their own RNG stream like herbs/POI: adding outposts must not
+## shift trees, herbs and Greys — otherwise every old map would change
+## entirely. STREAM_OUTPOSTS occupies its own range.
 const STREAM_OUTPOSTS := -2718
 const OUTPOST_FACTIONS: Array = ["humans", "ork", "necro", "druid"]
-## Шатёр/дом лагеря по расам. Все имена обязаны быть в structure_db.json
-## (проверяется генератором, иначе лагерь останется без постройки).
-## 28.10: Аллодовские tent/vigvam/necro/druidhouse удалены вместе с ids 1..179 —
-## лагеря стоят из наших seedream-построек (те же папки, что жильё/декор).
+## Camp tent/house by race. All names must exist in structure_db.json
+## (the generator checks it, otherwise the camp would be left without a building).
+## 28.10: the Allods tent/vigvam/necro/druidhouse were removed with ids 1..179 —
+## the camps stand from our seedream buildings (the same folders as housing/decor).
 const OUTPOST_CAMPS := {
 	"humans": ["barracks_s1", "barracks_s2"],
 	"ork": ["ork_house_b1", "ork_house_b2"],
 	"necro": ["necro_house_b1", "necro_house_b2"],
 	"druid": ["druid_house_b1", "druid_house_b2"],
 }
-## Имена форпостов для журнала мира и захвата. Отдельно от расы: игрок видит
-## «Форпост Орды», а не «ork».
+## Outpost names for the world journal and capture. Separate from the race: the player sees
+## "Horde outpost", not "ork".
 const OUTPOST_NAMES := {
 	"humans": "Форпост Альянса",
 	"ork": "Форпост Орды",
 	"necro": "Форпост Пожинателей",
 	"druid": "Форпост Круга",
 }
-const OUTPOST_PROP_ID := 193  ## бочка у шатра: центр лагеря без Аллодовского костра
+const OUTPOST_PROP_ID := 193  ## a barrel by the tent: the camp centre without the Allods campfire
 const OUTPOST_MIN_CITY_DISTANCE := 20
 const OUTPOST_MIN_SPAWN_DISTANCE := 16
 const OUTPOST_MIN_EACH_OTHER := 20
-## Радиус лагеря в клетках: шатёр + костёр + посты стражи.
+## Camp radius in cells: tent + campfire + guard posts.
 const OUTPOST_RADIUS := 4
 
 var _outposts_out: Array = []  # {id, faction, name, x, y, guards}
-## Достижимые от спавна клетки на момент расстановки лагерей: лагерь в
-## карманe за горами был бы недоступен игроку, а значит мёртвым контентом.
+## Cells reachable from spawn at the moment the camps are placed: a camp in
+## a pocket behind the mountains would be unreachable for the player, hence dead content.
 var _outpost_reach: Dictionary = {}
 
 var _spawn_pos: Vector2i = Vector2i(-1, -1)
 var _portal_pos: Vector2i = Vector2i(-1, -1)
 var _cities: Array = []  # [{pos: Vector2i, faction: String}]
 
-## Этап 2: города. Центры — на базовой земле, разнесённые (мин. дистанция),
-## заливка овалом ~11×11 дорогой (type 3). Количество — из профиля зоны.
+## Stage 2: cities. Centres — on base land, spaced apart (min. distance),
+## filled with an ~11×11 oval of road (type 3). The count comes from the zone profile.
 func _place_cities(rng: RandomNumberGenerator) -> void:
 	_cities.clear()
 	var range_arr: Array = ZONE_CITY_COUNTS.get(_zone, [1, 3])
@@ -746,11 +746,11 @@ func _place_cities(rng: RandomNumberGenerator) -> void:
 		var cx: int = rng.randi_range(8, W - 9)
 		var cy: int = rng.randi_range(8, H - 9)
 		var p := Vector2i(cx, cy)
-		# Центр города — только на базовой земле (0/4/5/6), не на воде/горах/дороге
+		# The city centre — only on base land (0/4/5/6), not on water/mountains/road
 		var t: int = _terrain[p.y * W + p.x]
 		if t == 1 or t == 2 or t == 3:
 			continue
-		# Разнесение: не ближе min_city_dist к уже размещённым городам
+		# Spacing: no closer than min_city_dist to already placed cities
 		var far_enough := true
 		for c in _cities:
 			if p.distance_to(c["pos"]) < min_city_dist:
@@ -762,16 +762,16 @@ func _place_cities(rng: RandomNumberGenerator) -> void:
 		_fill_city_oval(p, city_radius(), city_radius())
 	print("CITIES: %d/%d (zone=%s)" % [_cities.size(), count, _zone])
 
-## Раса города (id из CITY_POPULATION / world.json).
+## City race (id from CITY_POPULATION / world.json).
 ##
-## 10.10: ПЕРВЫЙ город — раса героя. До этого расы шли по кругу CITY_RACES от
-## нуля, то есть первый город всегда был humans, и за орка/друида герой попадал
-## в чужой город (жалоба игрока: «у всех кроме людей NPC не соответствуют
-## расе»). Остальные города — по кругу, начиная с расы героя, чтобы порядок
-## был тот же, но поворот вокруг оси.
+## 10.10: the FIRST city is the hero's race. Before that the races went in a circle over CITY_RACES from
+## zero, that is the first city was always humans, and as an orc/druid the hero ended up
+## in a foreign city (player report: "for everyone except humans the NPCs do not match
+## the race"). The other cities go in a circle starting from the hero's race, so the order
+## stays the same but is rotated around the axis.
 ##
-## неcro был исключён, пока не было атласа нежити. С приходом арта (10.10,
-## позже) каждая раса героя даёт свой город, без отката.
+## necro was excluded while there was no undead atlas. With the art arriving (10.10,
+## later) every hero race gives its own city, without a fallback.
 func _faction_for(i: int) -> String:
 	var order := _race_order()
 	if order.is_empty():
@@ -779,7 +779,7 @@ func _faction_for(i: int) -> String:
 	return str(order[i % order.size()])
 
 
-## Расы городов в порядке появления: сначала раса героя, потом остальные.
+## City races in order of appearance: the hero's race first, then the others.
 func _race_order() -> Array:
 	var out: Array = []
 	var hero := _race_hint if _race_hint != "" else city_race_for_hero(Game.hero_race)
@@ -790,7 +790,7 @@ func _race_order() -> Array:
 			out.append(r)
 	return out
 
-## Залитый овал дорогой (type 3), диаметр (2*rx+1)×(2*ry+1).
+## A filled oval of road (type 3), diameter (2*rx+1)×(2*ry+1).
 func _fill_city_oval(center: Vector2i, rx: int, ry: int) -> void:
 	for dy in range(-ry, ry + 1):
 		for dx in range(-rx, rx + 1):
@@ -804,7 +804,7 @@ func _fill_city_oval(center: Vector2i, rx: int, ry: int) -> void:
 				continue
 			_terrain[y * W + x] = 3
 
-## Этап 3: дороги — MST по городам (Прим, ближайший сосед) + A*-коридоры ширины 2.
+## Stage 3: roads — an MST over the cities (Prim, nearest neighbour) + width-2 A* corridors.
 func _connect_cities(rng: RandomNumberGenerator) -> void:
 	if _cities.size() < 2:
 		return
@@ -830,7 +830,7 @@ func _connect_cities(rng: RandomNumberGenerator) -> void:
 		in_tree[best_j] = true
 		connected.append(best_j)
 
-## A* между двумя точками + лента ширины 2 (перпендикулярно сегменту).
+## A* between two points + a width-2 ribbon (perpendicular to the segment).
 func _carve_road_between(a: Vector2i, b: Vector2i, rng: RandomNumberGenerator) -> void:
 	var path: Array = _a_star(a, b, rng)
 	if path.is_empty():
@@ -839,7 +839,7 @@ func _carve_road_between(a: Vector2i, b: Vector2i, rng: RandomNumberGenerator) -
 		return
 	for i in range(path.size()):
 		var p: Vector2i = path[i]
-		# Направление сегмента для перпендикулярной полосы ширины 2
+		# Direction of the segment for the perpendicular width-2 stripe
 		var seg := Vector2i(0, 0)
 		if i + 1 < path.size():
 			seg = Vector2i(path[i + 1]) - p
@@ -851,8 +851,8 @@ func _carve_road_between(a: Vector2i, b: Vector2i, rng: RandomNumberGenerator) -
 		_set_land_road(p)
 		_set_land_road(p + lane)
 
-## Этап 4: горы/вода по экстремумам рельефа. Никогда не трогаем дорогу (3):
-## города и дорожная сеть остаются проходимыми — «горы/вода защищают дороги».
+## Stage 4: mountains/water by the terrain extremes. We never touch the road (3):
+## cities and the road network stay walkable — "mountains/water protect the roads".
 func _place_mountains_water() -> void:
 	for y in range(H):
 		for x in range(W):
@@ -865,10 +865,10 @@ func _place_mountains_water() -> void:
 			elif elev > _mountain_thr:
 				_terrain[i] = 1
 
-## Убрать одиночные блоки 1×1 / 1×2 чужого биома внутри массива.
-## Клетка меняет тип, если среди 8 соседей есть тип с count >= 5, а своих
-## (того же типа, что она) <= 2. Кромка большого озера/гор не трогается
-## (там своих соседей >= 3). Дорога (3) не перетирается.
+## Remove isolated 1×1 / 1×2 blocks of a foreign biome inside the array.
+## A cell changes type if among its 8 neighbours there is a type with count >= 5 and its own
+## (the same type as itself) <= 2. The edge of a large lake/mountain is not touched
+## (there its own neighbours are >= 3). The road (3) is not overwritten.
 func _smooth_isolated_terrain() -> void:
 	var changed := 0
 	for _pass in range(2):
@@ -906,11 +906,11 @@ func _smooth_isolated_terrain() -> void:
 	if changed > 0:
 		print("SMOOTH: сглажено осиротевших клеток: %d" % changed)
 
-## Этап 5: спавн у первого города, портал на противоположном краю.
+## Stage 5: spawn near the first city, portal on the opposite edge.
 ##
-## Спавн сид-зависимый (через _find_land_near): жёсткий центр карты ломал
-## gen_seeds_smoke, который требует, чтобы sidecar-ы различались для разных
-## сидов. Смена поведения — осознанный откат e28fc374.
+## Spawn is seed-dependent (via _find_land_near): a hard centre of the map broke
+## gen_seeds_smoke, which requires the sidecars to differ for different
+## seeds. The behaviour change is a deliberate rollback of e28fc374.
 func _place_portal_spawn() -> void:
 	if _cities.is_empty():
 		return
@@ -919,18 +919,18 @@ func _place_portal_spawn() -> void:
 	_save_spawn_json()
 	_reserved[_spawn_pos] = true
 	if _sector != "" and not _neighbors.is_empty():
-		# Мир 4x3: по порталу на каждую границу с соседом по стороне.
+		# World 4x3: one portal per border with a neighbour on the side.
 		_place_sector_portals(city0)
 	elif _zone in ZONES_WITH_PORTAL:
-		# Старый режим (карты вне мира секторов): один портал вдалеке.
+		# Old mode (maps outside the sector world): one portal far away.
 		_portal_pos = _find_land_far(city0, 40)
 		_save_portal_json()
 		_reserved[_portal_pos] = true
 	else:
-		# Удаляем возможный старый sidecar: карта могла быть сгенерирована до
-		# того, как портал стал зональным, а alm_map.gd читает .portal.json, если
-		# файл есть. Без этого удаления зона без портала всё равно показывала
-		# бы маркер от старой генерации.
+		# Delete a possible old sidecar: the map could have been generated before
+		# the portal became zonal, and alm_map.gd reads .portal.json if the
+		# file exists. Without this deletion, a zone without a portal would still show
+		# a marker from the old generation.
 		_drop_portal_json()
 	if _spawn_pos.x >= 0:
 		print("SPAWN: (%d, %d)" % [_spawn_pos.x, _spawn_pos.y])
@@ -945,16 +945,16 @@ func _place_portal_spawn() -> void:
 		print("PORTAL: нет (zone=%s)" % _zone)
 
 
-## Портал на границе сектора, соответствующей направлению на соседа.
-## Клетка обязана быть проходимой и достижимой от первого города — иначе
-## игрок увидит маркер, до которого нельзя дойти.
+## Portal on the sector border matching the direction to the neighbour.
+## The cell must be walkable and reachable from the first city — otherwise
+## the player sees a marker they cannot reach.
 func _place_sector_portals(city0: Vector2i) -> void:
 	_portals_out.clear()
 	_portal_pos = Vector2i(-1, -1)
 	var wm = load("res://scripts/world/world_map.gd")
-	# Проходимая область считается ОДИН раз: раньше BFS запускался на каждую
-	# клетку приграничной полосы, и переход в сектор 192x192 занимал десятки
-	# секунд (замер 23.10: world_map_smoke 142 с).
+	# The walkable area is computed ONCE: before, BFS was run for every
+	# cell of the border band, and moving into a 192x192 sector took tens of
+	# seconds (measurement 23.10: world_map_smoke 142 s).
 	var reach := _reachable_cells(city0)
 	for raw_n in _neighbors:
 		var nid := str(raw_n)
@@ -972,8 +972,8 @@ func _place_sector_portals(city0: Vector2i) -> void:
 	_save_portals_json()
 
 
-## Клетка у края карты в направлении dir, максимально далеко от городов и уже
-## поставленных порталов, достижимая пешком от city0.
+## A cell near the map edge in the direction dir, as far as possible from cities and already
+## placed portals, reachable on foot from city0.
 func _find_edge_land(dir: String, city0: Vector2i, reach: Dictionary) -> Vector2i:
 	var best := Vector2i(-1, -1)
 	var best_score := -1
@@ -1024,7 +1024,7 @@ func _walkable_terrain(t: int) -> bool:
 	return t == 0 or t == 3 or t == 4 or t == 5 or t == 6
 
 
-## Все клетки, достижимые пешком от start (вода 2 и горы 1 непроходимы).
+## All cells reachable on foot from start (water 2 and mountains 1 are impassable).
 func _reachable_cells(start: Vector2i) -> Dictionary:
 	var out := {}
 	if start.x < 0 or start.y < 0:
@@ -1046,9 +1046,9 @@ func _reachable_cells(start: Vector2i) -> Dictionary:
 	return out
 
 
-# === Спавн: здания + НПЦ городов, деревья, Серые ===
+# === Spawn: city buildings + NPCs, trees, Greys ===
 
-## Ближайшая базовая земля (0 трава, 4 почва, 5 песок, 6 грязь) рядом с origin.
+## The nearest base land (0 grass, 4 soil, 5 sand, 6 mud) next to origin.
 func _find_land_near(origin: Vector2i, radius: int) -> Vector2i:
 	for r in range(1, radius + 1):
 		for dy in range(-r, r + 1):
@@ -1062,7 +1062,7 @@ func _find_land_near(origin: Vector2i, radius: int) -> Vector2i:
 						return p
 	return Vector2i(-1, -1)
 
-## Базовая земля далеко от origin, ближе к краю карты.
+## Base land far from origin, closer to the map edge.
 func _find_land_far(origin: Vector2i, min_dist: int) -> Vector2i:
 	var best := Vector2i(-1, -1)
 	var best_score := -1
@@ -1075,7 +1075,7 @@ func _find_land_far(origin: Vector2i, min_dist: int) -> Vector2i:
 			var dist: float = p.distance_to(origin)
 			if dist < min_dist:
 				continue
-			# Оценка: дальше от origin + ближе к краю карты
+			# Score: farther from origin + closer to the map edge
 			var edge_dist: float = mini(mini(x, W - 1 - x), mini(y, H - 1 - y))
 			var score: int = int(dist * 2.0 - edge_dist * 3.0)
 			if score > best_score:
@@ -1083,16 +1083,16 @@ func _find_land_far(origin: Vector2i, min_dist: int) -> Vector2i:
 				best = p
 	return best
 
-# === Спавн: здания + НПЦ городов, деревья, Серые ===
+# === Spawn: city buildings + NPCs, trees, Greys ===
 
-## Спека здания по папке: {id, w, h, fh} из structure_db.json или {}.
-## `fh` (full_height) — полная высота СПРАЙТА, а `h` (tile_height) — только
-## футпринт. Разница идёт ВВЕРХ от футпринта (крыша, башня, вывеска).
-## Раньше `fh` здесь не возвращался, из-за чего vis_rows всегда был 0: выступ
-## здания не резервировался, и дома наезжали друг на друга визуально.
-## `sel` из базы НЕ используем осознанно: в structure_db.json он
-## самопротиворечив (у kaarginn3 — [12, 82, 0, 82], x0 > x1), брать из него
-## футпринт значило бы угадывать.
+## Building spec by folder: {id, w, h, fh} from structure_db.json or {}.
+## `fh` (full_height) is the full SPRITE height, while `h` (tile_height) is only the
+## footprint. The difference goes UPWARD from the footprint (roof, tower, sign).
+## Before, `fh` was not returned here, which is why vis_rows was always 0: the building
+## protrusion was not reserved, and houses visually ran into each other.
+## We deliberately do NOT use `sel` from the database: in structure_db.json it is
+## self-contradictory (kaarginn3 has [12, 82, 0, 82], x0 > x1), taking the
+## footprint from it would mean guessing.
 func _structure_spec(folder: String) -> Dictionary:
 	if not StructureDB.has(folder):
 		return {}
@@ -1108,7 +1108,7 @@ func _structure_spec(folder: String) -> Dictionary:
 		"fh": maxi(tile_h, int(def.get("full_height", tile_h))),
 	}
 
-## Этап 6: здания + НПЦ для каждого города. Запись в sidecar-ы structures/npcs.
+## Stage 6: buildings + NPCs for every city. Written into the structures/npcs sidecars.
 func _place_city_content(rng: RandomNumberGenerator) -> void:
 	for city_index in range(_cities.size()):
 		var c: Dictionary = _cities[city_index]
@@ -1122,8 +1122,8 @@ func _place_city_content(rng: RandomNumberGenerator) -> void:
 			_pick(rng, SHOP_FOLDERS),
 			_pick(rng, INN_FOLDERS),
 		]
-		# Один жилой дом на город - по решению игрока (мы не симулятор городов).
-		# Раса дома/декора = раса города: орочий город строит орочье жильё.
+		# One dwelling per city - by the player's decision (we are not a city simulator).
+		# The race of the house/decor = the race of the city: an orc city builds orc housing.
 		var race := str(c.get("faction", "humans"))
 		var house_pool: Array = house_folders().get(race, house_folders().get("humans", []))
 		var decor_pool: Array = decor_folders().get(race, decor_folders().get("humans", []))
@@ -1137,14 +1137,14 @@ func _place_city_content(rng: RandomNumberGenerator) -> void:
 		_place_city_npcs(rng, center, race, city_id_of(city_index))
 	print("STRUCTURES_COUNT: %d" % _structures_out.size())
 
-## 6b. Мелкий декор вокруг городов: бочки/ящики/мешки/фонари (seedream).
-## Декор - на траве/почве внутри овала, не у самих зданий.
-## Фонари (197) - ТОЛЬКО на траве, примыкающей к дороге (фонарный столб
-## у тротуара), с дистанцией >= 3 клеток между фонарями, чтобы не сбивались
-## сгустком в центре площади.
+## 6b. Small decor around the cities: barrels/boxes/sacks/lamps (seedream).
+## Decor - on grass/soil inside the oval, not right by the buildings.
+## Lamps (197) - ONLY on grass adjacent to the road (a lamp post
+## at the pavement), with a distance >= 3 cells between lamps so they do not bunch
+## into a clump in the middle of the square.
 func _place_city_props(rng: RandomNumberGenerator) -> void:
-	# Prop pool comes from data (`map.city_props`); the lantern is placed by a
-	# dedicated branch next to roads, so it is excluded from the general pool.
+	# The prop pool comes from data (`map.city_props`); the lamp is placed by a separate
+	# branch along the road, so it is excluded from the common pool.
 	var prop_pool: Array = []
 	for p in ContentRules.list("map.city_props"):
 		if int(p) != LANTERN_PROP_ID:
@@ -1155,7 +1155,7 @@ func _place_city_props(rng: RandomNumberGenerator) -> void:
 	var lantern_cells: Array[Vector2i] = []
 	for c in _cities:
 		var center: Vector2i = c["pos"]
-		var cr := city_radius()  # овал +1 клетка «тротуара» снаружи
+		var cr := city_radius()  # oval +1 cell of "pavement" outside
 		var want := rng.randi_range(5, 8)
 		var tries := 0
 		var got := 0
@@ -1174,12 +1174,12 @@ func _place_city_props(rng: RandomNumberGenerator) -> void:
 				continue
 			var idx := cell.y * W + cell.x
 			var t := _terrain[idx]
-			# декор только на суше вне дороги: трава/почва
+			# decor only on land off the road: grass/soil
 			if t != 0 and t != 4:
 				continue
 			if _obstacles[idx] != 0 or _reserved.has(cell):
 				continue
-			# не лезть на свес зданий
+			# do not climb onto the building overhang
 			var touch_bldg := false
 			for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
 					Vector2i(1, 1), Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1)]:
@@ -1191,7 +1191,7 @@ func _place_city_props(rng: RandomNumberGenerator) -> void:
 			var near_rd := _near_road(cell)
 			var prop_id: int
 			if near_rd:
-				# фонарь у тротуара, но не чаще 1 на 3 клетки
+				# a lamp by the pavement, but not more often than 1 per 3 cells
 				var too_close := false
 				for lc in lantern_cells:
 					if maxi(abs(lc.x - cell.x), abs(lc.y - cell.y)) < 3:
@@ -1208,14 +1208,14 @@ func _place_city_props(rng: RandomNumberGenerator) -> void:
 			placed += 1
 	print("CITY_PROPS: %d (ламп=%d)" % [placed, lantern_cells.size()])
 
-## Поставить здание (spec) в кольцо вокруг центра города, не на площадь.
-## Кольцо расширено до CITY_RADIUS (было 7) под овал 17×17, а в проверку
-## передаётся выступ вверх (fh - h), чтобы здания не наезжали друг на друга.
+## Place a building (spec) into the ring around the city centre, not on the square.
+## The ring was widened to CITY_RADIUS (it was 7) for the 17×17 oval, and the check
+## is passed the upward protrusion (fh - h) so buildings do not run into each other.
 func _place_city_building(center: Vector2i, spec: Dictionary) -> bool:
 	var w := int(spec["w"])
 	var h := int(spec["h"])
 	var full_h: int = int(spec.get("fh", h))
-	var vis_rows: int = maxi(0, full_h - h)  # визуальный выступ здания выше футпринта
+	var vis_rows: int = maxi(0, full_h - h)  # the visual protrusion of the building above the footprint
 	_pending_vis_rows = vis_rows
 	for r in range(2, city_radius() + 1):
 		for dy in range(-r, r + 1):
@@ -1226,22 +1226,22 @@ func _place_city_building(center: Vector2i, spec: Dictionary) -> bool:
 				if not _footprint_fits(tl, w, h, center):
 					continue
 				_structures_out.append({"x": tl.x, "y": tl.y, "type_id": int(spec["id"])})
-				# Резервируем футпринт
+				# Reserve the footprint
 				for yy in range(h):
 					for xx in range(w):
 						_reserved[tl + Vector2i(xx, yy)] = true
-				# Резервируем визуальный выступ вверх (чтобы НПЦ не стояли на крыше)
+				# Reserve the visual protrusion upwards (so NPCs do not stand on the roof)
 				for vy in range(vis_rows):
 					for xx in range(w):
 						_reserved[tl + Vector2i(xx, -vy - 1)] = true
 				return true
 	return false
 
-## Футпринт здания помещается внутри овала города на дороге, не на площади,
-## не пересекая спавн/портал/уже занятые клетки и оставляя зазор.
-## Зазор CITY_GAP клетки с каждой стороны (была 1 — дома стояли вплотную и
-## визуально слипались). Проверяется и сам футпринт, и выступ вверх на fh - h
-## строк: иначе крыша одного дома попадала на крышу соседнего.
+## The building footprint fits inside the city oval on the road, not on the square,
+## without crossing spawn/portal/already occupied cells and leaving a gap.
+## A CITY_GAP cell gap on each side (it was 1 — houses stood flush and
+## visually stuck together). Both the footprint itself and the upward protrusion of fh - h
+## rows are checked: otherwise the roof of one house landed on the neighbour's roof.
 func _footprint_fits(tl: Vector2i, w: int, h: int, center: Vector2i) -> bool:
 	for yy in range(h):
 		for xx in range(w):
@@ -1251,10 +1251,10 @@ func _footprint_fits(tl: Vector2i, w: int, h: int, center: Vector2i) -> bool:
 			if _terrain[c.y * W + c.x] != 3:
 				return false
 	var vis_rows := _pending_vis_rows
-	# Зазор берётся из [spawn] city_gap. Раньше здесь стоял зашитый 1, хотя
-	# константа CITY_GAP и комментарий обещали 2 — то есть решение игрока
-	# от 26.09 («зазор 1 -> 2») в коде не было применено, и city_layout_smoke
-	# подстроился под факт (`gap >= CITY_GAP - 1`).
+	# The gap comes from [spawn] city_gap. Before, a hardcoded 1 stood here, although
+	# the CITY_GAP constant and the comment promised 2 — that is, the player's decision
+	# of 26.09 ("gap 1 -> 2") was not applied in the code, and city_layout_smoke
+	# adapted to the fact (`gap >= CITY_GAP - 1`).
 	for yy in range(-city_gap() - vis_rows, h + city_gap()):
 		for xx in range(-city_gap(), w + city_gap()):
 			var c := tl + Vector2i(xx, yy)
@@ -1262,19 +1262,19 @@ func _footprint_fits(tl: Vector2i, w: int, h: int, center: Vector2i) -> bool:
 				return false
 			if _reserved.has(c) or c == _spawn_pos or c == _portal_pos:
 				return false
-			# Кольцо вокруг здания шириной CITY_GAP свободно от других зданий.
+			# The ring around the building, CITY_GAP wide, is free of other buildings.
 			var d := maxi(abs(c.x - center.x), abs(c.y - center.y))
 			if d <= 1 or d > city_radius():
 				return false
 	return true
 
-## НПЦ города: стражи (первые 2 патрульные, остальные на постах — по краям
-## города, см. _guard_post_cell), капитан, глава города, жители у площади.
-## Все стоят; патруль — только первые 2 стража.
+## City NPCs: guards (the first 2 patrol, the rest stand at posts — at the edges
+## of the city, see _guard_post_cell), the captain, the city head, residents by the square.
+## All stand; the patrol is only the first 2 guards.
 ##
-## Глава (22.10) — отдельный NPC ролью "head": у него квесты и маркер «!»
-## (scripts/quest_marker.gd). Стоит у площади рядом с капитаном, но на кольце
-## жителей — в толпе капитан и глава не должны сливаться.
+## The head (22.10) — a separate NPC with the role "head": they have quests and a "!" marker
+## (scripts/quest_marker.gd). Stands by the square next to the captain, but on the ring
+## of residents — in a crowd the captain and the head must not blend together.
 func _place_city_npcs(rng: RandomNumberGenerator, center: Vector2i,
 		race: String, city_id: String) -> void:
 	var pop: Dictionary = CITY_POPULATION.get(race, {})
@@ -1303,15 +1303,15 @@ func _place_city_npcs(rng: RandomNumberGenerator, center: Vector2i,
 		if post.x < 0:
 			continue
 		var set_name: String = _pick(rng, pop["guards"])
-		# Стали NPC по зоне приходят из GameConfig [zone] - сейчас значения
-		# одинаковые для всех зон (было: hp 60-100, урон 6-10 зашито здесь).
+		# NPC stats by zone come from GameConfig [zone] - for now the values are
+		# the same in every zone (it used to be: hp 60-100, damage 6-10 hardcoded here).
 		var hp := rng.randi_range(
 			GameConfig.zonei(_zone, "guard_hp_min"), GameConfig.zonei(_zone, "guard_hp_max"))
 		var dmg := rng.randi_range(
 			GameConfig.zonei(_zone, "guard_damage_min"), GameConfig.zonei(_zone, "guard_damage_max"))
 		_npcs_out.append(_npc_rec(post, set_name, "guard", i < 2, hp, dmg, city_id, center))
-	# Капитан у площади — он же ВЕЛИКИЙ МАГ города (решение игрока 07.10),
-	# и маг СВОЕЙ расы (09.10): в орк-городе не должен стоятьdruид-маг.
+	# The captain by the square — they are also the city's GREAT MAGE (player's decision 07.10),
+	# and a mage of THEIR OWN race (09.10): an orc city must not have a druid mage.
 	var cap := _post_cell(center, [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)], posts_taken)
 	if cap.x >= 0:
 		var cap_rec := _npc_rec(cap, str(pop["captain"]), "guard", false,
@@ -1322,7 +1322,7 @@ func _place_city_npcs(rng: RandomNumberGenerator, center: Vector2i,
 		cap_rec.erase("city_y")
 		cap_rec["archmage"] = true
 		_npcs_out.append(cap_rec)
-	# Глава города — квестодатель. Стоит у площади, набор своей расы.
+	# The city head — a quest giver. Stands by the square, a set of their own race.
 	var head_set := str(pop.get("head", pop["citizens"][0]))
 	var head := _post_cell(center, [Vector2i(0, 1), Vector2i(0, -1),
 		Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)], posts_taken)
@@ -1331,7 +1331,7 @@ func _place_city_npcs(rng: RandomNumberGenerator, center: Vector2i,
 			GameConfig.zonei(_zone, "citizen_hp"), 0, city_id)
 		head_rec["head"] = true
 		_npcs_out.append(head_rec)
-	# Жители (стоят, не патрулируют) — кольца 3–4
+	# Residents (standing, not patrolling) — rings 3-4
 	var cit_n := rng.randi_range(
 		GameConfig.zonei(_zone, "citizen_count_min"), GameConfig.zonei(_zone, "citizen_count_max"))
 	if GameConfig.geti("stress", "enabled") != 0:
@@ -1344,9 +1344,9 @@ func _place_city_npcs(rng: RandomNumberGenerator, center: Vector2i,
 		_npcs_out.append(_npc_rec(post, set_name, "citizen", false,
 			GameConfig.zonei(_zone, "citizen_hp"), 0, city_id, center))
 
-## id города для квестов: "c<индекс>t<раса-в-списке>". Индекс — порядок
-## города в генераторе; суффикс t0.. повторяет расу из CITY_RACES.
-## Городам из военного .alm (без генератора) индексы выдаёт AlmMap.
+## city id for quests: "c<index>t<race-in-the-list>". The index is the order of the
+## city in the generator; the t0.. suffix repeats the race from CITY_RACES.
+## For cities from a military .alm (without the generator) the indices are given by AlmMap.
 func _city_race(city_index: int) -> String:
 	var order := _race_order()
 	if order.is_empty():
@@ -1357,43 +1357,43 @@ func _city_race(city_index: int) -> String:
 static func city_id_of(city_index: int) -> String:
 	return "c%dt%d" % [city_index, city_index % maxi(1, CITY_RACES.size())]
 
-## Раса по имени набора: "city_human_mage/t1" -> "humans", "city_ork_warrior/t0"
-## -> "ork", "city_druid_mage/t2" -> "druid". Наборы названы по корню без
-## хвоста "s" (human, а не humans) и с суффиксом роли (_mage/_warrior), поэтому
-## сравнение идёт по корню, а не конкатенацией. Пусто, если набор не наш.
+## Race by set name: "city_human_mage/t1" -> "humans", "city_ork_warrior/t0"
+## -> "ork", "city_druid_mage/t2" -> "druid". The sets are named by the root without
+## the trailing "s" (human, not humans) and with a role suffix (_mage/_warrior), so
+## the comparison goes by the root rather than by concatenation. Empty if the set is not ours.
 static func race_of_set(set_name: String) -> String:
 	if not set_name.begins_with("city_"):
 		return ""
 	var seg := set_name.trim_prefix("city_").get_slice("/", 0)
 	for suffix in ["_mage", "_warrior"]:
 		seg = seg.trim_suffix(suffix)
-	# Сегмент = id расы из world.json. ВАЖНО: для орков это "ork", а не
-	# "orc" — 10.10 тут стоял ["orc", "ork"], и потому городской орк-маг
-	# возвращал "" (подпись фракции «Прохожий», тест на расу города падал).
-	# Тест при этом был зелёным, потому что проверял СВОЮ копию разбора, а
-	# не эту функцию.
+	# Segment = race id from world.json. IMPORTANT: for orcs this is "ork", not
+	# "orc" — on 10.10 ["orc", "ork"] stood here, and because of that the city orc mage
+	# returned "" (the faction label "Passer-by", the city race test failed).
+	# The test was green at the same time because it checked ITS OWN copy of the parsing
+	# rather than this function.
 	for race in CITY_RACES:
 		if seg == race or seg + "s" == race:
 			return race
 	return ""
 
 
-## Раса героя -> id фракции (human -> humans). Неизвестная раса даёт "" —
-## вызывающий код обязан это учесть, а не молча получить первую в списке.
+## Hero race -> faction id (human -> humans). An unknown race gives "" —
+## the calling code must account for that instead of silently getting the first in the list.
 static func race_of_hero(hero_race: String) -> String:
 	match hero_race:
 		"human": return "humans"
 		"ork": return "ork"
 		"druid": return "druid"
-		# 10.10 (позже): был "" — у нежити не было атласа, и город за нежить
-		# откатывался на первую доступную расу. Теперь атлас есть.
+		# 10.10 (later): it was "" — the undead had no atlas, and a city for the undead
+		# fell back to the first available race. Now the atlas exists.
 		"necro": return "necro"
 		_: return ""
 
 
-## id фракции героя, но только если для неё есть CITY_POPULATION.
-## Проверка остаётся осмысленной: она страхует от расы без арта, если такую
-## добавят в hero_race раньше, чем появится набор спрайтов.
+## The hero's faction id, but only if there is CITY_POPULATION for it.
+## The check stays meaningful: it guards against a race without art if one is
+## added to hero_race before a sprite set appears.
 static func city_race_for_hero(hero_race: String) -> String:
 	var race := race_of_hero(hero_race)
 	if race != "" and CITY_POPULATION.has(race):
@@ -1401,7 +1401,7 @@ static func city_race_for_hero(hero_race: String) -> String:
 	return ""
 
 
-## Свободный пост: клетка дороги в городе, не на площади, не занята.
+## A free post: a road cell in the city, not on the square, not occupied.
 func _post_cell(center: Vector2i, offsets: Array, taken: Dictionary) -> Vector2i:
 	for off in offsets:
 		var c: Vector2i = center + off
@@ -1417,11 +1417,11 @@ func _post_cell(center: Vector2i, offsets: Array, taken: Dictionary) -> Vector2i
 		return c
 	return Vector2i(-1, -1)
 
-## Пост стражи на ВНЕШНЕМ кольце города. Стража стоит по краю (решение
-## игрока 22.10: в центре её было слишком много и она путалась под ногами),
-## а площадь остаётся капитану, главе и жителям. Кандидаты — клетки
-## внутреннего и внешнего кольца овала в порядке обхода по кругу со сдвигом,
-## равномерно по периметру; первым берётся ближайший к выезду (оси N/S/E/W).
+## A guard post on the OUTER ring of the city. The guards stand at the edge (the player's
+## decision 22.10: there were too many in the centre and they got underfoot),
+## while the square is left to the captain, the head and the residents. Candidates are cells
+## of the inner and outer ring of the oval in circular traversal order with an offset,
+## evenly around the perimeter; the first taken is the one nearest to an exit (the N/S/E/W axes).
 func _guard_post_cell(center: Vector2i, rings: Array, index: int, total: int,
 		taken: Dictionary) -> Vector2i:
 	var cands: Array[Vector2i] = []
@@ -1456,8 +1456,8 @@ func _guard_post_cell(center: Vector2i, rings: Array, index: int, total: int,
 	return Vector2i(-1, -1)
 
 
-## Клетка годится под пост стражи: дорога города, свободна от зданий/декора,
-## не спавн и не портал, не занята другим NPC и не на площади.
+## A cell is suitable for a guard post: a city road, free of buildings/decor,
+## not spawn and not portal, not taken by another NPC and not on the square.
 func _guard_post_free(c: Vector2i, center: Vector2i, taken: Dictionary) -> bool:
 	if c.x < 1 or c.y < 1 or c.x >= W - 1 or c.y >= H - 1:
 		return false
@@ -1486,34 +1486,34 @@ func _npc_rec(post: Vector2i, set_name: String, role: String, patrol: bool,
 		rec["city_y"] = center.y
 	return rec
 
-## Этап 8: точки интереса ВНЕ городов.
+## Stage 8: points of interest OUTSIDE the cities.
 ##
-## Что это и зачем. Решение игрока (03.10): «масштаб по зонам + точки
-## интереса, без бродячих NPC». То есть мир вне городов не должен быть
-## пустым (сейчас там только Серые и деревья), но и бродячих NPC, которых
-## нигде не найти, игрок не хочет. Поэтому точка интереса — это маленькая
-## СТАТИЧНАЯ группа NPC на одном месте: стоят, не патрулируют, не лезут
-## ни в какие дела.
+## What this is and why. The player's decision (03.10): "scale by zones + points
+## of interest, without wandering NPCs". That is, the world outside the cities must not be
+## empty (right now only Greys and trees are there), but the player does not want
+## wandering NPCs that cannot be found anywhere. So a point of interest is a small
+## STATIC group of NPCs in one place: they stand, do not patrol, do not meddle
+## in any business.
 ##
-## Почему НЕ свой sidecar. Первая мысль была завести .interest.json и
-## новый загрузчик в alm_map.gd. Отказался сознательно: точка интереса —
-## это просто NPC, а NPC уже умеют грузиться из .npcs.json. Новый файл +
-## новый путь загрузки + новый код спавна = втрое больше мест, где можно
-## ошибиться, ради функции, выключенной по умолчанию. Поэтому POI пишутся
-## обычными записями в .npcs.json с добавленным полем "poi".
+## Why NOT their own sidecar. The first thought was to introduce .interest.json and
+## a new loader in alm_map.gd. Deliberately rejected: a point of interest is
+## simply an NPC, and NPCs already know how to load from .npcs.json. A new file +
+## a new load path + new spawn code = three times more places to make a
+## mistake, for a feature that is off by default. So POI are written as
+## ordinary records in .npcs.json with an added "poi" field.
 ##
-## Выключено по умолчанию: interest_points = 0 во всех зонах ([zone]).
-## Пока игрок не поднимет число, поведение игры не отличается от прежнего.
+## Off by default: interest_points = 0 in every zone ([zone]).
+## Until the player raises the number, the game behaves as before.
 const POI_KINDS := [
-	# Аллодовские humans/* убраны (07.10). Пока арта мало — точки выключены
-	# (interest_points=0). Под ork_mage вернём, когда будет достаточно ступеней.
+	# The Allods humans/* were removed (07.10). While there is little art — the points are off
+	# (interest_points=0). We will bring them back under ork_mage when there are enough tiers.
 ]
 
-## Минимальные дистанции POI (клетки). Отдельны от трав: точка интереса
-## должна быть заметна издалека, трава — нет.
-const POI_MIN_CITY_DISTANCE := 18     # далеко от города (решение игрока 03.10)
-const POI_MIN_SPAWN_DISTANCE := 14    # не ближе спавна/портала
-const POI_MIN_EACH_OTHER := 16         # разрежены между собой
+## Minimum POI distances (cells). Separate from herbs: a point of interest
+## must be visible from afar, a herb — must not.
+const POI_MIN_CITY_DISTANCE := 18     # far from the city (player's decision 03.10)
+const POI_MIN_SPAWN_DISTANCE := 14    # no closer than spawn/portal
+const POI_MIN_EACH_OTHER := 16         # spaced out among themselves
 
 
 func _place_interest_points(rng: RandomNumberGenerator) -> void:
@@ -1529,7 +1529,7 @@ func _place_interest_points(rng: RandomNumberGenerator) -> void:
 		if not _poi_cell_ok(anchor):
 			continue
 		var kind: Dictionary = POI_KINDS[rng.randi() % POI_KINDS.size()]
-		# небольшая группа вокруг якоря: 2-3 NPC, стоят рядом
+		# a small group around the anchor: 2-3 NPCs standing next to each other
 		var members := rng.randi_range(2, 3)
 		var hp := GameConfig.zonei(_zone, "poi_hp")
 		var dmg := GameConfig.zonei(_zone, "poi_damage")
@@ -1555,13 +1555,13 @@ func _place_interest_points(rng: RandomNumberGenerator) -> void:
 		", ".join(POI_KINDS.map(func(k: Dictionary) -> String: return str(k["kind"])))])
 
 
-## Якорь точки интереса: суша, не в городе, не у спавна/портала, не на дороге,
-## не занято объектом. Как _herb_cell_ok, но с другими дистанциями.
+## Point-of-interest anchor: land, not in a city, not by spawn/portal, not on the road,
+## not taken by an object. Like _herb_cell_ok, but with different distances.
 func _poi_cell_ok(cell: Vector2i) -> bool:
 	if cell.x < 3 or cell.y < 3 or cell.x >= W - 3 or cell.y >= H - 3:
 		return false
 	var terrain := _terrain[cell.y * W + cell.x]
-	if terrain != 0 and terrain != 4:      # трава или почва; воду/горы/песок/грязь — нет
+	if terrain != 0 and terrain != 4:      # grass or soil; water/mountains/sand/mud — no
 		return false
 	if _obstacles[cell.y * W + cell.x] != 0:
 		return false
@@ -1592,14 +1592,14 @@ func _poi_spot_ok(cell: Vector2i) -> bool:
 	return true
 
 
-# --- Форпосты фракций (пакет B переработки ковки) --------------------------
+# --- Faction outposts (package B of the forging rework) --------------------------
 
-## Этап 6c: форпосты. Ставится ПОСЛЕ городов/декора и ДО деревьев: лагерь
-## резервирует клетки, и лес/травы/Серые обходят его сами.
+## Stage 6c: outposts. Placed AFTER the cities/decor and BEFORE the trees: the camp
+## reserves cells, and the forest/herbs/Greys go around it by themselves.
 ##
-## Стартовая зона намеренно пуста (решение игрока 28.10): «в начальном нет
-## никаких фракционных воинов, только серые». Поэтому там 0 форпостов, и это
-## не ошибка генератора, а правило.
+## The starting zone is deliberately empty (player's decision 28.10): "in the starting one there are
+## no faction warriors at all, only Greys". So there are 0 outposts there, and this is
+## not a generator bug but a rule.
 func _place_outposts(rng: RandomNumberGenerator) -> void:
 	_outposts_out.clear()
 	var target := GameConfig.geti("outpost", "per_map")
@@ -1608,11 +1608,11 @@ func _place_outposts(rng: RandomNumberGenerator) -> void:
 	if target <= 0:
 		print("OUTPOSTS: 0 (зона %s)" % _zone)
 		return
-	# Фракции не повторяются, пока их хватает: три лагеря одной и той же расы
-	# на одной карте читались бы как один лагерь, размноженный копипастой.
+	# Factions do not repeat while there are enough of them: three camps of the same race
+	# on one map would read as one camp multiplied by copy-paste.
 	var factions: Array = OUTPOST_FACTIONS.duplicate()
 	_shuffle(rng, factions)
-	# Достижимость от спавна: карман за горами не должен съесть лагерь.
+	# Reachability from spawn: a pocket behind the mountains must not eat the camp.
 	_outpost_reach = _reachable_cells(_spawn_pos)
 	var placed := 0
 	var tries := 0
@@ -1630,8 +1630,8 @@ func _place_outposts(rng: RandomNumberGenerator) -> void:
 	print("OUTPOSTS: %d/%d (%s)" % [placed, target, ", ".join(names)])
 
 
-## Якорь лагеря: суша вне дороги, не у города/спавна/портала и не рядом с
-## другим лагерем. Терраин — любой проходимый (трава/почва/песок/грязь).
+## Camp anchor: land off the road, not by a city/spawn/portal and not near
+## another camp. Terrain — any walkable (grass/soil/sand/mud).
 func _outpost_cell_ok(cell: Vector2i) -> bool:
 	if cell.x < OUTPOST_RADIUS + 2 or cell.y < OUTPOST_RADIUS + 2 \
 			or cell.x >= W - OUTPOST_RADIUS - 2 or cell.y >= H - OUTPOST_RADIUS - 2:
@@ -1656,7 +1656,7 @@ func _outpost_cell_ok(cell: Vector2i) -> bool:
 	return true
 
 
-## Проходимый биом под лагерь. Горы/вода не годятся: шатёр стоял бы в озере.
+## A walkable biome for the camp. Mountains/water will not do: the tent would stand in a lake.
 func _outpost_terrain_ok(cell: Vector2i) -> bool:
 	if cell.x < 0 or cell.y < 0 or cell.x >= W or cell.y >= H:
 		return false
@@ -1664,7 +1664,7 @@ func _outpost_terrain_ok(cell: Vector2i) -> bool:
 	return t == 0 or t == 4 or t == 5 or t == 6
 
 
-## Собрать один лагерь. false — не нашлось места под шатёр (якорь пропадает).
+## Build one camp. false — no room was found for the tent (the anchor is dropped).
 func _build_outpost(index: int, faction: String, anchor: Vector2i,
 		rng: RandomNumberGenerator) -> bool:
 	var camps: Array = OUTPOST_CAMPS.get(faction, [])
@@ -1677,14 +1677,14 @@ func _build_outpost(index: int, faction: String, anchor: Vector2i,
 	var camp_cell := _place_camp_building(anchor, spec)
 	if camp_cell.x < 0:
 		return false
-	# Метка лагеря: проп у шатра (бочка), а не Аллодовский костёр.
-	# Проп живёт в поле препятствий, как мелкий декор городов (`_place_city_props`),
-	# и не занимает футпринт структуры.
+	# Camp marker: a prop by the tent (a barrel), not the Allods campfire.
+	# The prop lives in the obstacle field, like the small city decor (`_place_city_props`),
+	# and does not take the structure footprint.
 	var prop_cell := _free_camp_cell(anchor, {}, 1)
 	if prop_cell.x >= 0:
 		_obstacles[prop_cell.y * W + prop_cell.x] = OUTPOST_PROP_ID
 		_reserved[prop_cell] = true
-	# Стража: тир зоны задаёт и набор, и силу (как у городских стражей).
+	# Guards: the zone tier sets both the set and the strength (as with the city guards).
 	var tier := _outpost_tier()
 	var token := "human" if faction == "humans" else faction
 	var count := GameConfig.geti("outpost", "guards_min") \
@@ -1722,8 +1722,8 @@ func _build_outpost(index: int, faction: String, anchor: Vector2i,
 	return true
 
 
-## Поставить шатёр лагеря: свободный футпринт в радиусе лагеря. В отличие от
-## города, дорога не нужна — лагерь стоит на земле.
+## Place the camp tent: a free footprint within the camp radius. Unlike a
+## city, no road is needed — the camp stands on the ground.
 func _place_camp_building(anchor: Vector2i, spec: Dictionary) -> Vector2i:
 	var w := int(spec["w"])
 	var h := int(spec["h"])
@@ -1770,7 +1770,7 @@ func _camp_footprint_fits(tl: Vector2i, w: int, h: int, anchor: Vector2i,
 	return true
 
 
-## Свободная клетка лагеря рядом с желаемой (радиус radius, не занята).
+## A free camp cell next to the desired one (radius radius, not occupied).
 func _free_camp_cell(want: Vector2i, taken: Dictionary, radius: int) -> Vector2i:
 	if _camp_cell_free(want, taken):
 		return want
@@ -1799,8 +1799,8 @@ func _camp_cell_free(c: Vector2i, taken: Dictionary) -> bool:
 	return true
 
 
-## Тир стражи по зоне: старт пуст, дальше набор и сила растут. t0..t3 есть у
-## всех четырёх городских наборов (units_db.json, city_*_warrior/tN).
+## Guard tier by zone: the start is empty, further on the set and the strength grow. t0..t3 exist for
+## all four city sets (units_db.json, city_*_warrior/tN).
 func _outpost_tier() -> int:
 	match _zone:
 		"mid": return 1
@@ -1809,10 +1809,10 @@ func _outpost_tier() -> int:
 	return 0
 
 
-## Этап 7: деревья/объекты в _obstacles (ID из alm_objects.json). Кластерный
-## шум по биому; не ставим на дорогу, у дорог, в городах и у спавна/портала.
-# Плотность деревьев по зонам. Раньше была словарём прямо в коде:
-# start 0.06, mid 0.08, hard 0.10, faction 0.09. Значения из GameConfig.
+## Stage 7: trees/objects in _obstacles (ID from alm_objects.json). Clustered
+## noise by biome; we do not place on the road, near roads, in cities or by spawn/portal.
+# Tree density by zone. Before it was a dictionary right in the code:
+# start 0.06, mid 0.08, hard 0.10, faction 0.09. The values come from GameConfig.
 func _zone_tree_density() -> float:
 	var v := GameConfig.zonef(_zone, "tree_density")
 	return 0.08 if v < 0.0 else v
@@ -1838,7 +1838,7 @@ func _place_objects(rng: RandomNumberGenerator) -> void:
 				continue
 			if _obj_noise.get_noise_2d(x, y) > 0.0 and rng.randf() < density:
 				_obstacles[y * W + x] = _tree_id(rng, t)
-	# Стресс: добиваем деревья до абсолютного счётчика [stress] tree_count.
+	# Stress: top the trees up to the absolute counter [stress] tree_count.
 	if GameConfig.geti("stress", "enabled") != 0:
 		_fill_stress_trees(rng)
 
@@ -1872,7 +1872,7 @@ func _fill_stress_trees(rng: RandomNumberGenerator) -> void:
 		placed += 1
 	print("STRESS trees: %d (tries=%d)" % [placed, tries])
 
-## Сосед-дорога рядом? (клиренс: дерево не примыкает к дороге)
+## Is there a road neighbour? (clearance: a tree does not touch the road)
 func _near_road(cell: Vector2i) -> bool:
 	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 		var n: Vector2i = cell + d
@@ -1965,15 +1965,15 @@ func _herb_cell_ok(cell: Vector2i) -> bool:
 			return false
 	return true
 
-## Этап 9: Серые — кластеры у дорог (сбоку) и в лесных массивах. Только на
-## свободных клетках, вне городов и не ближе 20 клеток к спавну.
+## Stage 9: Greys — clusters near roads (to the side) and in forest tracts. Only on
+## free cells, outside cities and no closer than 20 cells to spawn.
 ##
-## Замер 03.10 (жалоба игрока «1 Серый на карте»): при 15 Серых на 6 клетках
-## сидело по 2-3 врага, и все они жались в одну половину карты (y=74..118).
-## Две причины: якорь кластера не проверялся на занятость, и якоря выбирались
-## независимо, так что все шли из одного и того же случайного угла.
-## Теперь сначала обходим РЕГИОНЫ по очереди и по кластеру в каждом, а уже
-## потом добираем случайно — так покрытие карты гарантировано.
+## Measurement 03.10 (player report "1 Grey on the map"): with 15 Greys, 2-3 enemies
+## sat on 6 cells, and they all huddled in one half of the map (y=74..118).
+## Two reasons: the cluster anchor was not checked for occupancy, and the anchors were picked
+## independently, so all came from the same random corner.
+## Now we first walk the REGIONS in turn and one cluster in each, and only
+## then top up randomly — that way map coverage is guaranteed.
 func _place_greys(rng: RandomNumberGenerator) -> void:
 	var count: int = rng.randi_range(
 		GameConfig.zonei(_zone, "gray_count_min"), GameConfig.zonei(_zone, "gray_count_max"))
@@ -1982,15 +1982,15 @@ func _place_greys(rng: RandomNumberGenerator) -> void:
 	var placed := 0
 	var encounter_seq := 0
 
-	# Список регионов в перемешанном порядке — чтобы зоны «раньше» не выбирались
-	# всегда одинаково и карта не была предсказуемой.
+	# The list of regions in shuffled order — so that "earlier" zones are not always
+	# chosen the same way and the map is not predictable.
 	var regions: Array = []
 	for ry in range(GRAY_REGION_GRID):
 		for rx in range(GRAY_REGION_GRID):
 			regions.append(Vector2i(rx, ry))
 	_shuffle(rng, regions)
 
-	# Пакет D: сначала тематические встречи (улей/логово/стая), ~35% квоты.
+	# Package D: thematic encounters first (hive/lair/pack), ~35% of the quota.
 	var encounter_budget := int(ceil(float(count) * 0.35))
 	var kinds: Array = ENCOUNTER_KINDS.duplicate()
 	_shuffle(rng, kinds)
@@ -2014,8 +2014,8 @@ func _place_greys(rng: RandomNumberGenerator) -> void:
 			continue
 		placed += _gray_cluster(rng, anchor)
 
-	# Добор: если регионы не дали нужного количества (мало дорог/леса в части
-	# карты), берём любые подходящие якоря.
+	# Top-up: if the regions did not yield the needed amount (few roads/forest in part
+	# of the map), we take any suitable anchors.
 	var tries := 0
 	while placed < count and tries < 800:
 		tries += 1
@@ -2040,11 +2040,11 @@ func _place_greys(rng: RandomNumberGenerator) -> void:
 		GRAY_REGION_GRID * GRAY_REGION_GRID])
 
 
-## Якорь Серого внутри конкретного региона карты (сетка GRAY_REGION_GRID).
-## Две попытки: сначала ищем клетку рядом с дорогой или лесом (звери выглядят
-## как звери), а если в регионе такого нет — берём любую свободную сушу.
-## Без второй попытки регионы без дорог и леса оставались пустыми: замер
-## 03.10 давал 3 региона из 9.
+## Grey anchor inside a specific map region (the GRAY_REGION_GRID grid).
+## Two attempts: first we look for a cell near a road or forest (beasts look
+## like beasts), and if there is none in the region — we take any free land.
+## Without the second attempt, regions without roads and forest stayed empty: the measurement
+## of 03.10 gave 3 regions out of 9.
 func _gray_anchor_in_region(rng: RandomNumberGenerator, reg: Vector2i) -> Vector2i:
 	var rw := int(W / float(GRAY_REGION_GRID))
 	var rh := int(H / float(GRAY_REGION_GRID))
@@ -2067,7 +2067,7 @@ func _gray_anchor_in_region(rng: RandomNumberGenerator, reg: Vector2i) -> Vector
 	return fallback
 
 
-## Есть ли вокруг клетки хотя бы два дерева (объекта) — признак лесной местности.
+## Are there at least two trees (objects) around the cell — a sign of forest terrain.
 func _forest_anchor_ok(c: Vector2i) -> bool:
 	var trees := 0
 	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
@@ -2079,8 +2079,8 @@ func _forest_anchor_ok(c: Vector2i) -> bool:
 	return trees >= 2
 
 
-## Перемешивание массива по rng генератору (глобальный random.* не используем —
-## иначе генерация перестанет быть детерминированной по сиду).
+## Shuffle an array with the generator rng (we do not use the global random.* —
+## otherwise generation stops being deterministic by seed).
 func _shuffle(rng: RandomNumberGenerator, arr: Array) -> void:
 	for i in range(arr.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
@@ -2089,8 +2089,8 @@ func _shuffle(rng: RandomNumberGenerator, arr: Array) -> void:
 		arr[j] = tmp
 
 
-## Якорь кластера не должен совпадать с уже занятым и должен быть отделён от
-## других якорей, иначе все Серые слипаются в одном углу карты.
+## A cluster anchor must not coincide with an occupied one and must be separated from
+## other anchors, otherwise all Greys stick together in one corner of the map.
 func _gray_anchor_ok(anchor: Vector2i) -> bool:
 	if _gray_cells.has("%d,%d" % [anchor.x, anchor.y]):
 		return false
@@ -2102,7 +2102,7 @@ func _gray_anchor_ok(anchor: Vector2i) -> bool:
 			return false
 	return true
 
-## Случайная клетка дороги вне городов и подальше от спавна.
+## A random road cell outside the cities and farther from spawn.
 func _road_anchor(rng: RandomNumberGenerator) -> Vector2i:
 	var tries := 0
 	while tries < 400:
@@ -2117,7 +2117,7 @@ func _road_anchor(rng: RandomNumberGenerator) -> Vector2i:
 		return c
 	return Vector2i(-1, -1)
 
-## Сбоку от дороги (1–2 клетки в сторону, только проходимая земля).
+## To the side of the road (1-2 cells aside, walkable land only).
 func _side_road_cell(rng: RandomNumberGenerator, road: Vector2i) -> Vector2i:
 	var dirs: Array = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 	for step in range(1, 3):
@@ -2128,7 +2128,7 @@ func _side_road_cell(rng: RandomNumberGenerator, road: Vector2i) -> Vector2i:
 				return c
 	return road
 
-## Лесная точка: вокруг >=2 деревьев (obstacles), клетка свободна.
+## A forest point: >=2 trees around (obstacles), the cell is free.
 func _forest_anchor(rng: RandomNumberGenerator) -> Vector2i:
 	var tries := 0
 	while tries < 500:
@@ -2149,7 +2149,7 @@ func _forest_anchor(rng: RandomNumberGenerator) -> Vector2i:
 			return c
 	return Vector2i(-1, -1)
 
-## Клетка пригодна для Серого: суша, без объекта/здания/спавна/портала, вне городов.
+## A cell is suitable for a Grey: land, without an object/building/spawn/portal, outside cities.
 func _gray_cell_ok(c: Vector2i) -> bool:
 	if c.x < 2 or c.y < 2 or c.x >= W - 2 or c.y >= H - 2:
 		return false
@@ -2162,18 +2162,18 @@ func _gray_cell_ok(c: Vector2i) -> bool:
 		return false
 	if _near_city(c, 6):
 		return false
-	# Клетка уже занята другим Серым. Без этой проверки кластеры накладывались:
-	# их якоря подбирались независимо, и на 6 клетках сидело по 2-3 врага.
+	# The cell is already taken by another Grey. Without this check the clusters overlapped:
+	# their anchors were picked independently, and 2-3 enemies sat on 6 cells.
 	if _gray_cells.has("%d,%d" % [c.x, c.y]):
 		return false
 	return true
 
-## Кластер из 2–4 Серых вокруг anchor (ячейки разнесены).
+## A cluster of 2-4 Greys around anchor (the cells are spaced out).
 ##
-## ПУСТОЙ ПУЛ = СЕРЫХ НЕТ. Все наборы монстров удалены вместе с артом Аллодов
-## (11.10), и без этой проверки `_pick(rng, [])` возвращал null, который
-## присваивался в `String` — SCRIPT ERROR в самом генераторе карты. Раньше
-## пустой пул был невозможен, поэтому ветка не была написана.
+## AN EMPTY POOL = NO GREYS. All monster sets were removed with the Allods art
+## (11.10), and without this check `_pick(rng, [])` returned null, which
+## was assigned to `String` — a SCRIPT ERROR inside the map generator itself. Before,
+## an empty pool was impossible, which is why the branch was not written.
 func _gray_cluster(rng: RandomNumberGenerator, anchor: Vector2i) -> int:
 	var pool: Array = gray_pool_for_zone(_zone)
 	if pool.is_empty():
@@ -2188,9 +2188,9 @@ func _gray_cluster(rng: RandomNumberGenerator, anchor: Vector2i) -> int:
 		var cc: Vector2i = cells[i]
 		_gray_cells["%d,%d" % [cc.x, cc.y]] = true
 		var set_name: String = str(_pick(rng, pool))
-		# Тир усиливает зверя поверх статов зоны. Множитель по тиру НЕ должен
-		# искажать среднюю силу зоны, поэтому он и берётся из полосы зоны: в
-		# `start` полоса 1-2, и тир 2 — это +35% hp, а не ×2.4.
+		# The tier strengthens the beast on top of the zone stats. The per-tier multiplier must NOT
+		# distort the average strength of the zone, which is why it is taken from the zone band: in
+		# `start` the band is 1-2, and tier 2 is +35% hp, not ×2.4.
 		var mults: Array = gray_tier_mults(set_name)
 		var hp := int(round(float(rng.randi_range(
 			GameConfig.zonei(_zone, "gray_hp_min"), GameConfig.zonei(_zone, "gray_hp_max")))
@@ -2205,7 +2205,7 @@ func _gray_cluster(rng: RandomNumberGenerator, anchor: Vector2i) -> int:
 	return cells.size()
 
 
-## Якорь тематической встречи: forest/road/any.
+## Thematic encounter anchor: forest/road/any.
 func _encounter_anchor(rng: RandomNumberGenerator, near: String) -> Vector2i:
 	match near:
 		"forest":
@@ -2228,11 +2228,11 @@ func _encounter_anchor(rng: RandomNumberGenerator, near: String) -> Vector2i:
 			return Vector2i(-1, -1)
 
 
-## Поставить встречу: 1 «ядро» (сильнее) + members-1 обычных вокруг.
+## Place an encounter: 1 "core" (stronger) + members-1 ordinary ones around.
 func _spawn_encounter(rng: RandomNumberGenerator, anchor: Vector2i, ed: Dictionary, eid: int) -> int:
 	var sets: Array = ed.get("sets", [])
 	if sets.is_empty():
-		return 0   # нет наборов — стая не ставится (см. ENCOUNTER_KINDS)
+		return 0   # no sets — the pack is not placed (see ENCOUNTER_KINDS)
 	var members: Array = ed.get("members", [2, 3])
 	var n := rng.randi_range(int(members[0]), int(members[1]))
 	var hp_mult := float(ed.get("hp_mult", 1.0))
@@ -2266,11 +2266,11 @@ func _spawn_encounter(rng: RandomNumberGenerator, anchor: Vector2i, ed: Dictiona
 	print("ENCOUNTER %s id=%d members=%d core=%s" % [kind, eid, cells.size(), str(ed.get("label", ""))])
 	return cells.size()
 
-## Соседняя клетка для кластера. ВАЖНО: массив `taken` здесь ТОЛЬКО читается.
-## Раньше сюда писали `taken.append(c)`, а вызывающий код потом делал
-## `cells.append(c)` — а массив передаётся по ССЫЛКЕ, и клетка попадала в
-## список дважды. Кластер из 3 превращался в 5 записей, две из них на одной
-## клетке: замер 03.10 давал 15 Серых на 9 клетках, и игрок видел «1 Серый».
+## A neighbouring cell for the cluster. IMPORTANT: the `taken` array is only READ here.
+## Before, `taken.append(c)` was written here, and then the calling code did
+## `cells.append(c)` — and the array is passed BY REFERENCE, so the cell landed in the
+## list twice. A cluster of 3 turned into 5 records, two of them on the same
+## cell: the measurement of 03.10 gave 15 Greys on 9 cells, and the player saw "1 Grey".
 func _near_gray_cell(rng: RandomNumberGenerator, anchor: Vector2i, taken: Array) -> Vector2i:
 	for attempt in range(12):
 		var off := Vector2i(rng.randi_range(-2, 2), rng.randi_range(-2, 2))
@@ -2307,7 +2307,7 @@ func _save_portal_json() -> void:
 	f.store_string(JSON.stringify({"x": _portal_pos.x, "y": _portal_pos.y}))
 	f.close()
 
-## Новый формат sidecar: массив порталов по границам сектора.
+## New sidecar format: an array of portals by sector border.
 func _save_portals_json() -> void:
 	var path: String = _out_dir + _basename + ".portal.json"
 	var f := FileAccess.open(path, FileAccess.WRITE)
@@ -2316,7 +2316,7 @@ func _save_portals_json() -> void:
 	f.store_string(JSON.stringify({"portals": _portals_out}))
 	f.close()
 
-## Удалить sidecar портала, если карта перегенерируется в зоне без портала.
+## Delete the portal sidecar if the map is regenerated in a zone without a portal.
 func _drop_portal_json() -> void:
 	var path: String = _out_dir + _basename + ".portal.json"
 	if FileAccess.file_exists(path):
@@ -2333,7 +2333,7 @@ func _a_star(start: Vector2i, goal: Vector2i, rng: RandomNumberGenerator) -> Arr
 	fscore[gk] = _astar_h(start, goal)
 	var open: Array = [gk]
 	while not open.is_empty():
-		# выбираем минимальный fscore
+		# pick the minimum fscore
 		var best_i := 0
 		var best_f := -1
 		for i in range(open.size()):
@@ -2344,7 +2344,7 @@ func _a_star(start: Vector2i, goal: Vector2i, rng: RandomNumberGenerator) -> Arr
 		var cur: int = open[best_i]
 		open.remove_at(best_i)
 		if cur == gk2:
-			# восстанавливаем путь
+			# reconstruct the path
 			var out: Array = []
 			var c := cur
 			while c != gk:
@@ -2354,7 +2354,7 @@ func _a_star(start: Vector2i, goal: Vector2i, rng: RandomNumberGenerator) -> Arr
 			out.push_front(start)
 			return out
 		var cp: Vector2i = Vector2i(cur % W, int(cur / float(W)))
-		# Направление, с которого пришли (для штрафа за поворот)
+		# The direction we came from (for the turn penalty)
 		var dir_from_prev := Vector2i(0, 0)
 		if came.has(cur):
 			var prev_p: Vector2i = Vector2i(int(came[cur]) % W, int(int(came[cur]) / float(W)))
@@ -2364,12 +2364,12 @@ func _a_star(start: Vector2i, goal: Vector2i, rng: RandomNumberGenerator) -> Arr
 			if not _is_road_cell(np.x, np.y):
 				continue
 			var nk: int = np.y * W + np.x
-			# Базовая цена шага + штраф за горы (дорога любит траву)
+			# Base step cost + mountain penalty (the road prefers grass)
 			var stepcost := 10
 			if _terrain[nk] == 1:
 				stepcost = 18
-			# Лёгкое отталкивание от воды: в оригиналах дорога почти не примыкает
-			# к воде (adj 0–9%), держимся на расстоянии 1 клетки.
+			# Slight repulsion from water: in the originals the road almost never touches
+			# water (adj 0-9%), we keep a distance of 1 cell.
 			var near_water_cost := 0
 			for wd in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 				var wn: Vector2i = np + wd
@@ -2379,7 +2379,7 @@ func _a_star(start: Vector2i, goal: Vector2i, rng: RandomNumberGenerator) -> Arr
 			var penalty := 0
 			if dir_from_prev != Vector2i.ZERO and dir_from_prev != d:
 				penalty = 6
-			# детерминированный шум клетки для извилистости трассы
+			# deterministic cell noise for the winding of the route
 			var jitter: int = (abs(cp.x * 7919 + cp.y * 104729) % 9) - 4
 			var tentative: int = int(gscore.get(cur, 1 << 30)) + stepcost + penalty + near_water_cost + jitter
 			if tentative < int(gscore.get(nk, 1 << 30)):
@@ -2397,7 +2397,7 @@ func _is_road_cell(x: int, y: int) -> bool:
 	if x < 1 or y < 1 or x >= W - 1 or y >= H - 1:
 		return false
 	var t: int = _terrain[y * W + x]
-	return t != 2  # Всё кроме воды проходимо для дороги
+	return t != 2  # Everything except water is passable for the road
 
 func _set_land_road(p: Vector2i) -> void:
 	if p.x < 0 or p.y < 0 or p.x >= W or p.y >= H:
@@ -2409,22 +2409,22 @@ func _set_land_road(p: Vector2i) -> void:
 	_terrain[idx] = 3
 
 func _place_terrain(n: int) -> void:
-	# === Этап 1: почва Voronoi (база). Горы/вода/дорога добавляются позже ===
-	# Только базовые типы: 0 трава, 4 почва, 5 песок, 6 грязь.
-	# Опорные точки: тип -> количество
+	# === Stage 1: Voronoi soil (the base). Mountains/water/road are added later ===
+	# Base types only: 0 grass, 4 soil, 5 sand, 6 mud.
+	# Anchor points: type -> count
 	var seed_counts := {0: 3, 4: 2, 5: 2, 6: 1}
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = _seed + STREAM_TERRAIN
 
-	# Шум для деформации границ (создаёт извилистые берега/границы биомов)
+	# Noise for deforming the borders (creates winding shores/biome borders)
 	var jitter_noise := FastNoiseLite.new()
 	jitter_noise.seed = _seed + STREAM_JITTER
 	jitter_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	jitter_noise.frequency = 1.0 / 20.0
 	jitter_noise.fractal_octaves = 3
 
-	# Поле высот: используется гор/воды этапом 4 и высотами (шаг 7)
+	# Height field: used by mountains/water in stage 4 and by the heights (step 7)
 	var elev_noise := FastNoiseLite.new()
 	elev_noise.seed = _seed + STREAM_TERRAIN
 	elev_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
@@ -2432,7 +2432,7 @@ func _place_terrain(n: int) -> void:
 	elev_noise.fractal_octaves = 4
 	elev_noise.fractal_gain = 0.5
 
-	# Генерируем опорные точки
+	# Generate the anchor points
 	var seeds: Array = []
 	for t in seed_counts:
 		for i in range(seed_counts[t]):
@@ -2443,23 +2443,23 @@ func _place_terrain(n: int) -> void:
 	var field := PackedFloat32Array()
 	field.resize(n)
 
-	# Для каждой клетки — ближайшая опорная точка
+	# For every cell — the nearest anchor point
 	for i in range(n):
 		var x: float = float(i % W)
 		var y: float = float(int(i / float(W)))
 		var elev: float = (elev_noise.get_noise_2d(x, y) + 1.0) * 0.5
 		field[i] = elev
 
-		# Ищем ближайшую опорную точку с шумовым смещением
+		# Look for the nearest anchor point with noise offset
 		var best_type: int = 0
 		var best_dist: float = 1e30
 		for s in seeds:
 			var sp: Vector2 = s["pos"]
-			# Базовое расстояние
+			# Base distance
 			var dx: float = x - sp.x
 			var dy: float = y - sp.y
 			var dist: float = dx * dx + dy * dy
-			# Шумовое смещение для органичных границ (~10% от расстояния)
+			# Noise offset for organic borders (~10% of the distance)
 			var jx: float = jitter_noise.get_noise_2d(x * 3.0, y * 3.0)
 			var jy: float = jitter_noise.get_noise_2d(x * 3.0 + 100, y * 3.0 + 100)
 			dist += (jx * dx + jy * dy) * 3.0
@@ -2469,9 +2469,9 @@ func _place_terrain(n: int) -> void:
 
 		_terrain[i] = best_type
 
-	# Сохраняем field и пороги для высот.
-	# Рельеф сектора (23.10) меняет ДОЛЮ непроходимого, но не основу: горы/вода
-	# остаются барьерами по краям и между областями, а не биомом.
+	# Store field and thresholds for the heights.
+	# The sector relief (23.10) changes the SHARE of impassable terrain, but not the base: mountains/water
+	# remain barriers at the edges and between areas, not a biome.
 	_field = field
 	var sorted := field.duplicate()
 	sorted.sort()
@@ -2493,9 +2493,9 @@ func _place_terrain(n: int) -> void:
 
 func _pick_tile(t: int, x: int, y: int) -> int:
 	var s: Dictionary = _sides(x, y)
-	# Переходная кромка имеет приоритет над shape/rules: файлы tile1..7
-	# бесшовные и кромок не содержат, поэтому exact-формы из аудита .alm
-	# на них не дают ничего — только шов. См. terrain_tiles_db.json.
+	# The transition edge has priority over shape/rules: the tile1..7 files
+	# are seamless and contain no edges, so the exact shapes from the .alm audit
+	# give nothing on them — only a seam. See terrain_tiles_db.json.
 	var trans: int = _transition_tile(t, s, x, y)
 	if trans >= 0:
 		_stat_transition += 1
@@ -2512,25 +2512,25 @@ func _pick_tile(t: int, x: int, y: int) -> int:
 	_stat_rules += 1
 	return _edge_tile(t, s, x, y)
 
-## Направление перехода для клетки: -1, если перехода нет.
-## Порядок совпадает с directions.order в terrain_tiles_db.json и с ключами
-## _sides(): N, NE, E, SE, S, SW, W, NW. Кардинальные берутся раньше
-## диагональных — так же вела себя оригинальная transition_db.
+## Transition direction for a cell: -1 if there is no transition.
+## The order matches directions.order in terrain_tiles_db.json and the keys of
+## _sides(): N, NE, E, SE, S, SW, W, NW. Cardinals are taken before
+## diagonals — that is how the original transition_db behaved too.
 ##
-## 05.10 (два правила):
-## 1) Односторонний переход: смешиваем только если t < n (мой тип меньше
-##    типа соседа). Сосед с большим типом остаётся чистым интерьером.
-##    Иначе обе стороны границы режут навстречу: у края A-плитки чистый B,
-##    у края B-плитки чистый A → на шве жёсткий B|A посреди смеси,
-##    «двойной берег» (жалоба игрока, 05.10: вода-песок с двух сторон).
-## 2) Диагональ пропускается, если шов к n уже у кардинальных соседей
-##    угла (_diag_covered). См. комментарий к _diag_covered.
+## 05.10 (two rules):
+## 1) One-way transition: we blend only if t < n (my type is less than
+##    the neighbour's type). A neighbour with a greater type stays a clean interior.
+##    Otherwise both sides of the border cut towards each other: at the edge of the A tile there is pure B,
+##    at the edge of the B tile pure A → at the seam a hard B|A in the middle of the blend,
+##    a "double shore" (player report, 05.10: water-sand from both sides).
+## 2) A diagonal is skipped if the seam to n is already at the corner's
+##    cardinal neighbours (_diag_covered). See the comment on _diag_covered.
 func _transition_dir(s: Dictionary, t: int, x: int, y: int) -> int:
 	for d in _TRANSITION_DIR_ORDER:
 		var n: int = s[d]
 		if n < 0 or n == t:
 			continue
-		# Старший тип не смешивается в младший — переход поставит сосед.
+		# The higher type does not blend into the lower one — the neighbour will place the transition.
 		if t > n:
 			continue
 		if d == "NE" or d == "SE" or d == "SW" or d == "NW":
@@ -2539,7 +2539,7 @@ func _transition_dir(s: Dictionary, t: int, x: int, y: int) -> int:
 		return _TRANSITION_DIR_ORDER.find(d)
 	return -1
 
-## Кардинальные соседи в углу диагонали d (ключи _sides()).
+## Cardinal neighbours at the corner of diagonal d (_sides() keys).
 const _DIAG_CARDINALS := {
 	"NE": ["N", "E"],
 	"SE": ["S", "E"],
@@ -2553,20 +2553,20 @@ const _CARDINAL_OFFSET := {
 	"W": Vector2i(-1, 0),
 }
 
-## Значение террейна вне карты = -1.
+## The terrain value outside the map = -1.
 func _terrain_at(x: int, y: int) -> int:
 	if x < 0 or y < 0 or x >= W or y >= H:
 		return -1
 	return _terrain[y * W + x]
 
-## Диагональ к типу n «покрыта», если кардинальный сосед в этом углу имеет
-## тип t (свой) и у этого кардинального соседа есть кардинальный сосед типа n.
+## A diagonal to type n is "covered" if the cardinal neighbour at that corner has
+## type t (its own) and that cardinal neighbour has a cardinal neighbour of type n.
 ##
-## ГЕОМЕТРИЯ: у чистой диагонали (оба кардинала == t) диагональный сосед
-## ВСЕГДА кардинален для обоих угловых клеток (NW ячейки = W у N-соседа).
-## Значит чистые диагональные переходы фактически отключаются — по решению
-## игрока (05.10): лишний угловой срез поверх уже подрезанных соседей не нужен.
-## Границу держат кардинальные переходы на клетках, соприкасающихся с n.
+## GEOMETRY: for a clean diagonal (both cardinals == t) the diagonal neighbour
+## is ALWAYS cardinal for both corner cells (the NW of a cell = the W of the N neighbour).
+## So clean diagonal transitions are effectively disabled — by the player's
+## decision (05.10): an extra corner cut on top of already trimmed neighbours is not needed.
+## The border is held by the cardinal transitions on the cells touching n.
 func _diag_covered(x: int, y: int, t: int, n: int, d: String) -> bool:
 	var cards: Array = _DIAG_CARDINALS.get(d, [])
 	for cdir in cards:
@@ -2591,12 +2591,12 @@ func _diag_covered(x: int, y: int, t: int, n: int, d: String) -> bool:
 func _cell_hash(x: int, y: int) -> int:
 	return absi(x * 19349663 ^ y * 83492791)
 
-## Переходный тайл A -> B по направлению dir_index. -1, если перехода нет.
+## Transition tile A -> B for the direction dir_index. -1 when there is no transition.
 ##
-## Известное ограничение: угловая клетка с двумя отличающимися соседями
-## получает бленд только по одному (первому) направлению. Бленд по двум
-## краям сразу потребовал бы отдельных угловых плиток — это 4 файла на пару
-## типов, в формате .alm для них нет места.
+## Known limitation: a corner cell with two differing neighbours
+## gets a blend only in one (the first) direction. Blending along two
+## edges at once would require separate corner tiles — that is 4 files per pair
+## of types, and the .alm format has no room for them.
 func _transition_tile(t: int, s: Dictionary, x: int, y: int) -> int:
 	var dir_index: int = _transition_dir(s, t, x, y)
 	if dir_index < 0:
@@ -2605,17 +2605,17 @@ func _transition_tile(t: int, s: Dictionary, x: int, y: int) -> int:
 	if b < 0 or b > 6:
 		return -1
 	var file_n: int = AlmLoader.TRANSITION_FILE_MIN + dir_index
-	# row = B * 2 + вариация. Вариацию берём от координаты клетки, чтобы
-	# соседние кромки не были одинаковыми, но оставались детерминированными.
+	# row = B * 2 + variation. The variation comes from the cell coordinate so that
+	# neighbouring edges are not identical but stay deterministic.
 	var variation: int = _cell_hash(x, y) % 2
 	var row: int = b * 2 + variation
 	return AlmLoader.tile_encode_transition(file_n, t, row)
 
 ## Bit layout must match tests/analyze_shapes.gd: [N, NE, E, SE, S, SW, W, NW]
-const CARDINAL_BITS := 0x55  # биты N(0), E(2), S(4), W(6)
-## Варианты кромки травы, визуально почти идентичные (L1 4-20 тыс).
-## v0/v2/v3 — «почвенные» (L1 26-46 тыс): на ровной кромке выглядят
-## врезанными квадратами, сценаристы на простые границы их не ставили.
+const CARDINAL_BITS := 0x55  # bits N(0), E(2), S(4), W(6)
+## Grass edge variants that are visually almost identical (L1 4-20 thousand).
+## v0/v2/v3 — the "soil" ones (L1 26-46 thousand): on a flat edge they look
+## like inset squares, the level designers did not use them for simple borders.
 const GRASS_EDGE_VARIANTS := [1, 5, 9, 12, 13, 14]
 func _mask_from_sides(s: Dictionary, t: int) -> int:
 	var mask := 0
@@ -2667,9 +2667,9 @@ func _shape_lookup(t: int, mask: int, x: int, y: int) -> Dictionary:
 		return {}
 	return _shape_tile(t, _shapes[best_key], x, y, mask)
 
-## Весовой выбор из формы. Для граничных клеток с кардинальной маской
-## сужаем кандидатов до «краевого» row типа — иначе топ-тайл может быть
-## внутренней текстурой и рвать ровную линию кромки.
+## Weighted choice from the shape. For border cells with a cardinal mask
+## we narrow the candidates down to the type's "edge" row — otherwise the top tile may be an
+## interior texture and tear the flat edge line.
 func _shape_tile(t: int, entry: Dictionary, x: int, y: int, mask: int) -> Dictionary:
 	var tiles: Array = entry.get("tiles", [])
 	if tiles.is_empty():
@@ -2677,25 +2677,25 @@ func _shape_tile(t: int, entry: Dictionary, x: int, y: int, mask: int) -> Dictio
 	var candidates: Array = tiles
 	if mask & CARDINAL_BITS != 0:
 		var art_t := t if t <= 3 else 0
-		# Универсальный «край» есть только у травы (0) и гор (1) — один row на
-		# любой кардинальный переход. Вода анимирована (rows 0..7), дорога имеет
-		# свои краевые rows по соседям — им единый row навязывать нельзя.
+		# A universal "edge" exists only for grass (0) and mountains (1) — one row for
+		# any cardinal transition. Water is animated (rows 0..7), the road has its
+		# own edge rows by neighbour — you cannot force a single row on them.
 		if (art_t == 0 or art_t == 1) and _edge_rows.has(art_t):
 			var er: int = _edge_rows[art_t]
 			var filtered: Array = []
 			for ti in tiles:
 				if int(ti.get("row", -1)) == er:
-					# Кромка травы: только «зелёные» варианты. v0/v2/v3 — темнее,
-					# выглядят «квадратами почвы» на ровной линии, их сценаристы
-					# не ставили на простые кромки. Семейство v1/v5/v9/v12/v13/v14
-					# пиксельно почти идентично (L1 4-20 тыс vs 26-46 тыс у v0/2/3).
+					# Grass edge: "green" variants only. v0/v2/v3 are darker,
+					# they look like "squares of soil" on a flat line, the level designers
+					# did not use them on simple edges. The family v1/v5/v9/v12/v13/v14
+					# is pixel-wise almost identical (L1 4-20 thousand vs 26-46 thousand for v0/2/3).
 					if art_t == 0 and int(ti.get("variant", -1)) in GRASS_EDGE_VARIANTS:
 						filtered.append(ti)
 					elif art_t != 0:
 						filtered.append(ti)
 			if filtered.is_empty():
-				# Краевых кандидатов нет — пусть _pick_tile уйдёт в rules-fallback
-				# (ровная кромка по типу соседа), а не возьмёт внутренние текстуры.
+				# No edge candidates — let _pick_tile fall into the rules fallback
+				# (a flat edge by the neighbour type) instead of taking interior textures.
 				return {}
 			candidates = filtered
 	var total := 0
@@ -2751,7 +2751,7 @@ func _sides(x: int, y: int) -> Dictionary:
 
 func _interior_tile(t: int, x: int, y: int = -1) -> int:
 	# 1. Base textures from real maps: low-frequency noise per cell -> one of
-	#    top-6 tiles. Плавное поле даёт связные «поля» без жёстких worley-чанков.
+	#    top-6 tiles. A smooth field gives connected "fields" without hard worley chunks.
 	var base: Dictionary = _base_int.get(str(t), {})
 	var tiles: Array = base.get("tiles", [])
 	if not tiles.is_empty():
@@ -2805,9 +2805,9 @@ func _interior_tile(t: int, x: int, y: int = -1) -> int:
 		3: return AlmLoader.tile_from_spec({"file": 4, "variant": 3, "row": 0})
 	return 0
 
-## Плавный низкочастотный шум (частота ~1/14) + лёгкий локальный компонент.
-	## Возвращает индекс в диапазоне [0, total): соседние клетки коррелируют —
-	## связные «поля» без жёстких 8x8-чанков и без «шахматки».
+## Smooth low-frequency noise (frequency ~1/14) + a light local component.
+	## Returns an index in the range [0, total): neighbouring cells correlate —
+	## connected "fields" without hard 8x8 chunks and without a "checkerboard".
 func _interior_value(x: int, y: int, t: int, total: int) -> int:
 	if _interior_noise == null:
 		_interior_noise = FastNoiseLite.new()
@@ -2819,7 +2819,7 @@ func _interior_value(x: int, y: int, t: int, total: int) -> int:
 		_interior_hi.seed = _seed + STREAM_INTERIOR_HI
 		_interior_hi.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 		_interior_hi.frequency = 1.0 / 60.0
-	# Сдвиг домена на тип: базовый сид + шаг типа (7 + t*131 / 99 + t*271).
+	# Domain shift per type: base seed + type step (7 + t*131 / 99 + t*271).
 	_interior_noise.seed = _seed + STREAM_INTERIOR + t * 131
 	_interior_hi.seed = _seed + STREAM_INTERIOR_HI + t * 271
 	var off: int = _NOISE_OFFSETS.get(t, 0)
@@ -2844,8 +2844,8 @@ func _edge_tile(t: int, s: Dictionary, x: int, y: int) -> int:
 		var neighbor: int = s[d]
 		var spec: Dictionary = _get_rule(t, d, neighbor)
 		if not spec.is_empty():
-			# Правила для травы дают v0r4 («почва»). На кромке травы это
-			# «врезанный квадрат» — нормализуем вариант до зелёного семейства.
+			# The grass rules give v0r4 ("soil"). On a grass edge that is an
+			# "inset square" — we normalise the variant to the green family.
 			if t == 0 and int(spec.get("variant", -1)) in [0, 2, 3]:
 				spec = {"file": 1, "variant": 13, "row": int(spec.get("row", 4))}
 			return AlmLoader.tile_from_spec(_spec_for_type(t, spec))
@@ -2860,60 +2860,60 @@ func _edge_tile(t: int, s: Dictionary, x: int, y: int) -> int:
 	# No rule found — use interior
 	return _interior_tile(t, x, y)
 
-## file из правила -> file для кодировки типа A (.alm)
-## Теперь palette хранит правильный file, remap не нужен.
+## file from a rule -> file for type A encoding (.alm)
+## Now palette stores the correct file, no remap is needed.
 func _spec_for_type(type_a: int, spec: Dictionary) -> Dictionary:
 	var out := spec.duplicate(true)
 	out["variant"] = int(spec.get("variant", 0))
 	out["row"] = int(spec.get("row", 0))
-	# Для типов >=4: перезаписываем file через TERRAIN_FILE
+	# For types >=4: overwrite file through TERRAIN_FILE
 	if type_a >= 4:
 		out["file"] = int(TERRAIN_FILE.get(type_a, out["file"]))
 	return out
 
 func _pick_height(x: int, y: int, t: int, field_value: float) -> int:
-	# Псевдо-высота: noise field определяет И terrain И высоту.
-	# Вода всегда низкая, горы высокие, остальные — средние с вариацией.
+	# Pseudo-height: the noise field defines BOTH the terrain AND the height.
+	# Water is always low, mountains high, the rest — medium with variation.
 	match t:
-		2: # Вода: 0-15 (всегда низко)
+		2: # Water: 0-15 (always low)
 			return int(round(clampf(field_value * 15.0, 0.0, 15.0)))
-		1: # Горы: 40-127 (высокие пики)
+		1: # Mountains: 40-127 (high peaks)
 			var lo: float = _water_thr
 			var hi: float = 1.0
 			var span: float = maxf(0.0001, hi - lo)
 			var u: float = clampf((field_value - lo) / span, 0.0, 1.0)
 			return int(round(clampf(40.0 + u * 87.0, 40.0, 127.0)))
-		0: # Трава: 10-60 (холмы)
+		0: # Grass: 10-60 (hills)
 			var lo: float = _water_thr
 			var hi: float = _mountain_thr
 			var span: float = maxf(0.0001, hi - lo)
 			var u: float = clampf((field_value - lo) / span, 0.0, 1.0)
 			return int(round(clampf(10.0 + u * 50.0, 10.0, 60.0)))
-		4: # Почва: 10-50 (средняя)
+		4: # Soil: 10-50 (medium)
 			var lo: float = _water_thr
 			var hi: float = _mountain_thr
 			var span: float = maxf(0.0001, hi - lo)
 			var u: float = clampf((field_value - lo) / span, 0.0, 1.0)
 			return int(round(clampf(10.0 + u * 40.0, 10.0, 50.0)))
-		5: # Песок: 5-35 (низина)
+		5: # Sand: 5-35 (lowland)
 			var lo: float = _water_thr
 			var hi: float = _mountain_thr
 			var span: float = maxf(0.0001, hi - lo)
 			var u: float = clampf((field_value - lo) / span, 0.0, 1.0)
 			return int(round(clampf(5.0 + u * 30.0, 5.0, 35.0)))
-		6: # Грязь: 8-33 (болото)
+		6: # Mud: 8-33 (swamp)
 			var lo: float = _water_thr
 			var hi: float = _mountain_thr
 			var span: float = maxf(0.0001, hi - lo)
 			var u: float = clampf((field_value - lo) / span, 0.0, 1.0)
 			return int(round(clampf(8.0 + u * 25.0, 8.0, 33.0)))
-		3: # Дорога: интерполяция от соседей
+		3: # Road: interpolation from the neighbours
 			return _interpolate_road_height(x, y)
-		_: # Остальные: средняя
+		_: # The rest: medium
 			return int(round(clampf(field_value * 60.0, 10.0, 60.0)))
 
 func _interpolate_road_height(x: int, y: int) -> int:
-	# Дорога: среднее от соседних не-дорожных клеток.
+	# Road: the average of the neighbouring non-road cells.
 	var sum := 0.0
 	var cnt := 0
 	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
@@ -2927,7 +2927,7 @@ func _interpolate_road_height(x: int, y: int) -> int:
 			cnt += 1
 	if cnt > 0:
 		return int(round(sum / float(cnt)))
-	# Нет соседей — берём из field
+	# No neighbours — take it from field
 	return int(round(clampf(_field[y * W + x] * 40.0, 10.0, 40.0)))
 
 func _smooth_nonroad_heights() -> void:
@@ -2954,8 +2954,8 @@ func _smooth_nonroad_heights() -> void:
 				_heights[i] = clampi(int(round(sum / float(count))), 0, 127)
 
 func _box_blur(field: PackedFloat32Array) -> PackedFloat32Array:
-	# Лёгкое сглаживание (3×3): сохраняет извилистость берега, убирая только
-	# одиночные пиксели-артефакты шума.
+	# Light smoothing (3×3): keeps the winding of the shore, removing only
+	# single noise pixel artefacts.
 	var out: PackedFloat32Array = field.duplicate()
 	for y in range(H):
 		for x in range(W):
@@ -2972,7 +2972,7 @@ func _box_blur(field: PackedFloat32Array) -> PackedFloat32Array:
 			out[y * W + x] = sum / float(cnt)
 	return out
 
-# === Сохранение ===
+# === Saving ===
 
 func _save() -> void:
 	DirAccess.make_dir_recursive_absolute(_out_dir)
@@ -2990,7 +2990,7 @@ func _save() -> void:
 			int(m["width"]), int(m["height"]),
 			int(m["tiles"].size()), int(m["heights"].size()),
 		])
-		# Статистика
+		# Statistics
 		var tc := {}
 		for i in range(W * H):
 			var tt: int = _terrain[i]
@@ -3011,7 +3011,7 @@ func _save() -> void:
 			if v > 0:
 				obj_count += 1
 		print("Объектов: %d (%.1f%%)" % [obj_count, obj_count * 100.0 / total])
-		# Спавн sidecar-ами (buildings + NPC)
+		# Spawn via sidecars (buildings + NPC)
 		_save_sidecars()
 		_validate_city_content()
 		var guards := 0
@@ -3029,7 +3029,7 @@ func _save() -> void:
 	print("Сохранено: " + path)
 	_report(100, 12)
 
-## Sidecar-ы спавна: структуры и NPC (грузит alm_map.gd/_load_sidecars).
+## Spawn sidecars: structures and NPCs (loaded by alm_map.gd/_load_sidecars).
 func _save_sidecars() -> void:
 	var f := FileAccess.open(_out_dir + _basename + ".structures.json", FileAccess.WRITE)
 	if f:
@@ -3037,16 +3037,16 @@ func _save_sidecars() -> void:
 		f.close()
 	var n := FileAccess.open(_out_dir + _basename + ".npcs.json", FileAccess.WRITE)
 	if n:
-		# gen_version — чтобы ensure_map перегенерировал карту после правки
-		# настроек генерации (плотность, зазоры, разведение). См. GEN_VERSION.
+		# gen_version — so ensure_map regenerates the map after a change
+		# to the generation settings (density, gaps, spacing). See GEN_VERSION.
 		n.store_string(JSON.stringify({"npcs": _npcs_out, "gen_version": GEN_VERSION}))
 		n.close()
 	var h := FileAccess.open(_out_dir + _basename + ".herbs.json", FileAccess.WRITE)
 	if h:
 		h.store_string(JSON.stringify({"herbs": _herbs_out}))
 		h.close()
-	# Форпосты (пакет B): отдельный sidecar, чтобы игра знала, ЧЬИ лагеря на
-	# карте и сколько стражи осталось до захвата.
+	# Outposts (package B): a separate sidecar so the game knows WHOSE camps are on
+	# the map and how many guards are left before capture.
 	var o := FileAccess.open(_out_dir + _basename + ".outposts.json", FileAccess.WRITE)
 	if o:
 		o.store_string(JSON.stringify({"outposts": _outposts_out}))
@@ -3066,7 +3066,7 @@ func _validate_city_content() -> void:
 	print("CITY_CONTENT: missing=%s" % str(missing))
 
 func _road_stats(road_cells: int) -> void:
-	# Компоненты связности дороги (4-соседи)
+	# Road connectivity components (4-neighbour)
 	var seen := {}
 	var comps: Array = []
 	for y in range(H):
@@ -3092,7 +3092,7 @@ func _road_stats(road_cells: int) -> void:
 			comps.append(size)
 	comps.sort()
 	comps.reverse()
-	# bbox главного компонента и ширина дороги
+	# bbox of the main component and the road width
 	var main_bbox := Rect2i()
 	var main_flat := 0
 	var width_cnt := {}
@@ -3116,7 +3116,7 @@ func _road_stats(road_cells: int) -> void:
 						main_bbox.size.x = x - main_bbox.position.x + 1
 					if y - main_bbox.position.y + 1 > main_bbox.size.y:
 						main_bbox.size.y = y - main_bbox.position.y + 1
-		# ширина: сколько дорожных клеток в колонке bbox (гориз. маршрут) или строке
+		# width: how many road cells in a bbox column (horizontal route) or row
 		for y in range(main_bbox.position.y, main_bbox.position.y + main_bbox.size.y):
 			var cnt := 0
 			for x in range(main_bbox.position.x, main_bbox.position.x + main_bbox.size.x):
@@ -3125,7 +3125,7 @@ func _road_stats(road_cells: int) -> void:
 			if cnt > 0:
 				width_cnt[cnt] = width_cnt.get(cnt, 0) + 1
 				main_flat += cnt
-		# примыкание: доля соседей дороги по terrain
+		# adjacency: the share of road neighbours by terrain
 		for y in range(H):
 			for x in range(W):
 				var idx: int = y * W + x
@@ -3142,5 +3142,5 @@ func _road_stats(road_cells: int) -> void:
 		road_cells, str(comps), str(main_bbox), str(width_cnt), str(adj_cnt)])
 
 func _write_alm() -> PackedByteArray:
-	# Полный writer теперь один — в AlmLoader (его же зовёт редактор карт).
+	# The full writer is now a single one — in AlmLoader (the map editor calls it too).
 	return AlmLoader.build_map_bytes(W, H, _tiles, _heights, _obstacles, _map_name)

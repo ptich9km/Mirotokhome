@@ -1,11 +1,11 @@
 extends Node2D
 class_name Projectile
-## Снаряд заклинания. Визуал полностью процедурный (SpellVFX), готовые кадры
-## из assets/projectiles/* не используются.
+## Spell projectile. The visual is fully procedural (SpellVFX); pre-made frames
+## from assets/projectiles/* are not used.
 ##
-## Раньше: скорость была фиксированной 200 px/с, поле range игнорировалось,
-## числа урона рисовались дважды (здесь и в enemy.gd) и показывали сырое
-## значение, а вызов alm_map.damage_area был пустой заглушкой.
+## Before: the speed was a fixed 200 px/s, the range field was ignored,
+## damage numbers were drawn twice (here and in enemy.gd) and showed the raw
+## value, and the alm_map.damage_area call was an empty stub.
 
 var start_pos: Vector2
 var target_pos: Vector2
@@ -22,17 +22,17 @@ var _trail_timer := 0.0
 
 
 func _ready() -> void:
-	# Корень сцены (Game) стоит на PROCESS_MODE_ALWAYS, и раньше снаряд
-	# наследовал это через INHERIT: «тактическая пауза» его не останавливала,
-	# он долетал и наносил урон. PAUSABLE останавливает узел по SceneTree.paused
-	# независимо от режима родителя.
+	# The scene root (Game) runs in PROCESS_MODE_ALWAYS, and the projectile used
+	# to inherit it via INHERIT: "tactical pause" did not stop it, it kept flying
+	# and dealt damage. PAUSABLE stops the node via SceneTree.paused regardless
+	# of the parent mode.
 	process_mode = PROCESS_MODE_PAUSABLE
 	global_position = start_pos
 	_sprite = SpellVFX.make_projectile(spell_name)
 	add_child(_sprite)
 	z_index = 5
-	# Разворачиваем спрайт по направлению полёта (снаряд круглый, но ядро
-	# вытянутое — без этого Fire_Ball летит «боком»).
+	# Rotate the sprite along the flight direction (the projectile is round, but
+	# the core is elongated — without this Fire_Ball flies "sideways").
 	if _sprite != null:
 		_sprite.rotation = (target_pos - start_pos).angle()
 
@@ -41,7 +41,7 @@ func _process(delta: float) -> void:
 	_elapsed += delta
 	SpellVFX.update_shader_time(_sprite, delta, _elapsed)
 
-	# Если кастер или сцена исчезли (смена карты/перезапуск) — снаряд уходит
+	# If the caster or the scene is gone (map change/restart), the projectile is removed
 	var owner_alive := projectile_owner == null or is_instance_valid(projectile_owner)
 	if not owner_alive:
 		queue_free()
@@ -82,7 +82,7 @@ func _spawn_trail_particle() -> void:
 	p.position = global_position
 	p.modulate.a = 0.6
 	p.scale = Vector2(0.8, 0.8)
-	# След — ребёнок снаряда, чтобы не оставаться в сцене после queue_free
+	# The trail is a child of the projectile so it does not stay in the scene after queue_free
 	add_child(p)
 	_trail.append(p)
 
@@ -95,21 +95,21 @@ func explode() -> void:
 	SpellVFX.impact_burst(global_position, sphere, is_aoe)
 	SoundDB.play("magic.fire.bolt")
 
-	# Числа урона и вспышка рисуются в Game.deal_damage — здесь молча,
-	# чтобы они не дублировались (раньше рисовались и тут, и в enemy.gd).
+	# Damage numbers and the flash are drawn in Game.deal_damage — silent here,
+	# so they are not duplicated (they used to be drawn both here and in enemy.gd).
 	if is_aoe:
 		for enemy in Game.enemies:
 			if is_instance_valid(enemy) and enemy.global_position.distance_to(global_position) <= radius:
 				Game.deal_damage(enemy, damage, "magic", sphere, projectile_owner)
 	else:
-		# Одиночная цель: сначала конкретный снаряд, иначе любой в радиусе
+		# Single target: the specific projectile first, otherwise anything in radius
 		for enemy in Game.enemies:
 			if is_instance_valid(enemy) and enemy.global_position.distance_to(global_position) <= radius:
 				Game.deal_damage(enemy, damage, "magic", sphere, projectile_owner)
 				break
 
-	# Атрибуты заклинания (яды/замедления) — наводятся взрывом на ВРАГОВ в
-	# радиусе. Вампиризм/баффы сюда не попадают: они вешаются на кастера.
+	# Spell attributes (poisons/slows) are applied by the explosion to ENEMIES in
+	# radius. Vampirism/buffs do not go here: they are applied to the caster.
 	var spell := SpellDB.get_spell(spell_name)
 	if not spell.is_empty():
 		StatusEffects.apply_hostile_area(global_position, radius, spell, projectile_owner)

@@ -1,14 +1,14 @@
 class_name SpellVFX
 extends Node
-## Процедурные визуальные эффекты заклинаний: ТОЛЬКО шейдеры и генерируемые
-## частицы. Готовые кадры из assets/projecticles/* в рантайме не используются.
+## Procedural visual effects of spells: ONLY shaders and generated
+## particles. The ready-made frames in assets/projecticles/* are not used at runtime.
 ##
-## Важно: Shader компилируется один раз на сферу и кэшируется. Раньше в
-## make_projectile создавались новые Image/Shader/ShaderMaterial на КАЖДЫЙ
-## каст — шейдер компилировался заново каждый выстрел.
+## Important: a Shader is compiled once per sphere and cached. Before,
+## make_projectile created new Image/Shader/ShaderMaterial on EVERY
+## cast — the shader was recompiled on every shot.
 ##
-## Сферы: Fire plasma, Water гексакристалл, Air молния, Earth трещины,
-##        Astral звёздное поле.
+## Spheres: Fire plasma, Water hexacrystal, Air lightning, Earth cracks,
+##        Astral starfield.
 
 const SPHERE_COLORS := {
 	"Fire": Color(1.0, 0.4, 0.1),
@@ -18,7 +18,7 @@ const SPHERE_COLORS := {
 	"Astral": Color(0.7, 0.3, 0.9),
 }
 
-# --- Кэш (компиляция шейдера дорогая, создаётся один раз) ---
+# --- Cache (shader compilation is expensive, it is created once) ---
 static var _shader_cache: Dictionary = {}
 static var _wall_shader_cache: Dictionary = {}
 static var _ground_shader_cache: Dictionary = {}
@@ -46,7 +46,7 @@ static func spark_texture(color: Color) -> ImageTexture:
 	return tex
 
 
-## Шейдер снаряда для сферы (компилируется один раз).
+## The projectile shader for a sphere (compiled once).
 static func projectile_shader(sphere: String) -> Shader:
 	if _shader_cache.has(sphere):
 		var cached: Shader = _shader_cache[sphere]
@@ -70,32 +70,32 @@ static func _sphere_color(sphere: String) -> Color:
 	return SPHERE_COLORS.get(sphere, Color.WHITE)
 
 
-## Цвета ЗАЩИТ — отдельная таблица.
-## Глобальные SPHERE_COLORS не трогаем: там огонь оранжевый (1.0, 0.4, 0.1),
-## и такой он правильно выглядит на снарядах и стенах. Игрок попросил, чтобы
-## защиты читались как: огонь — красный, вода — синий, молния — светло-голубой,
-## земля — светло-коричневый.
+## PROTECTION colours — a separate table.
+## We do not touch the global SPHERE_COLORS: fire is orange there (1.0, 0.4, 0.1),
+## and that is how it should look on projectiles and walls. The player asked that
+## protections read as: fire — red, water — blue, lightning — light blue,
+## earth — light brown.
 const RESIST_COLORS := {
-	"Fire": Color(1.0, 0.18, 0.12),     # красный
-	"Water": Color(0.15, 0.5, 1.0),    # синий
-	# Воздух и земля специально УВЕДЕНЫ от соседей по цвету: прежние
-	# «светло-голубой» и «светло-коричневый» путались с водой и огнём, когда
-	# защиты висят одновременно. Воздух — бледно-жёлтый (разряд), земля —
-	# оливково-серый камень.
-	"Air": Color(0.96, 0.94, 0.66),     # бледно-жёлтый
-	"Earth": Color(0.68, 0.74, 0.52),   # оливково-серый
-	"Astral": Color(0.85, 0.6, 1.0),    # на всякий случай
+	"Fire": Color(1.0, 0.18, 0.12),     # red
+	"Water": Color(0.15, 0.5, 1.0),    # blue
+	# Air and earth were deliberately MOVED AWAY from their colour neighbours: the former
+	# "light blue" and "light brown" were confused with water and fire when
+	# protections hang at the same time. Air — pale yellow (a discharge), earth —
+	# olive-grey stone.
+	"Air": Color(0.96, 0.94, 0.66),     # pale yellow
+	"Earth": Color(0.68, 0.74, 0.52),   # olive grey
+	"Astral": Color(0.85, 0.6, 1.0),    # just in case
 }
 
-## Цвет защиты по сфере (для кольца ветерка вокруг корпуса).
+## Protection colour by sphere (for the breeze ring around the body).
 static func resist_color(sphere: String) -> Color:
 	return RESIST_COLORS.get(sphere, Color.WHITE)
 
 
-## Номер «школы» для шейдера ветерка: 0 огонь, 1 вода, 2 воздух, 3 земля.
-## Нужен потому, что у защит одного размера различие должно идти НЕ только
-## цветом (это канал, недоступный 8–10 % мужчин): у каждой школы своё
-## движение струй — угольки вверх, рябь, косые полосы, пыль.
+## The "school" number for the breeze shader: 0 fire, 1 water, 2 air, 3 earth.
+## It is needed because for same-size protections the difference must come NOT only
+## from colour (that is a channel unavailable to 8–10 % of men): every school has its own
+## jet motion — embers upward, ripples, slanted stripes, dust.
 const RESIST_SCHOOLS := {
 	"Fire": 0, "Water": 1, "Air": 2, "Earth": 3, "Astral": 3,
 }
@@ -105,12 +105,12 @@ static func resist_school(sphere: String) -> int:
 	return int(RESIST_SCHOOLS.get(sphere, 3))
 
 
-## Задать спрайту РАЗМЕР В ПИКСЕЛЯХ, а не масштаб-множитель.
+## Set the SIZE IN PIXELS on the sprite rather than a scale multiplier.
 ##
-## Раньше ауры задавали scale = 0.45…1.6 при текстуре 4×4 px: значок
-## получался 2–6 пикселей, то есть «точка, которая плавает». Масштаб обязан
-## считаться от размера текстуры, иначе один и тот же код даёт разный
-## результат при смене белой текстуры.
+## Before, auras set scale = 0.45…1.6 on a 4×4 px texture: the icon
+## came out 2–6 pixels, that is "a dot that floats". The scale must
+## be computed from the texture size, otherwise the same code gives a different
+## result when the white texture changes.
 static func fit_px(s: Sprite2D, w: float, h: float) -> void:
 	if s == null or s.texture == null:
 		return
@@ -118,19 +118,19 @@ static func fit_px(s: Sprite2D, w: float, h: float) -> void:
 	s.scale = Vector2(maxf(1.0, w) / maxf(1.0, ts.x), maxf(1.0, h) / maxf(1.0, ts.y))
 
 
-## Размер спрайта в пикселях (для тестов и для позиционирования эффектов).
+## Sprite size in pixels (for tests and for positioning effects).
 static func sprite_px(s: Sprite2D) -> Vector2:
 	if s == null or s.texture == null:
 		return Vector2.ZERO
 	return s.texture.get_size() * s.scale
 
-## Публичный доступ к цвету сферы: им пользуются аuras и зоны, которые
-## подкрашиваются по стихии (сопротивление огню — оранжевое, холоду — голубое).
+## Public access to the sphere colour: used by the auras and zones that
+## are tinted by element (fire resistance — orange, cold — light blue).
 static func sphere_color(sphere: String) -> Color:
 	return _sphere_color(sphere)
 
 
-## Вспомогательный шейдер по ключу (ring/glow/wall) — тоже компилируется один раз.
+## A helper shader by key (ring/glow/wall) — also compiled once.
 static func aux_shader(key: String, code: String) -> Shader:
 	if _aux_shader_cache.has(key):
 		var cached: Shader = _aux_shader_cache[key]
@@ -145,21 +145,21 @@ static func _scene() -> Node:
 	return Engine.get_main_loop().current_scene as Node
 
 
-## Твин эффекта, который останавливается вместе с миром.
+## The effect Tween that stops together with the world.
 ##
-## По умолчанию режим паузы у Tween — BOUND: твин замирает только если замер
-## узел-владелец. Здесь владелец — корень сцены (Game) с PROCESS_MODE_ALWAYS,
-## поэтому вспышки, телеграфы и искры продолжали играть на тактической паузе.
-## STOP останавливает твин по SceneTree.paused независимо от владельца.
+## By default a Tween pause mode is BOUND: the tween freezes only if the owner
+## node is paused. Here the owner is the scene root (Game) with PROCESS_MODE_ALWAYS,
+## which is why flashes, telegraphs and sparks kept playing on tactical pause.
+## STOP stops the tween by SceneTree.paused regardless of the owner.
 static func world_tween(scene: Node) -> Tween:
 	var tw := scene.create_tween()
 	tw.set_pause_mode(Tween.TWEEN_PAUSE_STOP)
 	return tw
 
 
-# --- Снаряд ---------------------------------------------------------------
+# --- Projectile ---------------------------------------------------------------
 
-## Создать спрайт снаряда заклинания. Материал свой (свой time), шейдер общий.
+## Create a spell projectile sprite. The material is own (own time), the shader is shared.
 static func make_projectile(spell_name: String) -> Sprite2D:
 	var sphere := SpellDB.sphere_of(spell_name)
 	var sprite := Sprite2D.new()
@@ -174,21 +174,21 @@ static func make_projectile(spell_name: String) -> Sprite2D:
 	return sprite
 
 
-## Обновить время в шейдере (каждый кадр).
+## Update the time in the shader (every frame).
 static func update_shader_time(sprite: Sprite2D, _delta: float, elapsed: float) -> void:
 	if sprite != null and sprite.material is ShaderMaterial:
 		(sprite.material as ShaderMaterial).set_shader_parameter("time", elapsed)
 
 
-# --- Каст -----------------------------------------------------------------
+# --- Cast -----------------------------------------------------------------
 
-## Вспышка при начале каста (кольцо, растущее наружу).
+## Flash at the start of a cast (a ring growing outwards).
 static func cast_flash(pos: Vector2, sphere: String) -> void:
 	var scene := _scene()
 	if scene == null:
 		return
-	# Свет на касте: без него вспышка просто яркая картинка, а не источник.
-	# Узел создаётся в сцене, чтобы попасть в y-сортировку вместе с эффектом.
+	# Light on a cast: without it the flash is just a bright picture, not a source.
+	# The node is created in the scene so it joins y-sorting together with the effect.
 	var holder := Node2D.new()
 	holder.position = pos
 	scene.add_child(holder)
@@ -213,8 +213,8 @@ static func cast_flash(pos: Vector2, sphere: String) -> void:
 	tw.chain().tween_callback(flash.queue_free)
 
 
-## Телеграф подготовки заклинания: кольцо, сжимающееся к моменту каста.
-## Показывается cast_time секунд — игрок видит, когда заклинание сорвётся.
+## Preparation telegraph of a spell: a ring shrinking towards the cast moment.
+## Shown for cast_time seconds — the player sees when the spell will go off.
 static func cast_telegraph(pos: Vector2, sphere: String, cast_time: float) -> void:
 	var scene := _scene()
 	if scene == null:
@@ -237,9 +237,9 @@ static func cast_telegraph(pos: Vector2, sphere: String, cast_time: float) -> vo
 	tw.chain().tween_callback(ring.queue_free)
 
 
-## Аура вокруг юнита: бафф (тёплая) или дебафф (фиолетовая).
-## Одноразовый всплеск на 0.45 с. Долгие эффекты (щит, Protection_from_*, Haste)
-## держатся минутами, поэтому для них нужен SpellAura — см. spawn_aura().
+## Aura around a unit: buff (warm) or debuff (purple).
+## A one-off burst for 0.45 s. Long effects (shield, Protection_from_*, Haste)
+## last for minutes, so they need SpellAura — see spawn_aura().
 static func aura_ring(unit: Node2D, sphere: String, kind: String) -> void:
 	if not is_instance_valid(unit):
 		return
@@ -268,9 +268,9 @@ static func aura_ring(unit: Node2D, sphere: String, kind: String) -> void:
 		tw.chain().tween_callback(p.queue_free)
 
 
-# --- Попадание ------------------------------------------------------------
+# --- Hit --------------------------------------------------------------------
 
-## Взрыв при попадании: ядро + разлетающиеся искры.
+## Explosion on hit: a core + scattering sparks.
 static func impact_burst(pos: Vector2, sphere: String, is_aoe: bool) -> void:
 	var scene := _scene()
 	if scene != null:
@@ -279,8 +279,8 @@ static func impact_burst(pos: Vector2, sphere: String, is_aoe: bool) -> void:
 		scene.add_child(light_holder)
 		SpellLighting.burst_light(light_holder, _sphere_color(sphere),
 			90.0 if is_aoe else 52.0, 0.45)
-		# ВТОРОЙ СЛОЙ: частицы дают то, чего не может статичный шейдер —
-		# стохастичную детализацию и историю движения.
+		# SECOND LAYER: particles give what a static shader cannot —
+		# stochastic detail and a history of motion.
 		if is_aoe:
 			SpellParticles.aoe_debris(scene, pos, _sphere_color(sphere))
 		else:
@@ -307,7 +307,7 @@ static func impact_burst(pos: Vector2, sphere: String, is_aoe: bool) -> void:
 		tw.chain().tween_callback(p.queue_free)
 
 
-## Свет (Astral, self): мягкое свечение вокруг героя.
+## Light (Astral, self): a soft glow around the hero.
 static func spawn_light(pos: Vector2, life: float) -> void:
 	var scene := _scene()
 	if scene == null:
@@ -330,32 +330,32 @@ static func spawn_light(pos: Vector2, life: float) -> void:
 	tw.tween_callback(glow.queue_free)
 
 
-## Молния между двумя точками (призматическое сияние, цепные заклинания).
-## Раньше для «многоцелевого» заклинания был только одиночный снаряд, поэтому
-## рисовать веер было нечем.
-## Радуга для призматического сияния: каждой цели — свой цвет.
-## Раньше все лучи красились в цвет СФЕРЫ (Air — светло-голубой), то есть
-## «призматическое» сияние выглядело как несколько одинаковых голубых молний.
+## Lightning between two points (prismatic radiance, chain spells).
+## Before, a "multi-target" spell had only a single projectile, so there was
+## nothing to draw a fan with.
+## A rainbow for prismatic radiance: every target gets its own colour.
+## Before, all beams were painted in the SPHERE colour (Air — light blue), that is
+## "prismatic" radiance looked like several identical blue lightning bolts.
 const RAINBOW := [
-	Color(1.0, 0.22, 0.22),   # красный
-	Color(1.0, 0.62, 0.15),   # оранжевый
-	Color(1.0, 0.95, 0.25),   # жёлтый
-	Color(0.35, 0.95, 0.35),  # зелёный
-	Color(0.25, 0.7, 1.0),    # голубой
-	Color(0.55, 0.4, 1.0),    # синий
-	Color(0.95, 0.4, 0.95),   # фиолетовый
+	Color(1.0, 0.22, 0.22),   # red
+	Color(1.0, 0.62, 0.15),   # orange
+	Color(1.0, 0.95, 0.25),   # yellow
+	Color(0.35, 0.95, 0.35),  # green
+	Color(0.25, 0.7, 1.0),    # cyan
+	Color(0.55, 0.4, 1.0),    # blue
+	Color(0.95, 0.4, 0.95),   # violet
 ]
 
 
-## Цвет радуги по индексу цели (с циклом по кругу).
+## Rainbow colour by target index (cycling around).
 static func rainbow_color(index: int) -> Color:
 	if RAINBOW.is_empty():
 		return Color.WHITE
 	return RAINBOW[posmod(index, RAINBOW.size())]
 
 
-## Молния между двумя точками. color_override — задать свой цвет (радуга);
-## если не задан (alpha < 0), берётся цвет сферы.
+## Lightning between two points. color_override — set a custom colour (rainbow);
+## if it is not set (alpha < 0), the sphere colour is taken.
 static func chain_arc(from: Vector2, to: Vector2, sphere: String,
 		color_override: Color = Color(-1.0, -1.0, -1.0, 0.0)) -> void:
 	var scene := _scene()
@@ -366,20 +366,20 @@ static func chain_arc(from: Vector2, to: Vector2, sphere: String,
 	var length := d.length()
 	if length < 1.0:
 		return
-	# Ломаная из 5 звеньев. Амплитуда РАСТЁТ к середине и падает к концам:
-	# раньше у всех внутренних точек был одинаковый разброс, и зигзаг читался
-	# как периодическая пила — глаз ловит повтор за ~200 мс. Конус даёт
-	# «вспышку» в середине и чистые концы у излучателя и у цели.
+	# A polyline of 5 segments. The amplitude GROWS towards the middle and falls towards the ends:
+	# before, all inner points had the same spread, and the zigzag read
+	# as a periodic saw — the eye catches the repeat in ~200 ms. The cone gives
+	# a "flash" in the middle and clean ends at the emitter and at the target.
 	var points: Array[Vector2] = []
 	var steps := 5
 	var normal := Vector2(-d.y, d.x).normalized()
 	for i in range(steps + 1):
 		var t := float(i) / float(steps)
-		# Треугольная огибающая: 0 на концах, 1 в середине.
+		# Triangular envelope: 0 at the ends, 1 in the middle.
 		var env := 1.0 - absf(t * 2.0 - 1.0)
 		var jitter := 0.0 if (i == 0 or i == steps) else length * 0.10 * env
 		points.append(from + d * t + normal * randf_range(-jitter, jitter))
-	# Слой свечения под основной разряд — иначе тонкая линия почти не видна.
+	# A glow layer under the main discharge — otherwise the thin line is barely visible.
 	for pass_index in range(2):
 		var line := Line2D.new()
 		line.z_index = 9
@@ -390,7 +390,7 @@ static func chain_arc(from: Vector2, to: Vector2, sphere: String,
 		line.joint_mode = Line2D.LINE_JOINT_ROUND
 		if pass_index == 0:
 			line.default_color = Color(color.r, color.g, color.b, 0.3)
-		# В Godot 4 у Line2D нет метода add_points() — точки задаются свойством.
+		# In Godot 4 Line2D has no add_points() method — the points are set by a property.
 		line.points = points
 		scene.add_child(line)
 		var tw := world_tween(scene)
@@ -399,11 +399,11 @@ static func chain_arc(from: Vector2, to: Vector2, sphere: String,
 		tw.tween_callback(line.queue_free)
 
 
-## Короткий всплеск у НОГ: пыль/искры на земле в момент наложения баффа.
-## Раньше на касте баффа рисовалось кольцо из искр вокруг юнита И одновременно
-## появлялась постоянная аура — два эффекта в одной точке читались как «дёрнулось
-## и наложилось». Теперь для баффов с постоянной аурой кольцо заменено пылью
-## у земли: она подчёркивает, что эффект применился, и не спорит с аурой.
+## A short burst at the FEET: dust/sparks on the ground when a buff is applied.
+## Before, on a buff cast a ring of sparks was drawn around the unit AND at the same time
+## a permanent aura appeared — two effects at one point read as "it jerked
+## and applied". Now for buffs with a permanent aura the ring is replaced by dust
+## at the ground: it stresses that the effect applied and does not argue with the aura.
 static func ground_dust(unit: Node2D) -> void:
 	var scene := _scene()
 	if scene == null or not is_instance_valid(unit):
@@ -425,9 +425,9 @@ static func ground_dust(unit: Node2D) -> void:
 		tw.chain().tween_callback(p.queue_free)
 
 
-## Стена огня/земли: узел с тикающим уроном и/или блокировкой клеток.
-## Размер приходит в КЛЕТКАХ (6 × 2), а не в пикселях: раньше радиус урона,
-## ширина спрайта и блок клеток задавались тремя разными числами и не совпадали.
+## Wall of fire/earth: a node with ticking damage and/or cell blocking.
+## The size comes in CELLS (6 × 2), not in pixels: before, the damage radius,
+## the sprite width and the cell block were set by three different numbers and did not match.
 static func spawn_wall(pos: Vector2, sphere: String, owner_unit: Node2D, life: float,
 		mode: String = "damage", cells: Vector2i = SpellWall.DEFAULT_CELLS,
 		damage: int = 0) -> SpellWall:
@@ -437,22 +437,22 @@ static func spawn_wall(pos: Vector2, sphere: String, owner_unit: Node2D, life: f
 	var wall := SpellWall.new()
 	wall.position = pos
 	wall.set_mode(mode)
-	# Стиль и наличие языков пламени — по сфере. В оригинале стены РАЗНЫЕ
-	# (spells.txt): огонь непрерывно жжёт, земля — непроходимая преграда.
-	# Огонь получает третий слой поверх юнитов, земля остаётся плоской.
+	# Style and the presence of flame tongues — by sphere. In the original the walls are DIFFERENT
+	# (spells.txt): fire burns continuously, earth — an impassable barrier.
+	# Fire gets a third layer over the units, earth stays flat.
 	wall.flame = sphere == "Fire"
 	wall.style = "wall_fire" if wall.flame else "wall_earth"
-	# ВАЖНО: configure ДО add_child. `_ready()` выполняется ВНУТРИ add_child и
-	# строит квады/очаги по `cells`; раньше он видел дефолт 6×2, и вертикальная
-	# стена 2×6 рисовалась горизонтальной, а зона 3×3 — полосой 6×2.
+	# IMPORTANT: configure BEFORE add_child. `_ready()` runs INSIDE add_child and
+	# builds the quads/hearths from `cells`; before, it saw the default 6×2, and a vertical
+	# wall 2×6 was drawn horizontal, while a 3×3 zone was drawn as a 6×2 stripe.
 	wall.configure(damage, cells, sphere, owner_unit, life)
 	scene.add_child(wall)
 	return wall
 
 
-## Зона заклинания общего типа: метель, ядовитое облако.
-## Стиль выбирает отрисовку ("hail" — падающие осколки, "cloud" — туман),
-## mode "damage" — тикает урон, "block" — непроходимая преграда.
+## A spell zone of a generic kind: blizzard, poisonous cloud.
+## The style picks the drawing ("hail" — falling shards, "cloud" — mist),
+## mode "damage" — ticks damage, "block" — an impassable barrier.
 static func spawn_zone(pos: Vector2, style: String, sphere: String, owner_unit: Node2D,
 		life: float, cells: Vector2i, damage: int, tick_interval: float = 0.5) -> SpellZone:
 	var scene := _scene()
@@ -463,13 +463,13 @@ static func spawn_zone(pos: Vector2, style: String, sphere: String, owner_unit: 
 	zone.style = style
 	zone.mode = "damage"
 	zone.tick_interval = maxf(0.1, tick_interval)
-	# configure ДО add_child: _ready() строит квады по cells (см. spawn_wall).
+	# configure BEFORE add_child: _ready() builds the quads from cells (see spawn_wall).
 	zone.configure(damage, cells, sphere, owner_unit, life)
 	scene.add_child(zone)
 	return zone
 
 
-## Падающий ледяной осколок метели.
+## A falling ice shard of the blizzard.
 static func hail_shard(pos: Vector2) -> void:
 	var scene := _scene()
 	if scene == null:
@@ -489,30 +489,30 @@ static func hail_shard(pos: Vector2) -> void:
 	tw.chain().tween_callback(s.queue_free)
 
 
-## Материал зоны/осколка. Кэш берётся общий (aux_shader), иначе на каждый
-## осколок компилировался бы новый Shader.
+## Material of a zone/shard. The cache is shared (aux_shader), otherwise for every
+## shard a new Shader would be compiled.
 static func zone_material(style: String, color: Color) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()
-	# render_mode подставляется по стилю: ауры над юнитом самосветящиеся
-	# (unshaded + additive), наземные зоны смешиваются с землёй.
+	# render_mode is substituted by style: auras over a unit are self-illuminated
+	# (unshaded + additive), ground zones blend with the ground.
 	mat.shader = aux_shader("zone_" + style, _zone_shader_with_mode(style))
 	mat.set_shader_parameter("color", color)
 	mat.set_shader_parameter("time", 0.0)
 	return mat
 
 
-## Цвет огненной стены. Игрок попросил РОВНЫЙ красно-оранжевый: сфера Fire
-## даёт (1.0, 0.4, 0.1), и на 6×2 поле с HDR это читалось как рыжая плёнка.
-## Языки пламени держат один hue, а яркость даёт ядро, а не смена оттенка.
+## The colour of the fire wall. The player asked for an EVEN red-orange: the Fire sphere
+## gives (1.0, 0.4, 0.1), and on a 6×2 field with HDR it read as a ginger film.
+## The flame tongues keep one hue, and the brightness comes from the core, not from a hue shift.
 const FLAME_WALL_COLOR := Color(1.0, 0.30, 0.06)
-## Ядовитое облако горит ЗЕЛЁНЫМ пламенем (просьба игрока 28.10): туман —
-## зелёный, и языки огня должны быть того же цвета, а не оранжевые.
+## The poisonous cloud burns with a GREEN flame (player request 28.10): the mist is
+## green, and the flame tongues must be the same colour, not orange.
 const POISON_FLAME_COLOR := Color(0.40, 0.95, 0.28)
 
 
-## Материал ОДНОГО очага огня: у стены теперь своё пламя в каждой клетке,
-## а не одна растянутая плёнка на весь прямоугольник (жалоба игрока 28.10).
-## seed меняет форму языка от клетки к клетке.
+## Material of ONE fire hearth: the wall now has its own flame in every cell
+## instead of one stretched film over the whole rectangle (player complaint 28.10).
+## seed changes the tongue shape from cell to cell.
 static func flame_wall_material(color: Color, seed: float = 0.0,
 		rise: float = 1.4) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()
@@ -596,9 +596,9 @@ void fragment() {
 }"""
 
 
-## Каменная стена: валун в клетке. Раньше стена земли рисовалась тем же
-## «огненным» шейдером без пламени — игрок видел «что-то горит и сетку».
-## Теперь это камень: скруглённая глыба, светлый верх, тёмный низ, скол.
+## Stone wall: a boulder in the cell. Before, the earth wall was drawn by the same
+## "fiery" shader without a flame — the player saw "something burns and a grid".
+## Now it is stone: a rounded block, light top, dark bottom, a chip.
 static func stone_wall_material(seed: float = 0.0) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()
 	mat.shader = aux_shader("stone_wall", _stone_wall_shader())
@@ -662,17 +662,17 @@ void fragment() {
 }"""
 
 
-## Наземная зона заклинания. Один шейдер на стену/метель/облако.
+## Ground spell zone. One shader for wall/blizzard/cloud.
 ##
-## Ключевое отличие от прежнего: вся математика идёт в МИРОВЫХ координатах,
-## а не в UV. Раньше один белый квад 4x4 растягивался до 192x64 и UV
-## сжимались в 6 раз по горизонтали — отсюда «глюк на земле» и ощущение,
-## что эффект «не в клетках». Мировая сетка даёт одинаковый масштаб зерна
-## у 3x3 облака и 6x2 стены, и привязывает эффект к клеткам мира.
+## The key difference from before: all the maths runs in WORLD coordinates
+## rather than in UV. Before, one white quad 4x4 was stretched to 192x64 and the UVs
+## were squeezed 6 times horizontally — hence the "glitch on the ground" and the feeling
+## that the effect is "not in the cells". The world grid gives the same grain scale
+## for a 3x3 cloud and a 6x2 wall, and ties the effect to the world cells.
 ##
-## nb — битовая маска соседей: 1=N 2=E 4=S 8=W 16=NE 32=SE 64=SW 128=NW.
-## Контур рисуется ТОЛЬКО по сторонам, где соседа нет, поэтому 12 клеток
-## читаются как один прямоугольник, а не как 12 квадратиков.
+## nb — a bitmask of neighbours: 1=N 2=E 4=S 8=W 16=NE 32=SE 64=SW 128=NW.
+## The outline is drawn ONLY on the sides where there is no neighbour, so 12 cells
+## read as one rectangle rather than as 12 little squares.
 static func _ground_shader() -> String:
 	return """shader_type canvas_item;
 render_mode blend_mix;
@@ -831,8 +831,8 @@ void fragment() {
 }"""
 
 
-## Цвет заливки по СТИЛЮ, а не по сфере заклинания: яд — это Water, и по
-## цвету сферы он был синим. Теперь стиль задаёт палитру.
+## Fill colour by STYLE rather than by spell sphere: poison is Water, and by
+## the sphere colour it was blue. Now the style sets the palette.
 const STYLE_COLORS := {
 	"wall_fire": Color(1.0, 0.36, 0.10),
 	"wall_earth": Color(0.52, 0.46, 0.36),
@@ -840,9 +840,9 @@ const STYLE_COLORS := {
 	"cloud": Color(0.22, 0.58, 0.16),
 }
 
-## Плотность заливки по стилю. Огонь/метель — почти прозрачная подложка (всё
-## читаемое даёт второй слой: языки пламени и осколки), яд — плотнее, потому
-## что туман и есть эффект.
+## Fill density by style. Fire/blizzard — an almost transparent underlay (everything
+## readable comes from the second layer: flame tongues and shards), poison — denser, because
+## the mist IS the effect.
 const STYLE_FILL := {
 	"wall_fire": 0.0,
 	"wall_earth": 0.20,
@@ -850,7 +850,7 @@ const STYLE_FILL := {
 	"cloud": 0.50,
 }
 
-## Яркость заливки: огонь — выжженная тёмная земля (0.35), туман — светлый.
+## Fill brightness: fire — scorched dark ground (0.35), mist — light.
 const STYLE_SHADE := {
 	"wall_fire": 0.35,
 	"wall_earth": 0.70,
@@ -870,9 +870,9 @@ static func style_fill(style: String) -> float:
 static func style_color(style: String) -> Color:
 	return STYLE_COLORS.get(style, Color(1.0, 0.4, 0.1))
 
-## Материал наземной зоны. Один шейдер на все стили (стиль — uniform int),
-## потому что логика у них одна. Цвет берётся по СТИЛЮ: раньше он приходил
-## из сферы заклинания, и ядовитое облако (сфера Water) было синим.
+## Material of the ground zone. One shader for all styles (the style is a uniform int),
+## because their logic is the same. The colour is taken by STYLE: before it came
+## from the spell sphere, and the poisonous cloud (Water sphere) was blue.
 static func ground_material(sphere: String, style: String) -> ShaderMaterial:
 	if _ground_shader_cache.is_empty():
 		var sh := Shader.new()
@@ -905,19 +905,19 @@ static func wall_material(sphere: String) -> ShaderMaterial:
 	return mat
 
 
-# --- Вспышки на юните -----------------------------------------------------
+# --- Flashes on a unit ---------------------------------------------------------
 
-## Попадание по щиту: голубая вспышка. Раньше не вызывалась ни разу.
+## A hit on a shield: a light blue flash. Before it was never called once.
 static func shield_hit(unit: Node2D) -> void:
 	_flash_unit(unit, Color(0.5, 0.7, 1.0, 1.0), 0.12)
 
 
-## Вспышка получения урона.
+## Flash of taking damage.
 static func hit_flash(unit: Node2D) -> void:
 	_flash_unit(unit, Color(1.0, 0.3, 0.3, 1.0), 0.1)
 
 
-## Невидимого юнита видно полупрозрачным (для отладки и попаданий).
+## An invisible unit is visible as semi-transparent (for debugging and hits).
 static func invisible_tint(unit: Node2D, alpha: float) -> void:
 	if is_instance_valid(unit):
 		unit.modulate.a = clampf(alpha, 0.15, 1.0)
@@ -939,7 +939,7 @@ static func _flash_unit(unit: Node2D, color: Color, seconds: float) -> void:
 		anim.modulate = original
 
 
-# === Шейдеры ===
+# === Shaders ===
 
 static func _noise_prelude() -> String:
 	return """float hash21(vec2 p) {
@@ -996,9 +996,9 @@ float core(float d) {
 }
 
 """
-## Огонь. Раньше: sin(uv.x*9 + t*6) * cos(uv.y*11 - t*4) — периодичная
-## сетка, которая и читалась как «1990-е». Теперь: warped-шум, вертикальный
-## подъём, яркое ядро со значением ВЫШЕ 1.0 (нужно для bloom при hdr_2d).
+## Fire. Before: sin(uv.x*9 + t*6) * cos(uv.y*11 - t*4) — a periodic
+## grid that read as "the 1990s". Now: warped noise, vertical
+## rise, a bright core with a value ABOVE 1.0 (needed for bloom with hdr_2d).
 static func _fire_shader() -> String:
 	return """shader_type canvas_item;
 render_mode blend_add, unshaded;
@@ -1077,7 +1077,7 @@ void fragment() {
 }"""
 
 
-## Лёд: гребневая текстура даёт острые грани, которых не даёт fbm.
+## Ice: a ridged texture gives sharp facets that fbm cannot.
 static func _ice_shader() -> String:
 	return """shader_type canvas_item;
 render_mode blend_add, unshaded;
@@ -1153,8 +1153,8 @@ void fragment() {
 }"""
 
 
-## Молния: ветви из ridged-шума + тонкий горячий канал. Высокий контраст,
-## узкая полоса — иначе выглядит как светящееся пятно, а не разряд.
+## Lightning: branches from ridged noise + a thin hot channel. High contrast,
+## a narrow band — otherwise it looks like a glowing spot rather than a discharge.
 static func _lightning_shader() -> String:
 	return """shader_type canvas_item;
 render_mode blend_add, unshaded;
@@ -1232,8 +1232,8 @@ void fragment() {
 }"""
 
 
-## Камень: трещины. Ridged-шум с порогом даёт тонкие ветвящиеся трещины,
-## которых не даёт fbm (у него слишком мягкие границы).
+## Stone: cracks. Ridged noise with a threshold gives thin branching cracks
+## that fbm cannot (its borders are too soft).
 static func _stone_shader() -> String:
 	return """shader_type canvas_item;
 render_mode blend_add, unshaded;
@@ -1309,7 +1309,7 @@ void fragment() {
 }"""
 
 
-## Астрал: туманность из warped-шума + настоящие звёзды из хеша.
+## Astral: a nebula from warped noise + real stars from a hash.
 static func _astral_shader() -> String:
 	return """shader_type canvas_item;
 render_mode blend_add, unshaded;
@@ -1389,7 +1389,7 @@ void fragment() {
 }"""
 
 
-## Кольцо ауры: мягкий ободок с шумовым разрывом, ярче к центру кольца.
+## Aura ring: a soft rim with a noise break, brighter towards the ring centre.
 static func _ring_shader() -> String:
 	return """shader_type canvas_item;
 render_mode blend_add, unshaded;
@@ -1466,8 +1466,8 @@ void fragment() {
 }"""
 
 
-## Свечение: радиальное с ярким ядром и HDR-запасом. Без значения выше 1.0
-## это просто «яркая картинка», а не свечение — glow нужен hdr_2d.
+## Glow: radial with a bright core and HDR headroom. Without a value above 1.0
+## it is just "a bright picture", not a glow — glow needs hdr_2d.
 static func _glow_shader() -> String:
 	return """shader_type canvas_item;
 render_mode blend_add, unshaded;
@@ -1558,23 +1558,23 @@ void fragment() {
 }"""
 
 
-## Шейдеры зон заклинания. Стиль выбирается строкой, потому что зон три, а
-## логика у них одна (прямоугольник + необязательная блокировка клеток).
-## Код шейдера с подставленным render_mode.
+## Spell zone shaders. The style is chosen by a string, because there are three zones and
+## their logic is the same (a rectangle + optional cell blocking).
+## The shader code with render_mode substituted.
 static func _zone_shader_with_mode(style: String) -> String:
 	var mode := _zone_render_mode(style)
 	var code := _zone_shader(style)
 	if mode.is_empty():
 		return code
-	# render_mode ОБЯЗАН идти после shader_type. Раньше он подставлялся
-	# префиксом перед «shader_type canvas_item;» — такой шейдер не применялся
-	# вовсе, и материал рисовал сырую белую текстуру 4×4. Отсюда «ауры-точки»
-	# 2–6 px в прошлой версии и «белый квадрат на всю фигуру» после того, как
-	# спрайты стали нормального размера.
+	# render_mode MUST come after shader_type. Before it was substituted
+	# as a prefix before "shader_type canvas_item;" — such a shader did not apply
+	# at all, and the material drew a raw white 4×4 texture. Hence the "aura dots"
+	# of 2–6 px in the previous version and the "white square over the whole figure" after
+	# the sprites became normal size.
 	#
-	# Вставляем после объявления типа, а не по индексу строки: тексты шейдеров
-	# лежат в тройных кавычках, и перевод строки в файле может быть как \n, так
-	# и \r\n — сравнение с "\n" ломалось на CRLF и давало ДВА shader_type.
+	# We insert it after the type declaration rather than by line index: the shader texts
+	# live in triple quotes, and the line break in the file may be either \n or
+	# \r\n — comparing with "\n" broke on CRLF and gave TWO shader_type.
 	const DECL := "shader_type canvas_item;"
 	var at := code.find(DECL)
 	if at >= 0:
@@ -1582,19 +1582,19 @@ static func _zone_shader_with_mode(style: String) -> String:
 		return code.substr(0, cut) + "\n" + mode + code.substr(cut).lstrip("\r\n")
 	return DECL + "\n" + mode + code
 
-## Render mode по стилю зоны.
-## Ауры над юнитом (щит, сопротивление, ветер, крест) и огненные осколки
-## рисуются как САМОСВЕЧЕНИЕ: unshaded + additive. Раньше у них не было
-## render_mode вообще, то есть они считались освещаемыми — а источников света
-## в сцене почти нет, и ambient гасил их на ~12 %, а на светлой траве щит с
-## альфой 0.22 пропадал совсем.
-## Наземные зоны (стена/метель/облако) остаются blend_mix: они лежат на земле
-## и должны смешиваться с ней, а не выжигать.
+## Render mode by zone style.
+## Auras over a unit (shield, resistance, wind, cross) and fire shards
+## are drawn as SELF-ILLUMINATION: unshaded + additive. Before they had no
+## render_mode at all, that is they counted as lit — and there are almost no light
+## sources in the scene, so ambient dimmed them by ~12 %, and on light grass a shield with
+## alpha 0.22 disappeared entirely.
+## Ground zones (wall/blizzard/cloud) stay blend_mix: they lie on the ground
+## and must blend with it rather than burn through.
 static func _zone_render_mode(style: String) -> String:
 	match style:
-		# Ветерок защиты смешивается ОБЫЧНЫМ альфа-блендингом: цвет школы
-		# должен оставаться цветом, а аддитивные кольца четырёх школ
-		# складывались в белое пятно.
+		# The protection breeze blends with NORMAL alpha blending: the school colour
+		# must stay a colour, while additive rings of four schools
+		# added up into a white spot.
 		"aura_breeze":
 			return "render_mode blend_mix, unshaded;\n"
 		"aura_shield", "aura_wind", "aura_bless", "heal_cross", "shard":
@@ -1701,10 +1701,10 @@ void fragment() {
 	COLOR = vec4(col * m * 1.5, 1.0);
 }"""
 		"aura_breeze":
-			# Защита от стихии: ЛЁГКИЙ ВЕТЕРОК КОЛЬЦОМ вокруг корпуса в цвете
-			# школы. Раньше это был значок 2–4 px над головой, который к тому же
-			# покачивался, и все четыре защиты выглядели одинаковой точкой.
-			# Движение у школ РАЗНОЕ — это второй канал различия кроме цвета.
+			# Element protection: a LIGHT BREEZE AS A RING around the body in the school
+			# colour. Before it was a 2–4 px icon above the head that also
+			# swayed, and all four protections looked like the same dot.
+			# The motion of the schools is DIFFERENT — that is the second channel of difference besides colour.
 			return """shader_type canvas_item;
 uniform vec4 color : source_color = vec4(1.0, 0.18, 0.12, 1.0);
 uniform float time : hint_range(0.0, 100.0) = 0.0;
@@ -1754,9 +1754,9 @@ void fragment() {
 	COLOR = vec4(col, a);
 }"""
 		"aura_bless":
-			# Благословение: маленькая тёплая аура НАД ГОЛОВОЙ. Раньше у Bless
-			# вообще не было постоянного визуала — заклинание накладывалось, а
-			# игрок этого не видел (жалоба 27.10).
+			# Blessing: a small warm aura ABOVE THE HEAD. Before, Bless had
+			# no permanent visual at all — the spell was applied and
+			# the player did not see it (complaint 27.10).
 			return """shader_type canvas_item;
 uniform vec4 color : source_color = vec4(1.0, 0.86, 0.38, 1.0);
 uniform float time : hint_range(0.0, 100.0) = 0.0;
