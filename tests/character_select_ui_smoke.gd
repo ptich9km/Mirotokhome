@@ -24,6 +24,10 @@ func _init() -> void:
 		await process_frame
 	await _inspect(cs, Vector2i(1280, 800), "1280x800")
 	await _inspect(cs, Vector2i(1280, 600), "1280x600")
+	cs._show_step(2)
+	await process_frame
+	await _inspect(cs, Vector2i(1280, 800), "step2 1280x800")
+	await _inspect(cs, Vector2i(1280, 600), "step2 1280x600")
 	_structure(cs)
 	_report()
 
@@ -132,13 +136,20 @@ func _structure(cs) -> void:
 	var start_btn: Button = cs.get("_start_btn")
 	_check(start_btn != null, "кнопка «В ПУТЬ!» на месте")
 	_check(start_btn != null and start_btn.custom_minimum_size.x >= 200.0, "кнопка старта не мелкая")
-	var aff: Array[Button] = cs.get("_affinity_buttons")
-	_check(aff.size() == 10, "кнопок склонности 10 (%d)" % aff.size())
+	# Step 2: four primary direction buttons, wired for keyboard/gamepad, and
+	# one auxiliary button that can never become the main direction.
+	var dirs: Dictionary = cs.get("_dir_buttons")
+	_check(dirs.size() == 4, "кнопок основных направлений 4 (%d)" % dirs.size())
 	var wired := 0
-	for b in aff:
-		if b.focus_neighbor_left.is_empty() == false and b.focus_neighbor_right.is_empty() == false:
+	for skill in dirs:
+		var b: Button = dirs[skill]
+		if is_instance_valid(b) and (not b.focus_neighbor_top.is_empty()
+				or not b.focus_neighbor_bottom.is_empty()):
 			wired += 1
-	_check(wired == aff.size(), "у кнопок склонности прописаны соседи фокуса (%d из %d)" % [wired, aff.size()])
+	_check(wired == dirs.size(), "у направлений прописаны соседи фокуса (%d из %d)"
+		% [wired, dirs.size()])
+	_check(cs.get("_aux_button") != null, "кнопка вспомогательного умения на месте")
+	_check(cs.get("_detail_skill") != "", "описание направления выбрано")
 
 ## Обойти всё дерево.
 func _walk(node: Node) -> Array:

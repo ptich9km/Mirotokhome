@@ -103,9 +103,14 @@ func _test_world_roundtrip() -> void:
 		"regions[].area_px остался Vector2")
 	var sample_city: String = str(st.cities.keys()[0])
 	_check(st2.cities[sample_city].get("pos") is Vector2, "cities[].pos остался Vector2")
-	var sample_army: String = str(st.armies.keys()[0])
-	_check(st2.armies[sample_army].get("pos") is Vector2, "armies[].pos остался Vector2")
-	_check(st2.armies[sample_army].get("target") is Vector2, "armies[].target остался Vector2")
+	# Armies may have fought to the last man during the 37 ticks; sample only
+	# when at least one survived (the old `keys()[0]` crashed on an empty map).
+	if st.armies.is_empty():
+		_check(true, "armies пуст после симуляции — проверка координат пропущена")
+	else:
+		var sample_army: String = str(st.armies.keys()[0])
+		_check(st2.armies[sample_army].get("pos") is Vector2, "armies[].pos остался Vector2")
+		_check(st2.armies[sample_army].get("target") is Vector2, "armies[].target остался Vector2")
 	_check(st2.factions[str(st.factions.keys()[0])].get("color") is Color,
 		"factions[].color остался Color")
 

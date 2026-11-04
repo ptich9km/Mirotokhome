@@ -287,7 +287,7 @@ func _combat_target_impl() -> Node2D:
 	if not is_hostile_to_hero():
 		return null
 	var player = get_tree().get_first_node_in_group("player")
-	if is_instance_valid(player):
+	if is_instance_valid(player) and not Game.hero_dead:
 		var dp := Game.units_range(self, player)
 		var committed := state == "chase" or state == "attack" or state == "flee"
 		var lim := deaggro_radius if committed else aggro_radius

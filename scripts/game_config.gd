@@ -71,6 +71,18 @@ const DEFAULTS := {
 	"progression": {
 		"unit_exp_base": 100,
 	},
+	"skill_stats": {
+		# The chosen direction (primary skill) and the auxiliary skill give
+		# survivability on top of the attributes: life for both classes, mana
+		# for a mage, defence for a warrior. The auxiliary counts at 60% of its
+		# level (player decision 04.11), so 20 + 10 reads as 26 development
+		# points, not 30. Damage is NOT added here: it already scales with the
+		# weapon/sphere skill in the damage formulas.
+		"hp_per_point": 0.5,
+		"mana_per_point": 0.5,
+		"defense_per_point": 0.2,
+		"aux_factor": 0.6,
+	},
 	"npc": {
 		# Радиус агро городской стражи на Серых. 190 -> 133 (-30%):
 		# стража стоит по краям города и не должна хватать Серых по площади.

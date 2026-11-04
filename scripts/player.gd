@@ -1,6 +1,10 @@
 extends CharacterBody2D
 class_name Player
 
+## Emitted once on a lethal hit. The game owns the death screen and the freeze;
+## the actor only latches its own state.
+signal died
+
 # Первичные характеристики (оригинальная система Allods 2)
 @export var body: int = 10
 @export var mind: int = 10
@@ -32,6 +36,9 @@ var max_mana: int = 50
 var current_hp: int
 var current_mana: int
 var state: String = "idle"
+## Latched death: unlike `state`, nothing (stop_movement, a panel, a load-time
+## state reset) may clear it by accident. Only reset_death_state() does.
+var is_dead: bool = false
 var attack_target: Node2D = null
 var attack_cooldown: float = 0.0
 var _impact_timer := -1.0            # отсчёт до кадра удара (замах); <0 = нет удара в полёте
@@ -155,6 +162,9 @@ func set_skill_field(field: String, v: int) -> void:
 	_set_skill_value(name, v)
 	if v > 0:
 		experience[name] = maxi(int(experience.get(name, 0)), skill_to_exp(v))
+	# A primary/aux skill level raises life (and mana/defence): refresh the
+	# derived maxima so the school purchase is felt immediately.
+	_recall_derived()
 
 ## Начислить опыт навыку; если уровень из опыта вырос — поднять навык.
 func gain_skill_exp(skill_name: String, amount: int) -> void:
@@ -166,6 +176,7 @@ func gain_skill_exp(skill_name: String, amount: int) -> void:
 	if lvl > skill_value(skill_name):
 		_set_skill_value(skill_name, lvl)
 		print("Навык %s повышен до %d!" % [skill_name, lvl])
+		_recall_derived()
 
 ## Навык из нанесённого урона (по типу оружия героя). "" — опыт не идёт.
 func _weapon_skill_name() -> String:
@@ -283,6 +294,17 @@ func _ready():
 		_levels_from_experience()
 	else:
 		_init_experience()
+	# The final skill values decide the skill-derived maxima: an old save may
+	# carry a max computed before this rule, so recompute (no delta — loading
+	# must not heal by a formula change).
+	max_hp = _calc_max_hp()
+	max_mana = _calc_max_mana()
+	current_hp = clampi(current_hp, 1, maxi(1, max_hp))
+	current_mana = clampi(current_mana, 0, maxi(1, max_mana))
+	if health_bar != null and is_instance_valid(health_bar):
+		health_bar.max_hp = maxi(1, max_hp)
+		health_bar.max_mana = maxi(1, max_mana)
+		health_bar.update_bars(current_hp, current_mana)
 
 
 ## Применить Game.hero_save (загрузка сейва) вместо стартового набора.
@@ -383,6 +405,16 @@ func reload_hero_state() -> void:
 			print("Player: надет предмет чужого класса в слоте %s: %s" % [slot, str(equipped[slot])])
 	if not experience.is_empty():
 		_levels_from_experience()
+	if Game.hero_primary_skill == "":
+		Game.hero_primary_skill = _infer_primary_skill()
+	if Game.hero_aux_skill == "":
+		Game.hero_aux_skill = "astral" if Game.hero_class == "mage" else "shooting"
+	# The restored skill levels decide the skill-derived maxima (a slot saved
+	# before this rule carries an older max).
+	max_hp = _calc_max_hp()
+	max_mana = _calc_max_mana()
+	current_hp = clampi(current_hp, 1, maxi(1, max_hp))
+	current_mana = clampi(current_mana, 0, maxi(1, max_mana))
 	move_speed = _calc_speed()
 	# Набор анимации зависит от класса, пола и расы — спрайт обязан
 	# переключиться на нового героя.
@@ -403,6 +435,24 @@ func reload_hero_state() -> void:
 		health_bar.update_bars(current_hp, current_mana)
 	if has_method("refresh_animation"):
 		refresh_animation()
+	reset_death_state()
+
+## Undo the death latch after a slot load / a new game. The actor must be
+## visible and idle BEFORE the world is rebuilt; otherwise a loaded hero stayed
+## a frozen corpse (the old code never reset `state`).
+func reset_death_state() -> void:
+	is_dead = false
+	state = "idle"
+	velocity = Vector2.ZERO
+	_path.clear()
+	visible = true
+	if health_bar != null and is_instance_valid(health_bar):
+		health_bar.visible = true
+	_cancel_casting()
+	Game.hero_dead = false
+	Game.player_target = global_position
+	if _anim != null:
+		_anim.play(UnitAnim.Anim.IDLE)
 
 ## Начальный опыт из стартовых навыков (skill -> exp, как у разработчиков:
 ## exp = (1.1^skill - 1) * 1000). Дальше навык растёт от получаемого опыта.
@@ -439,7 +489,29 @@ func _apply_hero_choice() -> void:
 	weapon = str(st.get("weapon", weapon))
 	has_shield = bool(st.get("shield", false))
 	armor_kind = str(st.get("armor", armor_kind))
-	# Маг: стартовые заклинания уже в abilities (fireball/heal/lightning)
+	# Old saves carry no primary/aux names: infer them so the skill-derived
+	# life/mana/defence start working without a schema migration.
+	if Game.hero_primary_skill == "":
+		Game.hero_primary_skill = _infer_primary_skill()
+	if Game.hero_aux_skill == "":
+		Game.hero_aux_skill = "astral" if Game.hero_class == "mage" else "shooting"
+
+## Best class direction from the current skills — the fallback for old saves.
+func _infer_primary_skill() -> String:
+	var candidates: Array
+	if Game.hero_class == "mage":
+		candidates = [["fire", fire_skill], ["water", water_skill],
+			["air", air_skill], ["earth", earth_skill]]
+	else:
+		candidates = [["blade", blade_skill], ["axe", axe_skill],
+			["bludgeon", bludgeon_skill], ["pike", pike_skill]]
+	var best := ""
+	var best_v := -1
+	for c in candidates:
+		if int(c[1]) > best_v:
+			best_v = int(c[1])
+			best = str(c[0])
+	return best
 
 ## Стартовое снаряжение по классу героя (в склад — можно одеть/продать сразу).
 func _grant_starter_set() -> void:
@@ -447,24 +519,22 @@ func _grant_starter_set() -> void:
 	# "Common Iron Long Sword". Расхождение не падало с ошибкой - ItemDB.find()
 	# возвращал пустой словарь, и герой выходил в бой голым, пока вещи лежали
 	# в инвентаре. Регистр приведён к item_db.json при переводе металлов вниз.
-	var weapon_key := "Common iron Long Sword" if Game.hero_class != "mage" else "Common Wood Staff"
-	inventory.append(weapon_key)
-	if Game.hero_stats.get("shield", false):
-		inventory.append("Common iron Buckler")
+	#
+	# Starter weapon follows the chosen direction and is BRONZE (player
+	# decision 04.11): the cheap metal is the opening kit, not iron.
+	var keys := starter_items(Game.hero_class, weapon,
+		bool(Game.hero_stats.get("shield", false)), Game.hero_start_book)
+	for k in keys:
+		inventory.append(str(k))
 	# Стартовой брони НЕТ по решению игрока (01.10): герой выходит в бой в
-	# оружии и щите, у мага — посох и книга. Раньше здесь выдавался
-	# "Common Leather Mail" — кожаная броня, удалённая из базы как пережиток
-	# Аллодов; ItemDB.find() вернул бы пустой словарь без ошибки.
+	# оружии и щите, у мага — посох и книга.
 	#
 	# Стартовое снаряжение надевается сразу: иначе новый герой выходил бы в бой
 	# голым (все статы — базовые, атрибуты), хотя вещи лежат в инвентаре.
+	var weapon_key := starter_weapon_key(Game.hero_class, weapon)
 	equip_item(ItemDB.find(weapon_key))
-	if Game.hero_stats.get("shield", false):
-		equip_item(ItemDB.find("Common iron Buckler"))
-	# Маг на старте получает книгу простейшего заклинания выбранной школы
-	# (учится одним кликом по ячейке склада; книга расходуется).
-	if Game.hero_class == "mage" and Game.hero_start_book != "":
-		inventory.append(Game.hero_start_book)
+	if inventory.has("Common bronze Buckler"):
+		equip_item(ItemDB.find("Common bronze Buckler"))
 	# Магу на старте выдаётся только книга его школы (учится одним кликом
 	# по ячейке склада; книга расходуется). Весь набор заклинаний и открытые
 	# сферы — отладочный режим Game.debug_magic ([debug] all_magic = 1),
@@ -474,9 +544,6 @@ func _grant_starter_set() -> void:
 			known_spells[str(spell)] = {"charges": -1}
 		for sphere in ["Fire", "Water", "Air", "Earth", "Astral"]:
 			sphere_books[sphere] = true
-	for i in range(3):
-		inventory.append("Potion Medium Healing")
-	inventory.append("Potion Mana Regeneration")
 
 ## --- Склад владений ---
 
@@ -597,13 +664,90 @@ func use_potion(item_key: String) -> bool:
 	return true
 
 # --- Производные характеристики (связи из оригинального main.txt) ---
+# ONE source of the formulas for the live player AND the creation preview:
+# the screen calls these statics, so its numbers cannot drift from combat.
+static func max_hp_of(body_value: int) -> int:
+	return 20 + body_value * 8
+
+static func max_mana_of(spirit_value: int) -> int:
+	return 10 + spirit_value * 4
+
+static func damage_min_of(base_min: int, skill: int, agility_value: int) -> int:
+	return maxi(1, int(round(float(base_min) * (1.0 + float(skill) / 40.0
+		+ float(agility_value) / 80.0))))
+
+static func damage_max_of(base_max: int, skill: int, body_value: int) -> int:
+	return maxi(1, int(round(float(base_max) * (1.0 + float(skill) / 40.0
+		+ float(body_value) / 60.0))))
+
+static func attack_of(agility_value: int, skill: int, to_hit: int) -> int:
+	return int(agility_value / 2.0) + int(skill / 10.0) + to_hit
+
+static func defense_of(agility_value: int, body_value: int, gear: int) -> int:
+	return int(round(float(int(agility_value / 2.0) + int(body_value / 4.0) + gear)))
+
+static func absorption_of(body_value: int, gear: int) -> int:
+	return int(body_value / 4.0) + gear
+
+static func speed_of(agility_value: int) -> float:
+	var reaction := 2 * agility_value
+	var base := clampf(float(reaction) / 5.0 + 12.0, 12.0, 255.0)
+	return base * 7.5 * GameConfig.getf("movement", "speed_multiplier")
+
+## Starter weapon key of a direction. Bronze is the player's decision (04.11):
+## a new hero starts with the cheap metal and earns the upgrade.
+static func starter_weapon_key(hero_class: String, weapon_kind: String) -> String:
+	if hero_class == "mage":
+		return "Common Wood Staff"
+	match weapon_kind:
+		"axe":
+			return "Common bronze Axe"
+		"club":
+			return "Common bronze Mace"
+		"pike":
+			return "Common bronze Pike"
+	return "Common bronze Long Sword"
+
+## Everything a new hero owns, in the order `_grant_starter_set` hands it out.
+## The creation screen renders this same list, so the promise is the inventory.
+static func starter_items(hero_class: String, weapon_kind: String,
+		with_shield: bool, book: String) -> Array:
+	var out: Array = [starter_weapon_key(hero_class, weapon_kind)]
+	var w := ItemDB.find(str(out[0]))
+	if with_shield and not w.is_empty() and not ItemDB.is_two_handed(w):
+		out.append("Common bronze Buckler")
+	if book != "":
+		out.append(book)
+	for i in range(3):
+		out.append("Potion Medium Healing")
+	out.append("Potion Mana Regeneration")
+	return out
+
+func primary_skill_value() -> int:
+	return skill_value(Game.hero_primary_skill) if Game.hero_primary_skill != "" else 0
+
+func aux_skill_value() -> int:
+	return skill_value(Game.hero_aux_skill) if Game.hero_aux_skill != "" else 0
+
+## Development points: the main direction at 100%, the auxiliary at 60%
+## ([skill_stats] aux_factor). Life/mana/defence are derived from this.
+func development_points() -> float:
+	return float(primary_skill_value()) \
+		+ float(aux_skill_value()) * GameConfig.getf("skill_stats", "aux_factor")
+
+func max_magic_skill() -> int:
+	return maxi(fire_skill, maxi(water_skill, maxi(air_skill,
+		maxi(earth_skill, astral_skill))))
+
 func _calc_max_hp() -> int:
-	return 20 + body * 8          # Body -> здоровье; body=10 -> 100
+	return max_hp_of(body) \
+		+ int(development_points() * GameConfig.getf("skill_stats", "hp_per_point"))
 
 func _calc_max_mana() -> int:
 	if not has_mana:
 		return 0                  # воины не имеют маны вовсе
-	return 10 + spirit * 4        # Spirit -> мана (по манифесту); spirit=10 -> 50
+	return max_mana_of(spirit) \
+		+ int(development_points() * GameConfig.getf("skill_stats", "mana_per_point"))
 
 func _calc_hp_regen() -> int:
 	return 1 + int(body / 5.0)           # реген HP от Body
@@ -612,28 +756,29 @@ func _calc_mana_regen() -> int:
 	return 1 + int(spirit / 10.0)        # реген маны от Spirit
 
 func _calc_speed() -> float:
-	# Скорость героя по формуле оригинала (UnityAllods MapHuman):
-	# Speed = min(Reaction/5 + 12, 255); Реакция ≈ 2·Ловкость (производная).
-	# В наших пикселях: base × 7.5 (при agility=10 — те же 120 px/с, что и раньше).
-	var reaction := 2 * agility
-	var base := clampf(float(reaction) / 5.0 + 12.0, 12.0, 255.0)
-	var speed := base * 7.5
-	# Общий множитель скорости из конфига [movement] speed_multiplier
-	# (по умолчанию 1.0, то есть ничего не меняет) — ручка для баланса и тестов.
-	speed *= GameConfig.getf("movement", "speed_multiplier")
-	# Нагрузка (вес предметов в инвентаре): перегруз замедляет до 0.5x
-	speed *= _load_penalty()
-	return speed
+	# Speed = min(Reaction/5 + 12, 255); Reaction ≈ 2·Agility (original
+	# derivative). In our pixels: base × 7.5 (agility=10 -> the old 120 px/s).
+	return speed_of(agility) * _load_penalty()
 
 ## Навык, которым герой бьёт текущим оружием (blade для меча и т.д.).
 func _weapon_skill_for_damage() -> int:
+	# The weapon's OWN skill. `weapon_kind()` returns "club" for maces, not
+	# "bludgeon" — the old name never matched, so a mace silently trained the
+	# blade skill. A staff uses the best magic school: a mage's weapon is the
+	# school, not fire.
 	match weapon:
-		"axe": return axe_skill
-		"bludgeon": return bludgeon_skill
-		"pike": return pike_skill
-		"shooting": return shooting_skill
-		"staff", "magic": return fire_skill
-		_: return blade_skill
+		"axe":
+			return axe_skill
+		"club":
+			return bludgeon_skill
+		"pike":
+			return pike_skill
+		"bow", "xbow":
+			return shooting_skill
+		"staff", "magic":
+			return max_magic_skill()
+		_:
+			return blade_skill
 
 
 func get_damage_min() -> int:
@@ -643,9 +788,7 @@ func get_damage_min() -> int:
 	if not w.is_empty():
 		var dmin := int(w.get("damage_min", 0))
 		if dmin > 0:
-			var sk := _weapon_skill_for_damage()
-			var mult := 1.0 + float(sk) / 40.0 + float(agility) / 80.0
-			return maxi(1, int(round(float(dmin) * mult)))
+			return damage_min_of(dmin, _weapon_skill_for_damage(), agility)
 	return unarmed_damage_min()
 
 
@@ -654,9 +797,7 @@ func get_damage_max() -> int:
 	if not w.is_empty():
 		var dmax := int(w.get("damage_max", 0))
 		if dmax > 0:
-			var sk := _weapon_skill_for_damage()
-			var mult := 1.0 + float(sk) / 40.0 + float(body) / 60.0
-			return maxi(1, int(round(float(dmax) * mult)))
+			return damage_max_of(dmax, _weapon_skill_for_damage(), body)
 	return unarmed_damage_max()
 
 
@@ -671,9 +812,11 @@ func unarmed_damage_max() -> int:
 
 func get_attack() -> int:
 	# to_hit оружия идёт в атаку (шанс попадания), а не выбрасывается.
+	# The weapon's OWN skill, not always blade: an axe must not borrow a
+	# swordsman's hit chance.
 	var w := _equipped_item("weapon")
-	return int(agility / 2.0) + int(blade_skill / 10.0) \
-		+ int(w.get("to_hit", 0)) + StatusEffects.stat_flat(self, "attack")
+	return attack_of(agility, _weapon_skill_for_damage(),
+		int(w.get("to_hit", 0)) + StatusEffects.stat_flat(self, "attack"))
 
 func get_defense() -> int:
 	var base := int(agility / 2.0) + int(body / 4.0)    # Agility -> уклонение/защита
@@ -684,16 +827,20 @@ func get_defense() -> int:
 		bonus += int(it.get("defence", 0))
 	# Щит мага (Shield) = временная броня по астралу, не поглощение HP.
 	bonus += StatusEffects.shield_armor_defense(self)
+	# Warrior's development direction adds defence; a mage gets life/mana and
+	# magic damage instead (player decision 04.11).
+	if not has_mana:
+		bonus += int(development_points() * GameConfig.getf("skill_stats", "defense_per_point"))
 	return int(round((base + bonus + StatusEffects.stat_flat(self, "defense")) \
 		* StatusEffects.defense_mult(self)))
 
 func get_absorption() -> int:
 	# Поглощение (в оригинале — отдельная характеристика брони): сумма по всем частям.
-	var a := int(body / 4.0)
+	var a := 0
 	for it in _equipped_items():
 		a += int(it.get("absorption", 0))
 	a += StatusEffects.shield_armor_absorption(self)
-	return a
+	return absorption_of(body, a)
 
 ## Предмет в слоте (пустой словарь, если слот пуст или предмета нет в базе).
 func _equipped_item(slot: String) -> Dictionary:
@@ -1077,7 +1224,6 @@ func _physics_process(delta):
 						# freeze_last_frame, у героя этого шага не было.
 						_anim.freeze_last_frame(UnitAnim.Anim.DYING)
 						state = "corpse"
-						get_tree().paused = true
 		"decay":
 			velocity = Vector2.ZERO
 			if _anim:
@@ -1085,7 +1231,6 @@ func _physics_process(delta):
 				if _anim.advance(delta):
 					_anim.freeze_last_frame(UnitAnim.Anim.DECAY)
 					state = "corpse"
-					get_tree().paused = true
 		"corpse":
 			# Труп: ни анимации, ни физики. Снятие паузы (Esc) больше не
 			# перезапускает падение — блок DYING уже отыграл.
@@ -1230,11 +1375,15 @@ func move_to_target(delta):
 
 ## Начать движение по маршруту (центры клеток из alm_map.find_path).
 func begin_path(path: Array) -> void:
+	if is_dead:
+		return
 	_path = path
 	_stuck_frames = 0
 
 ## Полная остановка (используется при входе в здание/паузах).
 func stop_movement() -> void:
+	if is_dead:
+		return   # панель не имеет права «поднять» труп в idle
 	_cancel_casting()
 	state = "idle"
 	velocity = Vector2.ZERO
@@ -1808,7 +1957,7 @@ func _heal_target(target: Node2D, spell_name: String, base: int) -> void:
 func heal_amount(amount: int) -> int:
 	if amount <= 0 or current_hp >= max_hp:
 		return 0
-	if state == "dead" or state == "decay" or state == "corpse":
+	if is_dead or state == "dead" or state == "decay" or state == "corpse":
 		return 0
 	var healed := mini(max_hp, current_hp + amount) - current_hp
 	if healed <= 0:
@@ -2120,8 +2269,8 @@ var _auto_scroll_accum := 0.0
 ## (жалоба 27.10). Теперь уровень авто-волшебства по умолчанию «Базовое»,
 ## и лечение идёт само, пока есть мана и заклинание известно.
 func _tick_auto_cast(delta: float) -> void:
-	if state == "casting" or state == "dead" or state == "corpse" \
-			or not Game.pending_spell.is_empty():
+	if is_dead or state == "casting" or state == "dead" or state == "corpse" \
+			or state == "decay" or not Game.pending_spell.is_empty():
 		return
 	if not Game.pending_scroll.is_empty():
 		return
@@ -2337,8 +2486,9 @@ func _auto_try_buffs() -> void:
 
 
 func take_damage(damage: int, _attacker: Node2D) -> int:
-	# Мёртвый герой больше не получает урон
-	if state == "dead" or state == "decay" or state == "corpse":
+	# Мёртвый герой больше не получает урон. `is_dead` — защёлка: `state`
+	# мог быть случайно сброшен панелью/stop_movement, и труп «вставал».
+	if is_dead or state == "dead" or state == "decay" or state == "corpse":
 		return 0
 	damage = Game.shield_reduce(self, damage)
 	if damage <= 0:
@@ -2350,7 +2500,12 @@ func take_damage(damage: int, _attacker: Node2D) -> int:
 	StatusEffects.break_invisibility(self)
 	_cancel_casting()
 	if current_hp <= 0:
-		# Смерть: играем падение DYING + разложение DECAY, затем пауза
+		# Смерть: играем падение DYING + разложение DECAY. Паузу и экран
+		# Game Over ставит ВЛАДЕЛЕЦ (game.gd::_on_hero_died), а не сам актёр:
+		# get_tree().paused здесь ничего не останавливал (корень Main — ALWAYS).
+		current_hp = 0
+		is_dead = true
+		Game.hero_dead = true
 		velocity = Vector2.ZERO
 		state = "dead"
 		_path.clear()
@@ -2358,6 +2513,7 @@ func take_damage(damage: int, _attacker: Node2D) -> int:
 		_hero_voice("death", 1)
 		if health_bar:
 			health_bar.visible = false
+		died.emit()
 	elif randf() < 0.45:
 		_hero_voice("pain", randi_range(1, 2))
 	return damage

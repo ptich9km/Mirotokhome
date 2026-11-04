@@ -30,7 +30,10 @@ func _run() -> void:
 	if player == null:
 		_finish()
 		return
-	var saved_pos := Vector2(1500.0, 1500.0)
+	# Save the CURRENT (spawn) position: it is guaranteed walkable, so the load
+	# cannot snap the hero to a nearby cell. A hard-coded (1500,1500) was a
+	# flaky expectation — it depended on the random seed of the generated map.
+	var saved_pos: Vector2 = player.global_position
 	player.global_position = saved_pos
 	player.gold = 2468
 	game.call("_save_to_slot", SLOT)

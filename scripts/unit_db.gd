@@ -225,6 +225,49 @@ static func loot_family_of(name: String) -> String:
 		short = short.substr(0, tier_at)
 	return str(loot_by_species().get(short, ""))
 
+## Creature type used by weapon-kind resistance (Allods formula):
+## human | undead | beast | insect | monster. An explicit `creature_type` field
+## wins; otherwise the set name decides. "People" is deliberately narrower than
+## loot_family humanoid: a club is bad against people, not against every orc and
+## troll (those are monsters, like the original's separate creature kinds).
+static func creature_type_of(name: String) -> String:
+	var explicit := str(get_set(name).get("creature_type", ""))
+	if explicit != "":
+		return explicit
+	var n := name.to_lower()
+	if n.contains("necro") or n.contains("undead") or n.contains("ghost") \
+			or n.contains("skeleton") or n.contains("zombie"):
+		return "undead"
+	if n.contains("orc") or n.contains("goblin") or n.contains("troll") \
+			or n.contains("ogre") or n.contains("cannibal") or n.contains("dino") \
+			or n.contains("dragon") or n.contains("succubus"):
+		return "monster"
+	if n.contains("city_human") or n.contains("humans/") or n.contains("human") \
+			or n.contains("hero"):
+		return "human"
+	var fam := loot_family_of(name)
+	match fam:
+		"beast":
+			return "beast"
+		"insect":
+			return "insect"
+		"undead":
+			return "undead"
+		"humanoid", "monstrous":
+			return "monster"
+	return "monster"
+
+## Damage percentage of `weapon_kind` against `creature_type` (100 = neutral).
+## The table lives in assets/config/content_rules.json under
+## `combat.weapon_vs_type`; the Allods source formula is
+## `trunc(damage * (100 - resistance) / 100 + 0.75)`, i.e. 125% / 75% here.
+static func weapon_percent(weapon_kind: String, creature_type: String) -> int:
+	var table := ContentRules.dict("combat.weapon_vs_type")
+	var row: Variant = table.get(weapon_kind, null)
+	if row is Dictionary:
+		return int((row as Dictionary).get(creature_type, 100))
+	return 100
+
 ## Тир набора (1..5), 0 - если тира нет. Тиры Серых записывает
 ## tests/gen_grey_tiers_db.py; tests/gray_tier_smoke сверяет поле с суффиксом
 ## `_tN` в имени набора. Дроп сломанной вещи выбирает металл ПО ТИРУ
