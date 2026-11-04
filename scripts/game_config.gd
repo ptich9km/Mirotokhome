@@ -35,7 +35,10 @@ const DEFAULTS := {
 		"damage_multiplier": 1.0,   # глобальный множитель урона (взят из AION)
 		"attack_cooldown": 1.0,     # раньше продублировано 1.0 в трёх файлах
 		"enemy_defense_div": 25,    # было max_hp/25
-		"enemy_attack_dmg_div": 2,  # было damage/2
+		# 2 -> 5 (player tuning, 15.10): enemy hits were cutting the fight
+		# short. The value has lived in the reference file since then, so the
+		# default follows it (rule 2 in the module header).
+		"enemy_attack_dmg_div": 5,
 		"enemy_attack_hp_div": 30,  # было max_hp/30
 		"enemy_absorption_div": 40, # было max_hp/40
 		"protection_max": 95,       # потолок сопротивления стихии, %
@@ -210,70 +213,68 @@ const DEFAULTS := {
 		"gray_respawn_seconds": 20.0,
 		"gray_respawn_min_dist": 26,
 	},
-	"mob_tier": {
-		# Множители по тирам мобов (идея из AION). Тиров Серых в игре ещё нет,
-		# место заведено заранее — см. аудит, пакет C.
-		"hp_multiplier": 1.0,
-		"damage_multiplier": 1.0,
-	},
-	"zone": {
-		# Плоские ключи вида zone.<name>.<key> — ConfigFile не умеет вложенные
-		# секции, поэтому зоны живут одной секцией с префиксом.
+	"grey": {
+		# Base stats of a tier-1 Grey (3x.11 cleanup): zone difficulty is NOT
+		# set here. A zone picks a tier band (MapGenerator.GRAY_TIER_BAND) and
+		# the tier scales these numbers by the [mob_tier] steps. This is the
+		# AION rates model: global numbers, per-monster multipliers, and no
+		# per-zone DPS.
 		#
-		# ВАЖНО: значения ниже = ТЕКУЩЕЕ поведение генератора, а не желаемое.
-		# Сейчас зоны различаются только по Серым (GRAY_ZONE), а стражи и
-		# горожане одинаковы везде. Этап баланса поднимет Серых в ранних зонах,
-		# этап спавна разведёт стражей по зонам. Пока дефолты = как было.
+		# Damage 4-6 -> 18-26 (playtest 04.11): a starter hero absorbs 5-8 and
+		# has ~100 HP, so 10-15 raw meant 5-10 per hit and a dozen hits to die
+		# — packs were cleared without crafting or potions.
+		"hp_min": 25,
+		"hp_max": 45,
+		"damage_min": 18,
+		"damage_max": 26,
+	},
+	"mob_tier": {
+		# Growth per tier above the first: mult = 1 + step * (tier - 1).
+		# Tier 5 is x2.4 HP and x2.0 damage over the tier-1 base. The tier
+		# itself comes from units_db.json, so the formula lives in one place
+		# (MapGenerator.gray_tier_mults) and the numbers live here.
+		"hp_step": 0.35,
+		"damage_step": 0.25,
+	},
+	"city": {
+		# City NPCs are the same in every zone: a guard is a guard, and zone
+		# danger lives in the Grey tiers. Counts are per city. Before 3x.11
+		# these numbers were duplicated four times under a per-zone prefix
+		# while every zone carried identical values.
+		"guard_count_min": 5,
+		"guard_count_max": 8,
+		"guard_hp_min": 60,
+		"guard_hp_max": 100,
+		"guard_damage_min": 6,
+		"guard_damage_max": 10,
+		"captain_hp": 120,
+		"captain_damage": 12,
+		"citizen_hp": 30,
+		"citizen_count_min": 6,
+		"citizen_count_max": 9,
+	},
+	"poi": {
+		# Points of interest (ruins, camps, shrines). count = 0 keeps the
+		# feature off: there is not enough art yet (player decision 07.10).
+		"count": 0,
+		"hp": 60,
+		"damage": 6,
+	},
+	"zone_design": {
+		# Map design per zone, not combat rates: how many Greys a map holds
+		# and how dense the trees are. A Grey's HP and damage come from
+		# [grey] plus the tier of its set, so nothing here changes a fight's
+		# DPS. Flat prefixed keys because ConfigFile has no nested sections.
 		"start.gray_count_min": 40,     "start.gray_count_max": 60,
-		"start.gray_hp_min": 25,       "start.gray_hp_max": 45,
-		"start.gray_damage_min": 4,    "start.gray_damage_max": 6,
-		"start.guard_hp_min": 60,      "start.guard_hp_max": 100,
-		"start.guard_damage_min": 6,   "start.guard_damage_max": 10,
-		"start.guard_count_min": 5,    "start.guard_count_max": 8,
-		"start.citizen_hp": 30,
-		"start.citizen_count_min": 6, "start.citizen_count_max": 9,
-		"start.captain_hp": 120,       "start.captain_damage": 12,
-		"start.interest_points": 0,    # руины/стоянки/святилища. Зона новичка остаётся тихой: точки рядом со стартом убивают смысл первого города.
-		"start.poi_hp": 60,           "start.poi_damage": 6,
 		"start.tree_density": 0.18,
 
 		"mid.gray_count_min": 120,     "mid.gray_count_max": 150,
-		"mid.gray_hp_min": 45,         "mid.gray_hp_max": 75,
-		"mid.gray_damage_min": 6,      "mid.gray_damage_max": 9,
-		"mid.guard_hp_min": 60,        "mid.guard_hp_max": 100,
-		"mid.guard_damage_min": 6,     "mid.guard_damage_max": 10,
-		"mid.guard_count_min": 5,      "mid.guard_count_max": 8,
-		"mid.citizen_hp": 30,
-		"mid.citizen_count_min": 6,   "mid.citizen_count_max": 9,
-		"mid.captain_hp": 120,         "mid.captain_damage": 12,
-		"mid.interest_points": 0,
-		"mid.poi_hp": 60,             "mid.poi_damage": 6,
 		"mid.tree_density": 0.20,
 
 		"hard.gray_count_min": 140,    "hard.gray_count_max": 180,
-		"hard.gray_hp_min": 70,        "hard.gray_hp_max": 120,
-		"hard.gray_damage_min": 9,     "hard.gray_damage_max": 14,
-		"hard.guard_hp_min": 60,       "hard.guard_hp_max": 100,
-		"hard.guard_damage_min": 6,    "hard.guard_damage_max": 10,
-		"hard.guard_count_min": 5,     "hard.guard_count_max": 8,
-		"hard.citizen_hp": 30,
-		"hard.citizen_count_min": 6,  "hard.citizen_count_max": 9,
-		"hard.captain_hp": 120,        "hard.captain_damage": 12,
-		"hard.interest_points": 0,
-		"hard.poi_hp": 60,            "hard.poi_damage": 6,
 		"hard.tree_density": 0.22,
 
 		"faction.gray_count_min": 100, "faction.gray_count_max": 130,
-		"faction.gray_hp_min": 50,     "faction.gray_hp_max": 95,
-		"faction.gray_damage_min": 7,  "faction.gray_damage_max": 11,
-		"faction.guard_hp_min": 60,    "faction.guard_hp_max": 100,
-		"faction.guard_damage_min": 6, "faction.guard_damage_max": 10,
-		"faction.guard_count_min": 5,  "faction.guard_count_max": 8,
-		"faction.citizen_hp": 30,
-		"faction.citizen_count_min": 6, "faction.citizen_count_max": 9,
-		"faction.captain_hp": 120,     "faction.captain_damage": 12,
-		"faction.interest_points": 0,
-		"faction.poi_hp": 60,         "faction.poi_damage": 6,
 		"faction.tree_density": 0.20,
 	},
 	"events": {
@@ -304,7 +305,9 @@ const DEFAULTS := {
 		"blueprint_min_difficulty": 3,
 		"kill_elite_hp_mult": 2.5,
 		"kill_elite_dmg_mult": 1.5,
-		"gray_kill_base": 4,       # база количества в "убей N особей"
+		# gray_kill_base was removed on 03.11: the target count comes from the
+		# quest template (`count_by_difficulty` in quest_db.json), the key was
+		# read by nobody, so tuning it silently did nothing.
 		"rep_base": 5,             # репутация фракции за сложность 1
 		"power_base": 0.2,         # могущество мага за сложность 1
 		"prep_min_dist": 6,        # клеток от героя до цели при спавне
@@ -348,11 +351,13 @@ const DEFAULTS := {
 		# профилировщик сам стоит времени — для замеров, не для игры.
 		"perf": 0,
 		#
-		# all_magic: все 31 заклинание + бесконечная мана. До 03.10 это был
-		# жёсткий `static var debug_magic = true` в game.gd — то есть сборка
-		# для беты отдавала всю магию, и отключить её без правки кода было
-		# нельзя. Теперь это просто ключ.
-		"all_magic": 1,
+		# all_magic: все 31 заклинание + бесконечная мана для мага. До 03.10 это
+		# был жёсткий `static var debug_magic = true` в game.gd. С 04.11 ключ
+		# ВЫКЛЮЧЕН по умолчанию: играбельный маг начинает с одной книгой
+		# школы (hero_start_book), учит её одним кликом и тратит ману.
+		# Включать только для отладки магии: с 1 маг теряет экономику маны и
+		# стартовую прокачку — это дисбаланс, который игрок и заметил.
+		"all_magic": 0,
 		#
 		# fog_of_war: туман войны на карте героя (19.10, FogOfWar). Радиус
 		# видимости ~14 клеток, исследованное остаётся приглушённым, враги
@@ -457,13 +462,15 @@ static func getf(section: String, key: String) -> float:
 	return float(d)
 
 
-## Ключ зоны вида "start.gray_hp_min" живёт в секции [zone].
-static func zonei(zone: String, key: String) -> int:
-	return geti("zone", "%s.%s" % [zone, key])
+## A zone design key such as "start.gray_count_min" lives in [zone_design].
+## Combat numbers are NOT per zone any more: Greys scale by tier, city NPCs
+## are identical everywhere.
+static func designi(zone: String, key: String) -> int:
+	return geti("zone_design", "%s.%s" % [zone, key])
 
 
-static func zonef(zone: String, key: String) -> float:
-	return getf("zone", "%s.%s" % [zone, key])
+static func designf(zone: String, key: String) -> float:
+	return getf("zone_design", "%s.%s" % [zone, key])
 
 
 static func unknown_keys() -> PackedStringArray:

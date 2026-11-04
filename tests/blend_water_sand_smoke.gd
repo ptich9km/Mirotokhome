@@ -39,19 +39,22 @@ func _run() -> void:
 	_check(WalkTable.walkable_at(1, 0) == false,
 		"walkable_at для hf гор (hf=1=file2-1) — false")
 
-	# Летающие. Проверка ИНВЕРТИРОВАНА: наборов `monsters/*` (bat, dragon,
-	# succubus) с z=96 больше нет — весь арт Аллодов удалён 11.10. Сейчас в базе
-	# нет НИ ОДНОГО летающего набора, и это надо подтверждать, а не молча
-	# пропускать: если завтра появится риг летучего зверя с z>0, проверка
-	# «сейчас летающих нет» перестанет проходить и заставит разобраться.
-	# Когда риги Серых появятся, сюда вернётся проверка конкретных наборов.
+	# Flying units. The check was INVERTED on 11.10: after the Allods art
+	# purge the DB had no set with z>0, so the test guarded against fliers
+	# returning. On 17.10 fliers came back with real art (bat/bee/ghost/
+	# dragon/succubus plus tiers), the check went red and lied for weeks.
+	# Now it asserts what must hold: fliers exist and have z>0, infantry
+	# stays on the ground.
 	var flying := 0
 	for name in UnitDB.all_names(""):
 		if UnitDB.fly_z(str(name)) > 0:
 			flying += 1
-	_check(flying == 0,
-		"летающих наборов сейчас нет (после чистки Аллодов), найдено: %d" % flying)
-	_check(UnitDB.fly_z("seed/sw_seed") == 0, "пехота без fly_z")
+	_check(flying > 0,
+		"летающие наборы есть (fly_z > 0), найдено: %d" % flying)
+	_check(UnitDB.fly_z("monsters/bat") > 0, "битый набор летает (bat)")
+	_check(UnitDB.fly_z("monsters/succubus") > 0, "суккуб летает")
+	_check(UnitDB.fly_z("monsters/wolf") == 0, "волк — пехота без fly_z")
+	_check(UnitDB.fly_z("seed/sw_seed") == 0, "набор-заглушка без fly_z")
 
 	# --- Карта: BlendMesh ---
 	Game.request_map_by_seed(SEED, "mid")

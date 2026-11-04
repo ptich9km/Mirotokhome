@@ -94,11 +94,15 @@ func _run() -> void:
 
 	print("-- усиление за тир --")
 	# Множители считаются по числам, а не «функция что-то вернула».
+	# Шаги берём из [mob_tier]: с 3x.11 формула живёт в конфиге, и тест не
+	# должен держать вторую копию 0.35/0.25.
+	var hp_step := GameConfig.getf("mob_tier", "hp_step")
+	var dmg_step := GameConfig.getf("mob_tier", "damage_step")
 	for t in range(1, 6):
 		var sn4 := MapGenerator.gray_set_name("wolf", t)
 		var m: Array = MapGenerator.gray_tier_mults(sn4)
-		var want_hp: float = 1.0 + 0.35 * float(t - 1)
-		var want_dmg: float = 1.0 + 0.25 * float(t - 1)
+		var want_hp: float = 1.0 + hp_step * float(t - 1)
+		var want_dmg: float = 1.0 + dmg_step * float(t - 1)
 		_check(absf(float(m[0]) - want_hp) < 0.001 and absf(float(m[1]) - want_dmg) < 0.001,
 			"тир %d: hp x%.2f, урон x%.2f" % [t, float(m[0]), float(m[1])])
 	_check(MapGenerator.gray_tier_mults(MapGenerator.gray_set_name("wolf", 5))[0] > 2.0,

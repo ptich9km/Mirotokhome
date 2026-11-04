@@ -10,9 +10,9 @@ extends SceneTree
 ## интервал автосейва, ничего не происходит, и это выглядит как баг движка.
 ##
 ## ЭТО НЕ ГРЕП «ключ где-то используется», а проверка СВЯЗАННОСТИ: ключ
-## обязан быть назван в коде. Все ключи зон лежат в секции одной (`zone.*`
-## из-за ограничений ConfigFile) и читаются по КОРОТКОМУ имени через
-## `GameConfig.zonei(zone, "guard_hp_min")`. Первый замер этого теста считал
+## обязан быть назван в коде. Ключи дизайна зон лежат в одной секции
+## (`zone_design.start.gray_count_min`) и читаются по КОРОТКОМУ имени через
+## `GameConfig.designi(zone, "gray_count_min")`. Первый замер этого теста считал
 ## по полным именам и выдал «94 мёртвых ключа» — это была ложь, полные имена
 ## в коде просто не встречаются.
 ##
@@ -26,7 +26,6 @@ const CFG_SRC := "res://scripts/game_config.gd"
 ## Ключи, которые разрешено не читать из кода: заготовки под будущие фичи.
 ## Для них обязателен комментарий-обоснование в game_config.gd.
 const ALLOWED_DEAD := {
-	"mob_tier.hp_multiplier": "тиров мобов ещё нет, место заведено заранее",
 	"metal.absorption_min": "ссылается только тест game_config_smoke",
 	"metal.absorption_max": "ссылается только тест game_config_smoke",
 	"loot.enemy_potion_chance": "шансы зверей/гуманоидов в loot_tables.json (пакет A)",
@@ -108,7 +107,7 @@ func _run() -> void:
 			continue
 		for r in rx.search_all(line):
 			var name := str(r.get_string(1))
-			# Ключи зон уже несут свою зону в имени ("start.guard_hp_min"),
+			# Ключи зон уже несут свою зону в имени ("start.gray_count_min"),
 			# префикс секции им не нужен — иначе было бы "zone.start.xxx".
 			var full := name if name.contains(".") else "%s.%s" % [section, name]
 			if not keys.has(full):
@@ -122,8 +121,8 @@ func _run() -> void:
 	print("-- мёртвые ключи --")
 	var dead: Array[String] = []
 	for k in keys:
-		# Зональные ключи читаются по короткому имени (zonei/_zone, "guard_hp_min"),
-		# поэтому ищем именно короткое имя, а не полное "mid.guard_hp_min".
+		# Зональные ключи читаются по короткому имени (designi/_zone, "gray_count_min"),
+		# поэтому ищем именно короткое имя, а не полное "mid.gray_count_min".
 		var short := k.split(".")[-1]
 		var found := false
 		for path in corpus:
