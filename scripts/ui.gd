@@ -638,12 +638,18 @@ func _make_scroll_cell(item_key: String, item: Dictionary, count: int) -> void:
 			b.accept_event()
 			_toggle_auto_scroll(k)
 			return
-		if event is InputEventKey and event.pressed and event.ctrl_pressed \
-				and event.keycode >= KEY_1 and event.keycode <= KEY_9:
-			var slot: int = event.keycode - KEY_1
-			Game.hotbar[slot] = {"kind": "item", "key": k}
-			_notify_item_assigned(slot, k)
-			b.accept_event()
+		if event is InputEventKey and event.pressed and event.ctrl_pressed:
+			# cast_1..3 are rebindable actions; keys 4..9 remain fixed.
+			var slot := -1
+			for i in range(3):
+				if event.is_action_pressed("cast_%d" % (i + 1)):
+					slot = i
+			if slot < 0 and event.keycode >= KEY_4 and event.keycode <= KEY_9:
+				slot = event.keycode - KEY_1
+			if slot >= 0:
+				Game.hotbar[slot] = {"kind": "item", "key": k}
+				_notify_item_assigned(slot, k)
+				b.accept_event()
 	)
 	spell_grid.add_child(b)
 	spell_buttons.append(b)

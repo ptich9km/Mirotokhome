@@ -633,6 +633,10 @@ func _apply_key(action: String, keycode: int) -> void:
 
 func _on_reset() -> void:
 	Settings.reset_to_defaults()
+	# Drop session rebinds too: reset must restore project.godot defaults, not
+	# only delete settings.cfg.
+	InputMap.load_from_project_settings()
+	Settings.apply_input()
 	_rebuild_current()
 	_status.text = Loc.t("ui.settings.reset_done")
 

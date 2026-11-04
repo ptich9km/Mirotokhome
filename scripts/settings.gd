@@ -218,12 +218,35 @@ static func save() -> bool:
 	return true
 
 
-## Применяет звук и видео к системе. Вызывается один раз при старте.
+## Applies input, audio and video at startup. Must run before the first scene
+## reads input; otherwise a saved rebind exists only in settings.cfg.
 static func apply_all(root_window: Window) -> void:
+	_apply_input()
 	_apply_audio()
 	if root_window != null:
 		root_window.content_scale_factor = ui_scale()
 	_apply_video()
+
+
+## Public entry for tests and for scenes that only need the bindings.
+static func apply_input() -> void:
+	_apply_input()
+
+
+## Replace the key event of every rebindable action that has a saved key.
+## Actions without a saved key keep their project.godot defaults.
+static func _apply_input() -> void:
+	for entry in REBINDABLE:
+		var action := str(entry[0])
+		var key := key_for(action)
+		if key <= 0 or not InputMap.has_action(action):
+			continue
+		for ev in InputMap.action_get_events(action):
+			if ev is InputEventKey:
+				InputMap.action_erase_event(action, ev)
+		var e := InputEventKey.new()
+		e.physical_keycode = key
+		InputMap.action_add_event(action, e)
 
 
 static func _apply_audio() -> void:

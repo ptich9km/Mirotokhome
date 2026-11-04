@@ -108,6 +108,13 @@ func apply() -> String:
 	Game.pending_map_path = ""
 	Game.clear_load_position()
 	Game.clear_hero_save()
+	# A new game starts a new world: drop the previous run's SIM (cities,
+	# armies, day, journal). Loaded saves never pass through StartSetup.
+	var loop := Engine.get_main_loop()
+	if loop is SceneTree:
+		var bus = (loop as SceneTree).root.get_node_or_null("WorldBus")
+		if bus != null and bus.state != null:
+			bus.state.reset_for_new_game()
 	return ""
 
 
