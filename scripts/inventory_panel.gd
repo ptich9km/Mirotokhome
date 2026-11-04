@@ -80,9 +80,18 @@ const _RESIST_EARTH := Color(0.7, 0.55, 0.3)
 const _RESIST_ASTRAL := Color(0.8, 0.5, 0.9)
 
 
+## Second click of a double click on a scroll. The engine sets `double_click`
+## itself using the OS setting, so pass that flag when you have it: the timer
+## below is only a fallback for stylised input (keyboard focus etc.).
+## 450 ms used to be the ONLY gate, which is tighter than the Windows default
+## (500 ms) — a normal but unhurried double click was swallowed silently, and a
+## book simply did not open (player report 04.11).
+const MAGIC_DOUBLE_CLICK_MS := 700
+
+
 func _magic_double_click(item_key: String) -> bool:
 	var now := Time.get_ticks_msec()
-	var hit := _magic_click_key == item_key and now - _magic_click_time < 450
+	var hit := _magic_click_key == item_key and now - _magic_click_time < MAGIC_DOUBLE_CLICK_MS
 	_magic_click_key = item_key
 	_magic_click_time = now
 	return hit
@@ -1215,7 +1224,7 @@ func _add_inventory_slot(item: Dictionary, count: int = 0) -> void:
 
 	slot.gui_input.connect(func(event: InputEvent):
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			_on_item_clicked(item))
+			_on_item_clicked(item, (event as InputEventMouseButton).double_click))
 
 
 func _hotbar_slot_of_key(item_key: String) -> int:
@@ -1235,7 +1244,7 @@ func _ui_host() -> Node:
 	return null
 
 
-func _on_item_clicked(item: Dictionary) -> void:
+func _on_item_clicked(item: Dictionary, is_double: bool = false) -> void:
 	if not is_instance_valid(player):
 		return
 	var quality := str(item.get("quality", ""))
@@ -1244,18 +1253,24 @@ func _on_item_clicked(item: Dictionary) -> void:
 	if quality == "Herb":
 		return
 	if quality == "Book":
-		if not _magic_double_click(item_key):
-			return
+		# A book is knowledge, not a cast: one click is enough (player report
+		# 04.11 — the double-click gate made the starter book look dead).
 		if player.learn_book(item_key):
 			SoundDB.play("ui.book_open")
 			_refresh_inventory_grid()
 			_refresh_equipment()
 			inventory_changed.emit()
+		else:
+			var why := "Книга уже изучена" if player.has_mana \
+				else "Книги магии читают только маги"
+			_flash_equip_error(why)
 		return
 	if quality in ["Scroll", "SuperScroll"]:
 		# Использовать свиток = прицеливание (как с хоткея). Рыцарь тоже
 		# может прочитать свиток боевым действием, не только «выучить заряд».
-		if not _magic_double_click(item_key):
+		# A scroll casts right away, so it keeps the double click: the engine
+		# flag first, the timer as a fallback.
+		if not (is_double or _magic_double_click(item_key)):
 			return
 		var spell := SpellDB.spell_from_scroll(item_key)
 		if spell == "":
