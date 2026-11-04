@@ -1,217 +1,256 @@
-# Рекомендации по результатам аудита — план исправлений
+# Рекомендации по результатам аудита — ревизия 04.11.2026
 
 > Документ: `Allodshome/docs/audit/02-recommendations.md`
 > Связь: находки нумерованы по [`01-audit-report.md`](01-audit-report.md).
 > Формат каждой рекомендации: **Проблема → Решение → Файлы → Проверка**.
-> Порядок исполнения строго по приоритетам: P0 закрывает блокеры, P1 — логические ошибки, P2 — техдолг. Задачи P0/P1 по одной на запрос (AGENTS §9.1).
+> Правило проекта: **одна задача на запрос** (AGENTS §9.1), коммит — только после ручной проверки игроком (§9.3).
+> Закрытые пункты прошлой ревизии не повторяются: они собраны в §0, чтобы не рекомендовать сделанное.
+
+> **Выполнено 04.11 (после ревизии):** R-P1-13 — разрушаемые объекты
+> (`destructibles.json`, `AlmMap.damage_area`, тест 19/0); R-P1-12 — шесть
+> действий на `InputMap` и применение сохранённых клавиш при старте
+> (`settings_smoke` 64/0); R-P2-15 — SIM городов/армий из карты
+> (`sim_from_map_smoke` 26/0). Все три **ждут проверки в игре**. Ниже
+> оставлены описания как записи о принятом решении; открыты R-P1-1 и
+> R-P1-4, остальные P2/P3 — по-прежнему в бэклоге.
 
 ---
 
-## P0 — закрыть блокеры (порядок важен)
+## 0. Реестр закрытого с 30.09
 
-### R-P0-1. Выключить тест-режим магии по умолчанию
-**Проблема:** `Game.debug_magic = true` открывает всю магию, убирает ману/кулдауны (01-§3.1).
-**Решение:**
-1. `debug_magic` сделать читаемым из `ProjectSettings` (`settings/debug/magic`, default `false`), а не статической константой:
-   ```gdscript
-   static var debug_magic: bool = ProjectSettings.get_setting("settings/debug/magic", false)
-   ```
-2. Для разработки добавить запуск с аргументом: `-- --debug-magic` (обработать в `_ready` через `OS.get_cmdline_user_args()`).
-3. Убрать раздачу всех заклинаний/сфер из `_grant_starter_set()` (оставить под флагом).
-4. Обновить `magic_smoke` и `spell_*_smoke`: они должны **явно включать** флаг в тесте, а не полагаться на глобальное `true`.
-**Файлы:** [`game.gd`](../../scripts/game.gd:35), [`player.gd`](../../scripts/player.gd:261), [`player.gd`](../../scripts/player.gd:978), `project.godot`, `tests/magic_smoke.gd`.
-**Проверка:** headless-парсинг без SCRIPT ERROR; вручную: маг на старте имеет 1 книгу/1 заклинание и тратит ману; тесты зелёные с явным флагом.
-
-### R-P0-2. Принять решение по порталу и связать зоны
-**Проблема:** портал телепортирует на спавн; зоны Z1–Z4 не соединены (01-§3.2).
-**Решение (минимальное):** превратить портал в **переход между зонами**:
-1. В sidecar `.portal.json` добавить `target_zone` (или генерировать по правилу: следующая зона по цепочке start→mid→hard→faction).
-2. `_on_portal_enter()`: `Game.request_map_by_seed(новый_сид, следующая_зона)` + пересборка сцены; сохранить автосейв перед переходом.
-3. В `character_select` дать выбор стартовой зоны (или первый проход стартует в `start`).
-**Файлы:** [`game.gd`](../../scripts/game.gd:1208), [`map_generator.gd`](../../scripts/world/map_generator.gd:464), [`character_select.gd`](../../scripts/character_select.gd), `tests/map_seed_integration.gd`.
-**Проверка:** smoke-тест «портал меняет зону»; ручная: герой заходит в портал → новая карта другой зоны, сид сохранён.
-
-### R-P0-3. Починить контракт данных WorldState ↔ WorldSim
-**Проблема:** армии без `power` воюют вечно; экономика города вложена, а читается плоско; `felt()` — no-op (01-§3.3).
-**Решение:**
-1. **Единый источник правды для схемы**: завести `WORLD_SCHEMA.md` (или JSON-схему) с полями сущностей — армия обязана иметь `power`, город — плоские `gold/food/prod` (или SIM читает `economy.*` — выбрать одно и сделать везде).
-2. `new_army()`: вычислять `power` из `unit_ids` (сумма attack/max_hp юнитов) при создании и при изменении состава.
-3. `TickSettlements()`: читать `economy.gold/food/prod` из одной ветки (например, `var eco = c["economy"]; food += eco.prod - pop*0.15`).
-4. `felt()` — удалить или сделать осмысленной (например, штраф продуктивности при голоде).
-5. `reseed()` — либо подключить к генератору реальных фракций из `units_db.json`, либо вынести фикстуру в отдельный `world_fixture()` для тестов и держать `reseed()` игровым.
-**Файлы:** [`world_state.gd`](../../scripts/world/world_state.gd:87), [`world_sim.gd`](../../scripts/world/world_sim.gd:93), [`world_sim.gd`](../../scripts/world/world_sim.gd:119), [`world_bus.gd`](../../scripts/world/world_bus.gd:26), `tests/save_smoke.gd`, `tests/test_simulation.gd`.
-**Проверка:** `sim_runner` даёт осмысленный исход: армии сражаются и одна гибнет; город накапливает ресурсы; `save_smoke` round-trip зелёный.
-
-### R-P0-4. Восстанавливать позицию героя при загрузке (или убрать поле)
-**Проблема:** `hero.position` пишется, но не читается (01-§3.4).
-**Решение:** в `apply_payload()` после применения героя восстановить позицию через `AlmMap.is_walkable_world` с откатом на спавн при непроходимости (спираль `_nearest_walkable` уже есть в alm_map). Если сознательно «всегда со спавна» — удалить поле из `build_payload` и из схемы v1.
-**Файлы:** [`save_system.gd`](../../scripts/save_system.gd:249), [`save_system.gd`](../../scripts/save_system.gd:290), `tests/save_smoke.gd`.
-**Проверка:** сохраниться в точке X, загрузиться — герой в X (или ближайшей проходимой клетке).
-
-### R-P0-5. Реализовать или честно отключить `damage_area()`
-**Проблема:** AoE не разрушает объекты карты (01-§3.5).
-**Решение (выбор за игроком):**
-- *Вариант A (минимум):* убрать вызов `alm_map.damage_area()` из `player._damage_area_at` и пометить разрушаемость объектов как незаявленную фичу (обновить README/AGENTS).
-- *Вариант B (полноценно):* разрушаемые объекты — `_obstacles` с HP в `alm_objects.json` (добавить поле `hp`), урон по радиусу списывает HP, при 0 — снять объект (очистить `_obstacles`, перестроить меш препятствий). Это же даст «Серые ломают деревья/город» в будущем.
-**Файлы:** [`alm_map.gd`](../../scripts/alm_map.gd:915), [`player.gd`](../../scripts/player.gd:1469), `tests/spell_mechanics_smoke.gd`.
-**Проверка (B):** огненный шар по дереву → дерево исчезает, клетка становится проходимой; smoke-тест на разрушение.
-
-### R-P0-6. Привести `project.godot` в порядок
-**Проблема:** повреждённый заголовок с BOM/дублями (01-§3.6).
-**Решение:** руками (или скриптом) переписать первые строки в канонический вид:
-```
-; Engine configuration file.
-...
-config_version=5
-```
-Затем открыть проект в редакторе и сохранить один раз. ⚠️ Approval gate: изменение `project.godot` — по AGENTS §9.4 требуется согласование.
-**Файлы:** [`project.godot`](../../project.godot:9).
-**Проверка:** `godot --headless --path . --quit` без ошибок; git diff только первых строк.
+| Было | Чем закрыто |
+|---|---|
+| P0-1 `debug_magic` | `[debug] all_magic` в `game.cfg`, `Game.debug_magic` читает конфиг, дефолт 0 |
+| P0-2 портал-заглушка | сектора, `PORTAL_CHAIN`, экран загрузки перехода |
+| P0-3 контракт WorldState↔WorldSim | `city_economy`, кэш `power`, `maxi(1, …)` в бою, `world_sim_smoke` |
+| P0-4 позиция героя в сейве | `apply_payload` + `_spawn_player_on_walkable` |
+| P0-6 `project.godot` | канонический заголовок |
+| P1-3 дубликаты инвентаря | обход уникальных ключей |
+| P1-6 приказы отряда | `mercenary._sync_order`, `mercenary_orders_smoke` |
+| P1-7 магические числа | `GameConfig combat.attack_cooldown`, `npc.guard_leash` |
+| P1-8 `Silver` | `_SMELTABLE` = 4 металла, тест |
+| P1-9 hotbar | схема сейва v2 |
+| P1-10 дроп | `ItemDB.roll_broken_gear` без полного перебора |
+| P1-11 hover-дубль | один `_world_hover_target` |
+| P2-1 мёртвый код | 5 функций удалены 30.10 |
+| P2-3 O(N²) | spatial grid в `movement_direction` |
+| P2-4 pathfinding | best-first с «ведёрками» |
+| P2-5 размер карты | `size`-параметр, `W = 192` |
+| P2-6 `hash()` | `_cell_hash` |
+| P2-7 миникарта | база кэшируется (частично, см. P2-7 ниже) |
+| P2-9 `loot_icons` | класс `LootIcons` + `loot_icon_smoke` |
+| P3-1…P3-8 | зона в UI, туман, музыка, пауза, `_fight`, `reseed` при рестарте |
 
 ---
 
-## P1 — значимые исправления
+## 1. P1 — значимые дефекты
 
-### R-P1-1. Починить рельеф наёмников и миньонов
-**Проблема:** `mercenary._apply_relief_stand()` берёт карту из `Game.hero` (01-§4.1).
-**Решение:** заменить источник на `get_tree().get_first_node_in_group("alm_map")`, как в [`npc.gd`](../../scripts/npc.gd:38) и [`enemy.gd`](../../scripts/enemy.gd:167). Добавить health_bar в эту же функцию (у мерков бар смещён? — проверить и поправить).
-**Файлы:** [`mercenary.gd`](../../scripts/mercenary.gd:204).
-**Проверка:** нанять мерка, подойти к холму — спрайт поднят на высоту; визуально и smoke-тестом высоты.
+### R-P1-12. Сделать переназначение клавиш настоящим
 
-### R-P1-2. Ставить `ZONE_HOUSES` домов, а не один
-**Проблема:** `range(mini(houses_n, 1))` (01-§4.2).
-**Решение:** `for i in range(houses_n)`. Прогнать `gen_seeds_smoke` и `city_layout_smoke` — количество зданий изменится; при необходимости поднять лимиты попыток в `_place_city_building`.
-**Файлы:** [`map_generator.gd`](../../scripts/world/map_generator.gd:556).
-**Проверка:** генерация без `CITY_CONTENT: missing`; в городе >1 жилого дома; `gen_seeds_smoke` OK.
+**Проблема.** Экран настроек обещает переназначение 6 действий, но (а) сохранённые клавиши не применяются при старте, (б) игра читает сырые `KEY_*`/кнопки мыши, а не эти actions ([`01`](01-audit-report.md) §4.1).
 
-### R-P1-3. Инвентарь: одна ячейка на ключ предмета
-**Проблема:** дубликаты рисуются отдельными ячейками (01-§4.3).
-**Решение:** итерировать уникальные ключи (`counts.keys()`), ячейку дополнять счётчиком стака; клик «использовать/надеть» работает с ключом, как сейчас.
-**Файлы:** [`inventory_panel.gd`](../../scripts/inventory_panel.gd:370).
-**Проверка:** `inventory_ui_smoke` обновить под уникальные ячейки; визуально: 3 зелья = 1 ячейка «×3».
+**Решение (минимальное, без ремапа всего ввода):**
+1. При старте игры вызывать `Settings.apply_input()`: пройти по `REBINDABLE`, прочитать `Settings.key_for(action)` и заменить событие в `InputMap` (тот же код, что `settings_panel._apply_key`, вынести в `Settings`).
+2. Перевести на actions ровно те шесть действий, которые уже обещаны:
+   - `Game._input`: `Space` → `event.is_action_pressed("pause")`;
+   - хоткеи 1–9 → `cast_1..3` (и, если решим, добавить `cast_4..9` в `[input]` — это approval gate);
+   - клик мира/атака → `move_click`/`attack_click` вместо `MOUSE_BUTTON_LEFT` (проверить, что не ломается прицеливание ПКМ).
+3. Пока действие не переведено — **убрать его из `REBINDABLE`** и честно пометить в UI. Лучше 2 работающих строки, чем 6 плацебо.
+4. `Settings.apply_all()` вызывать один раз в `main_menu._ready()` (и в `main.tscn` для прямого запуска), чтобы раскладка переживала перезапуск.
+
+**Файлы:** [`settings.gd`](../../scripts/settings.gd:222), [`settings_panel.gd`](../../scripts/settings_panel.gd:620), [`game.gd`](../../scripts/game.gd:1444), `project.godot` (только если добавляем actions — approval gate).
+
+**Проверка:** `settings_smoke` расширить: переназначить `pause` → `P`, сохранить, пересоздать `Settings`, вызвать `apply_input`, проверить `InputMap.action_get_events("pause")`; в игре — Esc-меню → Настройки → Клавиши → `P` → пауза работает после перезапуска. `--quit` без `SCRIPT ERROR`.
+
+---
+
+### R-P1-13. `damage_area()`: реализовать или убрать (бывший P0-5)
+
+**Проблема.** `player._damage_area_at()` вызывает `alm_map.damage_area()`, у игрового `AlmMap` это `pass`; комментарий обещает урон объектам карты ([`01`](01-audit-report.md) §4.2).
+
+**Решение — выбрать одно:**
+- **A (минимум, рекомендуется для v1):** убрать вызов из `_damage_area_at`, убрать метод-пустышку из `AlmMap`, поправить комментарий на «урон по юнитам». Разрушаемость объектов не заявлена — честно её не обещать.
+- **B (полноценно):** перенести реализацию `CustomMap.damage_area` в `AlmMap`: у объектов карты (`MapObject`/`AlmObstacle`) завести `hp`, по радиусу списывать урон, при 0 — убирать объект, чистить `_obstacles` и перестраивать меш препятствий/чанк. Это уже механика, а не багфикс: нужен GDD (сколько HP у дерева/камня, что роняет).
+
+**Файлы:** [`alm_map.gd`](../../scripts/alm_map.gd:1308), [`player.gd`](../../scripts/player.gd:2180), [`custom_map.gd`](../../scripts/custom_map.gd:669), `map_object.gd`.
+
+**Проверка (A):** поиск по `damage_area` не находит вызовов в игровом пути; `spell_mechanics_smoke` зелёный; AoE по врагам не изменился.
+**Проверка (B):** новый smoke: огненный шар по дереву → объект исчез, клетка проходима; `fuzz_water`/`fuzz_edge` зелёные.
+
+---
+
+### R-P1-1. Рельеф наёмников и миньонов
+
+**Проблема.** `mercenary._apply_relief_stand()` берёт карту из `Game.hero` и проверяет у игрока группу `alm_map` ([`01`](01-audit-report.md) §4.3).
+
+**Решение.** Заменить источник на `get_tree().get_first_node_in_group("alm_map")` (как в `npc.gd:236`/`enemy.gd:211`), оставить проверку `has_method("relief_at_world")`. Заодно проверить, что полоса HP наёмника поднимается на ту же высоту.
+
+**Файлы:** [`mercenary.gd`](../../scripts/mercenary.gd:284).
+
+**Проверка:** smoke: создать наёмника на клетке с `relief > 0`, вызвать `_apply_relief_stand()`, `_anim.position.y == -relief`; в игре — нанять мерка и подойти к холму.
+
+---
 
 ### R-P1-4. Эффекты зелий — в данные
-**Проблема:** лечение по подстроке имени (01-§4.4).
-**Решение:** в `item_db.json` у Potion добавить `{ "heal": 30, "mana": 0 }` (генератор `tests/gen_potion_fields.py`); `_on_item_clicked` читает поля, fallback — ноль с `push_warning` для неизвестных.
-**Файлы:** `assets/items/item_db.json`, [`inventory_panel.gd`](../../scripts/inventory_panel.gd:472).
-**Проверка:** smoke: зелья лечат по данным, неизвестное зелье не исчезает молча.
 
-### R-P1-5. Перенести ввод на Input Map
-**Проблема:** сырые keycodes вместо actions (01-§4.5).
-**Решение:** добавить actions (`ui_inventory`, `ui_spells`, `toggle_pause`, `quick_cast_1..9`, `cancel_target`, `restart`, `move_click`), читать через `Input.is_action_*`/`event.is_action_pressed`. ⚠️ Approval gate: изменение input map — согласовать.
-**Файлы:** `project.godot`, [`game.gd`](../../scripts/game.gd:640).
-**Проверка:** все горячие клавиши работают как раньше (smoke по _input заменяется unit-проверкой action-ов).
+**Проблема.** Лечение/мана выводятся из подстроки ключа; у предметов нет числовых полей ([`01`](01-audit-report.md) §4.4).
 
-### R-P1-6. Команды отряда — наёмникам
-**Проблема:** follow/attack/guard двигают только героя (01-§4.6).
-**Решение (этап 1):** `Game.action_mode` читать в `mercenary._physics_process`: при `attack` — целевой выбор из врагов в радиусе (как сейчас), при `guard` — не отходить дальше N px от героя, при `follow` — держаться за героем; `stop` — стоять. Формации/стойки — в vision (03).
-**Файлы:** [`mercenary.gd`](../../scripts/mercenary.gd:34), [`game.gd`](../../scripts/game.gd:1216).
-**Проверка:** smoke: после «Атак.» наёмник атакует ближайшего врага; после «Стоп» стоит.
+**Решение:**
+1. В `item_db.json` у `quality == "Potion"` добавить `"heal": int`, `"mana": int` (0, если не лечит). Заполнить генератором/скриптом по существующим 3 размерам, не руками.
+2. `Player.use_potion()` читает `heal`/`mana`; если у зелья нет ни постоянных эффектов, ни чисел — `push_warning` и **не тратить** предмет (сейчас молча тратится).
+3. `LootIcons` продолжает определять баночку по `type`/`name_ru` — это визуал, не эффект; пометить в комментарии, чтобы не путали.
+4. Инвариант в `craft_items_smoke`/`material_migration_smoke`: каждое `Potion` имеет `heal + mana > 0` или постоянный эффект.
 
-### R-P1-7. Убрать магические числа боя
-**Проблема:** `attack_cooldown = 1.0`, граница стражи 380 (01-§4.7).
-**Решение:** константы в одном месте: `Game.ATTACK_COOLDOWN` уже есть — использовать; `GUARD_MAX_LEASH` — константа `Npc` (или в `units_db` поле `guard_leash`).
-**Файлы:** [`enemy.gd`](../../scripts/enemy.gd:125), [`npc.gd`](../../scripts/npc.gd:160), [`mercenary.gd`](../../scripts/mercenary.gd:147).
-**Проверка:** парсинг + `equipment_combat_smoke`/`spawn_smoke` зелёные.
+**Файлы:** `assets/items/item_db.json`, [`player.gd`](../../scripts/player.gd:635), [`loot_icons.gd`](../../scripts/loot_icons.gd:41).
 
-### R-P1-8. Очистить `_SMELTABLE` от серебра и синхронизировать с данными
-**Проблема:** мёртвый `"Silver"` (01-§4.8).
-**Решение:** проверить наличие `Silver Ingot` в БД; если нет — убрать `"Silver"` из `_SMELTABLE`, добавить инвариант в `material_migration_smoke`: «каждый металл в _SMELTABLE имеет слиток в item_db».
-**Файлы:** [`item_db.gd`](../../scripts/item_db.gd:181), `tests/material_migration_smoke.gd`.
-**Проверка:** `blacksmith_smoke` + новый инвариант зелёные.
-
-### R-P1-9. Сохранять hotbar
-**Проблема:** назначения 1..9 теряются после загрузки (01-§4.9).
-**Решение:** добавить `"hotbar": Game.hotbar.duplicate(true)` в `build_payload` и восстановление в `apply_payload` (версия схемы — bump до 2 с миграцией v1→v2, поле опционально).
-**Файлы:** [`save_system.gd`](../../scripts/save_system.gd:231).
-**Проверка:** `save_smoke`: назначил → сохранил → загрузил → хотбар на месте.
-
-### R-P1-10. Кэш пула дропа
-**Проблема:** `_random_gear()` фильтрует 491 предмет на каждый труп (01-§4.10).
-**Решение:** статический кэш `ItemDB.price_pool(budget)` — отсортированный список по цене + бинарный поиск верхней границы, случайный выбор из подмножества.
-**Файлы:** [`enemy.gd`](../../scripts/enemy.gd:379), [`item_db.gd`](../../scripts/item_db.gd).
-**Проверка:** `equipment_combat_smoke` зелёный; бенчмарк дропа 1000 раз.
-
-### R-P1-11. Единый ховер-детектор цели
-**Проблема:** два обхода юнитов на кадр (01-§4.11).
-**Решение:** один `Game.unit_at_point(pos) -> Node2D` (для click/hover/tooltip), кэшировать цель на кадр в `ui` (`_hover_target_cache` + invalidate по позиции мыши), чтобы `_hover_portrait` и `_world_hover_target` не дублировали работу.
-**Файлы:** [`ui.gd`](../../scripts/ui.gd:711), [`ui.gd`](../../scripts/ui.gd:802), [`game.gd`](../../scripts/game.gd:948).
-**Проверка:** `hover_tooltip_smoke` зелёный; производительность — профилировщик.
+**Проверка:** smoke: зелье лечит по данным; неизвестное зелье не исчезает; модовое зелье работает без правки кода.
 
 ---
 
-## P2 — техдолг и полировка
+## 2. P2 — техдолг и инфраструктура
 
-### R-P2-1. Вычистить мёртвый код
-Удалить (по одному коммиту): `player._create_lightning_effect`, `unit_db._unused`, `ui.cast_ability` (pass), поля крита в SpellDB (или реализовать крит — см. 03), `alm_map._add_vert`. После каждого удаления — парсинг + релевантные smoke.
-**Файлы:** [`player.gd`](../../scripts/player.gd:1540), [`unit_db.gd`](../../scripts/unit_db.gd:214), [`ui.gd`](../../scripts/ui.gd:1332), [`spell_db.gd`](../../scripts/spell_db.gd:102), [`alm_map.gd`](../../scripts/alm_map.gd:557).
+### R-P2-2. Hover-карточки в `UiKit`
 
-### R-P2-2. Вынести hover-карточки в UiKit
-`_item_card_lines` + `_attach_item_card/_attach_slot_card` перенести в `UiKit.make_item_card_lines(item)` / `UiKit.attach_card(cell, item, bounds)`. Проверить, что панели не изменили вид (smoke-тесты UI).
-**Файлы:** [`ui.gd`](../../scripts/ui.gd:583), [`inventory_panel.gd`](../../scripts/inventory_panel.gd:516), [`ui_kit.gd`](../../scripts/ui_kit.gd).
+**Проблема.** `_item_card_lines`/`_attach_item_card` продублированы в `ui.gd` и `inventory_panel.gd` ([`01`](01-audit-report.md) §5.1).
 
-### R-P2-3. Кэш списка юнитов и spatial hash для separation
-Ввести `Game.units_cache` (герой+враги+НПЦ+отряд), обновляемый при спавне/смерти; `movement_direction()` ограничить поиском в радиусе 24 px через spatial hash или минимум — проверкой расстояния после сортировки. `tick_shields`/`StatusEffects.tick` использовать кэш.
-**Файлы:** [`game.gd`](../../scripts/game.gd:210), [`game.gd`](../../scripts/game.gd:253), [`status_effects.gd`](../../scripts/status_effects.gd:249).
-**Проверка:** профилировщик: кадр с 60 юнитами без просадок; `fuzz_edge`/`runtime_errors_smoke` зелёные.
+**Решение.** Перенести в `UiKit.make_item_card_lines(item)` и `UiKit.attach_item_card(cell, item)`, оставить тонкие обёртки. Проверить, что карточки в складе/лавке/кузне выглядят одинаково.
 
-### R-P2-4. Единый pathfinding: A* с нормальной очередью
-Заменить BFS `find_path` на A* (эвристика Manhattan, соседи 8 с диагональной проверкой — сохранить), очередь — `Array` с линейным минимумом заменить на двоичную кучу или, минимально, на `PriorityQueue`-подобную реализацию с `sort` по вставке. Покрыть инвариантами из `fuzz_edge`/`fuzz_water`.
-**Файлы:** [`alm_map.gd`](../../scripts/alm_map.gd:825).
-**Проверка:** те же пути, что и BFS (сравнить на 20 случайных парах), скорость выше на 256×256.
+**Файлы:** [`ui.gd`](../../scripts/ui.gd:994), [`inventory_panel.gd`](../../scripts/inventory_panel.gd:1343), [`ui_kit.gd`](../../scripts/ui_kit.gd).
 
-### R-P2-5. Переменный размер карты
-`W/H` из параметров `generate(seed, zone, dir, size)`; профиль зоны задаёт размер (start 96, mid 128, hard 160, faction 192 — предложение); все внутренние циклы уже параметризованы (`W*H`, `range(H)`), кроме констант `W/H` в сигнатурах. Атлас/рендер приспособить.
-**Файлы:** [`map_generator.gd`](../../scripts/world/map_generator.gd:18).
-**Проверка:** `gen_seeds_smoke` + новый тест разных размеров.
-
-### R-P2-6. Заменить `hash(Vector2i)` на стабильный
-Во всех местах генератора использовать формулу `abs(t*73856093 ^ x*19349663 ^ y*83492791)` (как уже в `_interior_tile`) — убрать зависимость от движка.
-**Файлы:** [`map_generator.gd`](../../scripts/world/map_generator.gd:1141), [`map_generator.gd`](../../scripts/world/map_generator.gd:1237).
-**Проверка:** байтовая регрессия `seed=4242` — совпадение с эталоном (или пересчёт эталона разово, с записью в журнал).
-
-### R-P2-7. Миникарта: слои вместо попиксельной перерисовки
-Рендер terrain в `Image` один раз (при загрузке карты), затем поверх — точки юнитов (крошечный слой, обновление 4 Гц). Для будущих больших карт — LOD-шаг.
-**Файлы:** [`ui.gd`](../../scripts/ui.gd:963).
-**Проверка:** `lighting_smoke`/UI-тесты зелёные; визуально миникарта не отличается.
-
-### R-P2-8. Обновить документацию
-- README: рендерер Forward+ (+ hdr_2d), `MapGenerator` как ядро, актуальный раздел «Что реализовано», дорожная карта.
-- HOW_TO_RUN.txt: актуальный путь, старт с `character_select.tscn`, текущее управление.
-- AGENTS.md: журнал сессий — запись об аудите.
-**Файлы:** [`README.md`](../../README.md), [`HOW_TO_RUN.txt`](../../HOW_TO_RUN.txt), [`AGENTS.md`](../../AGENTS.md).
-
-### R-P2-9. Решить судьбу `assets/loot_icons/`
-Или подключить (`loot_bag` рисует меш кодом — заменить спрайтом), или пометить в README как архив и удалить из рабочего дерева. Починить Linux-пути в `tests/recolor_*.py`/`generate_*_icons.py` или удалить нерабочие генераторы.
-**Файлы:** `assets/loot_icons/`, `tests/generate_loot_icons.py`, `tests/recolor_*.py`.
-
-### R-P2-10. Панели интерьера — декомпозиция на контейнеры (поэтапно)
-Не рефакторить разом; при каждой следующей правке панели переводить блок на контейнеры с проверкой `*_ui_smoke` (уже заведены: `shop_ui_smoke`, `inn_ui_smoke`, `inventory_ui_smoke`).
-**Файлы:** [`inventory_panel.gd`](../../scripts/inventory_panel.gd:97) и др.
+**Проверка:** `inventory_ui_smoke`, `shop_ui_smoke`, `inn_ui_smoke`, `hover_tooltip_smoke` (если есть) зелёные; визуально 1280×800.
 
 ---
 
-## Контроль после каждого шага (AGENTS §3)
+### R-P2-7. Миникарта: слой оверлеев
+
+**Проблема.** База кэшируется, но герой/враги/НПЦ/туман перерисовываются `set_pixel` каждые 0.25 с ([`01`](01-audit-report.md) §5.2).
+
+**Решение.** Оставить `_minimap_base` как есть; оверлеи рисовать в отдельный маленький `Image` (или `Node2D` с точками) и обновлять только его. Для 192×192 выигрыш невелик, но это снимет потолок при росте карт.
+
+**Файлы:** [`ui.gd`](../../scripts/ui.gd:1310-1517), [`fog_of_war.gd`](../../scripts/fog_of_war.gd).
+
+**Проверка:** `lighting_smoke`, `fog_of_war_smoke`, `world_map_ui_smoke` зелёные; визуально миникарта не изменилась.
+
+---
+
+### R-P2-8. Привести доки и комментарии в соответствие
+
+**Проблема.** Пять мест расходятся с кодом ([`01`](01-audit-report.md) §5.3): `HOW_TO_RUN.txt`, `README.dev.md`, шапка `settings_panel.gd`, комментарии `map_generator.gd` и `minimap_markers.gd`.
+
+**Решение.** Одним docs-коммитом:
+- `HOW_TO_RUN.txt`: путь `D:\Work\Allodshome`, старт `character_select.tscn`, актуальные управление и проверка;
+- `README.dev.md:8`: Forward+ (или явно указать, что `rendering_method` не задан = default);
+- `settings_panel.gd:13-23`: убрать «шин нет», описать реальное состояние (шины есть, раздельные громкости работают);
+- `map_generator.gd:141`: убрать «ВРЕМЕННО hero_dummy»;
+- `minimap_markers.gd:8`: квесты уже есть, маркеры `QUEST_*` используются.
+
+**Файлы:** см. выше.
+
+**Проверка:** `git diff` только текстов; `loc_smoke`/`branding_smoke` зелёные.
+
+---
+
+### R-P2-11. Linux-пути в генераторах иконок
+
+**Проблема.** `generate_loot_icons.py` и `generate_potion_icons.py` пишут в `/media/alexey/...` ([`01`](01-audit-report.md) §5.4).
+
+**Решение.** Перевести на `Path(__file__).resolve().parents[1] / "assets" / ...`; если скрипт исторический и не нужен — перенести в `tests/archive/` с пометкой в `README.dev.md`.
+
+**Файлы:** `tests/generate_loot_icons.py`, `tests/generate_potion_icons.py`.
+
+**Проверка:** `python tests/generate_loot_icons.py --help` (или `--check`) запускается на Windows; артефакты не перезаписываются без флага.
+
+---
+
+### R-P2-13. Один прогон тестов
+
+**Проблема.** 136 файлов `tests/`, ручной цикл; уже были «зелёные» тесты с падавшими проверками.
+
+**Решение.** `tests/run_all.ps1` (и `.sh`): парсинг `--quit`, затем список smoke-тестов (исключая пробы/утилиты), суммарный отчёт `PASS/FAIL`, код возврата 1 при любом провале. Список тестов держать в самом скрипте (явный, не автопоиск), чтобы новые тесты добавлялись осознанно.
+
+**Файлы:** новый `tests/run_all.ps1`, `README.dev.md`.
+
+**Проверка:** скрипт на чистом клоне: 0 провалов; специально сломать один smoke — скрипт возвращает 1 и печатает имя.
+
+---
+
+### R-P2-14. Export presets
+
+**Проблема.** Нет `export_presets.cfg`; собрать билд нельзя ([`01`](01-audit-report.md) §5.6).
+
+**Решение.** Добавить Windows Desktop preset (и, при желании, Linux), путь `build/` в `.gitignore`, проверить экспорт из CLI. ⚠️ Approval gate: новые файлы конфигурации сборки согласовать с игроком.
+
+**Файлы:** новый `export_presets.cfg`, `.gitignore`, `README.dev.md`.
+
+**Проверка:** `godot --headless --export-release "Windows Desktop" build/Mirotokhome.exe`; запуск `.exe` из чистой папки; автосейв на выходе.
+
+---
+
+### R-P2-15. `WorldBus.reseed()` — фикстура или модель карты
+
+**Проблема.** SIM-мир стартует с 4 фракциями, 2 городами и 2 армиями из кода ([`01`](01-audit-report.md) §5.7).
+
+**Решение — выбрать одно:**
+- **A (минимум):** переименовать в `reseed_fixture()` и вызывать только в тестах/`sim_runner`; в игре строить SIM из текущей карты (города/фракции/стража) или хотя бы из `map_seed`.
+- **B:** оставить как «демо-мир» и честно записать в AGENTS, что SIM не связан с картой; убрать из пользовательских ожиданий.
+
+**Файлы:** [`world_bus.gd`](../../scripts/world/world_bus.gd:35), `world_sim_smoke`, `sim_runner.gd`.
+
+**Проверка:** `world_sim_smoke` и `sim_runner` дают осмысленный исход; в игре день мира и квесты не зависят от фикстуры (или явно зависят — задокументировано).
+
+---
+
+### R-P2-16. Подбор зелья у НПЦ без полного перебора
+
+**Проблема.** `npc.gd:482` обходит `ItemDB.all()` при выборе зелья.
+
+**Решение.** Добавить в `ItemDB` индекс `potions_by_size` (small/medium/large), построенный при загрузке; НПЦ берёт случайный из нужного списка.
+
+**Файлы:** [`npc.gd`](../../scripts/npc.gd:482), [`item_db.gd`](../../scripts/item_db.gd).
+
+**Проверка:** `npc_spawn_smoke`/`city_npc_smoke` зелёные; дроп зелий не изменился по типам.
+
+---
+
+## 3. P3 — заметки и будущие фичи
+
+| ID | Тема | Что делать |
+|---|---|---|
+| R-P3-1 | День/ночь | Использовать `time_of_day` из `.alm` + `CanvasModulate`/`Light2D`; ночные мобы. Скиллы `godot-2d-rendering`, `level-design` |
+| R-P3-2 | Диалоги НПЦ | Ветвящийся диалог поверх квестов; `dialogue-systems` |
+| R-P3-3 | Ковка из слитков | «Слиток + рецепт → выбранный предмет»; сейчас кузня только перерабатывает и куёт рецепты мастерской |
+| R-P3-4 | Авторская таблица сопротивлений | Пересмотреть проценты после плейтеста; формула Аллодов не трогать |
+| R-P3-5 | 100+ юнитов / 60 FPS | Стресс-тест на 192×192 и 256×256; профилировщик, бюджеты кадра |
+| R-P3-6 | EN-локализация | Аудит строк: квесты, лор, тултипы; сейчас EN покрыт неравномерно |
+
+---
+
+## 4. Контроль после каждого шага (AGENTS §3)
 
 1. `godot --headless --path . --quit` — без `SCRIPT ERROR`.
 2. `godot --headless --path . --script res://tests/runtime_errors_smoke.gd` — без рантайм-ошибок.
-3. Релевантные smoke-тесты (список в [`AGENTS.md`](../../AGENTS.md:235)).
-4. Ручная визуальная проверка 1280×800, где затронут UI.
-5. Коммит — только после ручной проверки игроком (AGENTS §9.3).
+3. Релевантные smoke-тесты (список в `AGENTS.md`).
+4. UI — визуально на 1280×800 и 1280×600, фокус/мышь/клавиатура.
+5. Коммит — только после проверки игроком (AGENTS §9.3), сообщение на английском.
 
 ---
 
-## Сводная таблица задач
+## 5. Сводная таблица
 
-| # | Задача | Severity | Файлы | Зависит от |
+| ID | Задача | Severity | Файлы | Зависит от |
 |---|---|---|---|---|
-| R-P0-1 | debug_magic → настройка | P0 | game.gd, player.gd, project.godot | — |
-| R-P0-2 | Портал между зонами | P0 | game.gd, map_generator, character_select | — |
-| R-P0-3 | Контракт WorldState↔WorldSim | P0 | world_* | — |
-| R-P0-4 | Позиция героя в save | P0 | save_system | — |
-| R-P0-5 | damage_area | P0 | alm_map, player | решение игрока A/B |
-| R-P0-6 | project.godot | P0 | project.godot | approval gate |
-| R-P1-1..11 | См. раздел P1 | P1 | — | частично P0 |
-| R-P2-1..10 | См. раздел P2 | P2 | — | — |
+| R-P1-12 | Настоящее переназначение клавиш | P1 | settings*.gd, game.gd | решение по `cast_4..9` (approval gate) |
+| R-P1-13 | `damage_area` — реализовать или убрать | P1 | alm_map, player, map_object | решение A/B |
+| R-P1-1 | Рельеф наёмников | P1 | mercenary.gd | — |
+| R-P1-4 | Эффекты зелий в данные | P1 | item_db.json, player.gd | — |
+| R-P2-2 | Hover-карточки в UiKit | P2 | ui.gd, inventory_panel.gd, ui_kit.gd | — |
+| R-P2-7 | Слой оверлеев миникарты | P2 | ui.gd, fog_of_war.gd | — |
+| R-P2-8 | Доки и комментарии | P2 | HOW_TO_RUN, README.dev, 3 скрипта | — |
+| R-P2-11 | Linux-пути генераторов | P2 | 2 python-скрипта | — |
+| R-P2-13 | `run_all.ps1` | P2 | tests/, README.dev | — |
+| R-P2-14 | Export presets | P2 | export_presets.cfg | approval gate |
+| R-P2-15 | SIM-фикстура | P2 | world_bus, sim_runner | решение A/B |
+| R-P2-16 | Индекс зелий | P2 | npc.gd, item_db.gd | — |
+| R-P3-1…6 | День/ночь, диалоги, ковка, баланс, перф, EN | P3 | — | после P1/P2 |
 
 *Приоритеты могут пересматриваться; главное правило — по одной задаче на запрос и без смешивания несвязанных изменений (AGENTS §9.1).*

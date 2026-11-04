@@ -62,6 +62,10 @@ const BIOME_COUNT := 7
 ## Сколько клеток карты в одну плитку текстуры бленда (1 = 32px на клетку).
 const BLEND_CELLS_PER_TEX := 1.0
 var _obstacle_db := {}          # .alm obstacle id -> {folder, w, h, cx, cy, phases}
+## folder -> HP from assets/map-objects/destructibles.json (04.11).
+var _destructible_hp := {}
+## Vector2i -> AlmObstacle, so an area spell can find the node by cell.
+var _obstacle_nodes := {}
 var obstacles_root: Node2D      # слой препятствий (y-sort)
 var buildings: Node2D           # слой зданий (y-sort)
 var herbs_root: Node2D
@@ -112,6 +116,7 @@ func _ready() -> void:
 	var info: Dictionary = data.get("info", {})
 	solar_angle = float(info.get("solar_angle", 0.785398))
 	_load_obstacle_db()
+	_load_destructible_db()
 	_build_atlas()
 	_build_relief_mesh()
 	_build_obstacles()
@@ -131,8 +136,21 @@ func _load_obstacle_db() -> void:
 	if parsed is Dictionary:
 		_obstacle_db = parsed
 
+## HP of destructible obstacle folders. Missing folder = indestructible.
+func _load_destructible_db() -> void:
+	_destructible_hp.clear()
+	var f := FileAccess.open("res://assets/map-objects/destructibles.json", FileAccess.READ)
+	if f == null:
+		push_warning("AlmMap: нет destructibles.json — объекты не разрушаются")
+		return
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	if parsed is Dictionary:
+		_destructible_hp = parsed
+
 ## Препятствия (.alm obstacles): дерево/камень/статуя на клетках с id > 0.
 func _build_obstacles() -> void:
+	_obstacle_nodes.clear()
 	if obstacles_root == null:
 		obstacles_root = Node2D.new()
 		obstacles_root.name = "Obstacles"
@@ -153,9 +171,12 @@ func _build_obstacles() -> void:
 			ob.setup(folder, int(spec.get("phases", 1)),
 				int(spec.get("w", 128)), int(spec.get("h", 128)),
 				int(spec.get("cx", 64)), int(spec.get("cy", 96)),
-				int(spec.get("index", 0)))
+				int(spec.get("index", 0)),
+				int(_destructible_hp.get(folder, 0)))
 			ob.place_at(Vector2i(x, y), TILE, relief_at_tile(x, y))
+			ob.destroyed.connect(_on_obstacle_destroyed)
 			obstacles_root.add_child(ob)
+			_obstacle_nodes[Vector2i(x, y)] = ob
 
 ## Здания из секции id=4 (structures): спрайты assets/structures/<папка>/house-NNN.png.
 ## Сетка кадров 32x32: fw=TileWidth, fh=FullHeight; верхние (fh-th) рядов — выше земли.
@@ -966,6 +987,36 @@ func get_units() -> Array:
 	return map_units
 
 
+## City list for the SIM layer (04.11): one record per city head, carrying the
+## race, the averaged centre cell and the population (all NPCs of that city).
+## Custom maps without city_id still produce one city per head.
+func get_cities() -> Array:
+	var heads := city_heads()
+	var out: Array = []
+	for cid in heads:
+		var rec: Dictionary = heads[cid]
+		var cells: Array = rec.get("cells", [])
+		if cells.is_empty():
+			continue
+		var sx := 0
+		var sy := 0
+		for c in cells:
+			sx += int(c[0])
+			sy += int(c[1])
+		var pop := 0
+		for d in map_units:
+			if str(d.get("city_id", "")) == str(cid):
+				pop += 1
+		out.append({
+			"id": str(cid),
+			"race": str(rec.get("race", "")),
+			"x": int(round(float(sx) / float(cells.size()))),
+			"y": int(round(float(sy) / float(cells.size()))),
+			"population": maxi(1, pop),
+		})
+	return out
+
+
 ## Форпосты фракций этой карты: [{id, faction, name, x, y}].
 ## Пусто у карт без sidecar .outposts.json (военные .alm, старые карты).
 func outposts() -> Array:
@@ -1305,5 +1356,34 @@ func tile_id_at(cell: Vector2i) -> int:
 		return -1
 	return _hflags[cell.y * map_width + cell.x]
 
-func damage_area(_world_pos: Vector2, _radius: float, _dmg: int) -> void:
-	pass
+## Area-spell damage against world objects (trees, rocks, barrels). The cell
+## becomes walkable the moment the object breaks, so pathfinding and the click
+## marker agree with what the player sees.
+func damage_area(world_pos: Vector2, radius: float, dmg: int) -> void:
+	if radius <= 0.0 or dmg <= 0:
+		return
+	var center := _cell_of(world_pos)
+	var reach := int(ceil(radius / float(TILE))) + 1
+	for ty in range(center.y - reach, center.y + reach + 1):
+		for tx in range(center.x - reach, center.x + reach + 1):
+			if tx < 0 or ty < 0 or tx >= map_width or ty >= map_height:
+				continue
+			var at := Vector2i(tx, ty)
+			var ob: AlmObstacle = _obstacle_nodes.get(at)
+			if ob == null or not is_instance_valid(ob):
+				continue
+			# Compare against the CELL's ground point: the node itself is raised
+			# by relief, and a tree on a hill must not dodge a fireball.
+			var ground := Vector2(tx * TILE + TILE / 2.0, ty * TILE + TILE / 2.0)
+			if ground.distance_to(world_pos) > radius + TILE * 0.5:
+				continue
+			ob.take_damage(dmg)
+
+
+func _on_obstacle_destroyed(at: Vector2i) -> void:
+	_obstacle_nodes.erase(at)
+	if at.x < 0 or at.y < 0 or at.x >= map_width or at.y >= map_height:
+		return
+	var i := at.y * map_width + at.x
+	if i >= 0 and i < _obstacles.size():
+		_obstacles[i] = 0

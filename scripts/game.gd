@@ -1016,6 +1016,9 @@ func _setup_post_pass() -> void:
 
 func _ready():  # Инициализация мира и боя
 	process_mode = PROCESS_MODE_ALWAYS  # Работает даже на паузе
+	# Direct main.tscn launch (F6/tests) bypasses the main menu, which is the
+	# normal place where saved key bindings are applied.
+	Settings.apply_input()
 	# A fresh main scene is a fresh life: the death flag is static and could
 	# survive a redirect/restart from a dead run.
 	Game.hero_dead = false
@@ -1049,6 +1052,7 @@ func _ready():  # Инициализация мира и боя
 
 	# Спавним игрока на проходимом тайле в центре карты
 	_ensure_world_state()
+	_sync_sim_from_map()
 	# Свежая сцена начинает ленту с одной строки прибытия: после загрузки
 	# сохранения не должно оставаться болтовни прошлой сессии.
 	var wf = load("res://scripts/world/world_feed.gd")
@@ -1353,6 +1357,20 @@ func _is_open_spot(tx: int, ty: int) -> bool:
 			open_neighbors += 1
 	return open_neighbors >= 2
 
+## Hotbar slot 0..8 for this event. cast_1..3 are rebindable InputMap actions;
+## keys 4..9 stay fixed until cast_4..9 are added to project.godot.
+func _cast_slot_of(event: InputEvent) -> int:
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return -1
+	for i in range(3):
+		if event.is_action_pressed("cast_%d" % (i + 1)):
+			return i
+	var key := (event as InputEventKey).keycode
+	if key >= KEY_4 and key <= KEY_9:
+		return key - KEY_1
+	return -1
+
+
 func _input(event):
 	# Dead hero: every world command and the normal Esc menu are off. The
 	# game-over panel has its own _input and still receives the event; Esc is
@@ -1369,8 +1387,7 @@ func _input(event):
 	if is_paused:
 		if event is InputEventMouseButton:
 			return
-		if event is InputEventKey and event.pressed and not event.echo \
-				and event.keycode >= KEY_1 and event.keycode <= KEY_9:
+		if _cast_slot_of(event) >= 0:
 			return
 	# Прицеливание (свиток или заклинание книги): ПКМ или ESC отменяет.
 	# Свиток НЕ тратится, мана/заряд НЕ списываются.
@@ -1393,8 +1410,8 @@ func _input(event):
 	# применяет назначенное: заклинание — с прицеливанием, зелье — сразу,
 	# свиток — с выбором цели кликом.
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode >= KEY_1 and event.keycode <= KEY_9:
-			var slot: int = event.keycode - KEY_1
+		var slot := _cast_slot_of(event)
+		if slot >= 0:
 			if event.ctrl_pressed:
 				var sn := str(Game.pending_spell.get("name", ""))
 				if sn != "":
@@ -1423,7 +1440,11 @@ func _input(event):
 						_use_hotbar_item(str(entry.get("key", "")))
 				return
 
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+	# Both actions are world clicks: attack_click is the second binding for the
+	# same contextual action (click an enemy to attack, ground to move).
+	if event is InputEventMouseButton and event.pressed \
+			and (event.is_action_pressed("move_click") \
+				or event.is_action_pressed("attack_click")):
 		# Клики по интерфейсу (книга заклинаний, инвентарь, панели, магазин/таверна)
 		# не должны двигать/атаковать героя по карте
 		if ui != null and ui.has_method("is_editor_open") and ui.is_editor_open():
@@ -1441,9 +1462,11 @@ func _input(event):
 			return
 		handle_click(world_position)
 
-	if event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
+	if event is InputEventKey and event.pressed and not event.echo \
+			and event.is_action_pressed("pause"):
 		is_paused = !is_paused
 		get_tree().paused = is_paused
+		return
 
 	# Рестарт по Ctrl+R
 	if event is InputEventKey and event.pressed and event.keycode == KEY_R and event.ctrl_pressed:
@@ -2680,6 +2703,27 @@ func _ensure_world_state() -> void:
 	# должны «докручивать» день, накопленный прошлой сценой/сессией.
 	if bus.has_method("reset_day_timer"):
 		bus.call("reset_day_timer")
+
+
+## Build the SIM from the live map's cities (04.11). The first real map replaces
+## the hardcoded sandbox; a loaded save keeps its economy because
+## WorldBus.sync_sector_map is a no-op once the sector already has cities.
+func _sync_sim_from_map() -> void:
+	var bus := _world_bus()
+	if bus == null or bus.state == null or alm_map == null:
+		return
+	if not alm_map.has_method("get_cities"):
+		return
+	var cities: Array = alm_map.call("get_cities")
+	if cities.is_empty():
+		return
+	var sector := Game.map_sector
+	if sector == "":
+		sector = "zone:" + Game.map_zone
+	var region_name := Game.map_zone
+	if Game.map_sector != "":
+		region_name = _sector_name(Game.map_sector)
+	bus.call("sync_sector_map", sector, cities, region_name)
 
 
 ## Карта сектора для перехода: сначала из слота (посещённый сектор), потом из

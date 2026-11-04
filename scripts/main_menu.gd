@@ -59,6 +59,10 @@ var _fit_root: Control
 
 
 func _ready() -> void:
+	# Saved volume/video/key bindings must survive a restart. Before 04.11
+	# apply_all() was never called, so the settings file only lived in the
+	# panel's session; the game ignored every saved value.
+	Settings.apply_all(get_tree().root)
 	Loc.load_locale()
 	MusicDB.start_playlist.call_deferred()
 	# Тематический анимированный курсор вместо системной стрелки.

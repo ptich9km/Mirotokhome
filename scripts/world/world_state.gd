@@ -85,10 +85,12 @@ func new_unit(faction_id: String = "", sphere: String = "") -> Dictionary:
 	}
 	return units[id]
 
-func new_city(name: String, faction_id: String = "", region_id: String = "") -> Dictionary:
+func new_city(name: String, faction_id: String = "", region_id: String = "",
+		sector_id: String = "") -> Dictionary:
 	var id := _id("c")
 	cities[id] = {
 		"id": id, "name": name, "faction_id": faction_id, "region_id": region_id,
+		"sector_id": sector_id,
 		"pos": Vector2.ZERO, "population": 100, "loyalty": 60.0,
 		"economy": { "gold": 50, "food": 100, "prod": 5, "price_base": {} },
 	}
@@ -381,6 +383,110 @@ func new_region(name: String) -> Dictionary:
 	regions[id] = { "id": id, "name": name, "area_px": Vector2(1024, 768), "cities": [], "roads": [], "faction_ids": [] }
 	return regions[id]
 
+
+## True when the live map of this sector already fed the SIM. Loading a save
+## must not re-seed the sector and wipe its economy/loyalty.
+func has_sector_cities(sector_id: String) -> bool:
+	if sector_id == "":
+		return false
+	for id in cities:
+		if str(cities[id].get("sector_id", "")) == sector_id:
+			return true
+	return false
+
+
+## Build SIM cities/armies from the city list of the CURRENT map (04.11).
+## Fixture records from WorldBus.reseed() are removed on the first real map,
+## so the sandbox world no longer survives into a normal game.
+func apply_map_cities(sector_id: String, map_cities: Array, region_name: String = "") -> int:
+	if sector_id == "" or map_cities.is_empty():
+		return 0
+	_clear_map_records(sector_id)
+	ensure_race_factions()
+	var region: Dictionary = _region_for_sector(sector_id, region_name)
+	var ordinal := {}
+	var added := 0
+	var lore = load("res://scripts/lore.gd")
+	for raw in map_cities:
+		if not (raw is Dictionary):
+			continue
+		var rec: Dictionary = raw
+		var race := str(rec.get("race", ""))
+		if race == "":
+			continue
+		var f: Dictionary = _faction_for_race(race)
+		if f.is_empty():
+			continue
+		var n := int(ordinal.get(race, 0)) + 1
+		ordinal[race] = n
+		var base: String = str(RACE_FACTION_LABEL.get(race, "Город"))
+		if lore != null:
+			var fd: Dictionary = lore.faction(race) as Dictionary
+			if str(fd.get("city", "")) != "":
+				base = str(fd.get("city"))
+		var cname := str(base) if n == 1 else "%s %d" % [str(base), n]
+		var c: Dictionary = new_city(cname, str(f.get("id", "")),
+			str(region.get("id", "")), sector_id)
+		c["pos"] = Vector2(float(rec.get("x", 0)), float(rec.get("y", 0)))
+		c["population"] = maxi(1, int(rec.get("population", 100)))
+		c["loyalty"] = 60.0
+		var a: Dictionary = new_army(str(f.get("id", "")), c["pos"])
+		a["sector_id"] = sector_id
+		a["power"] = clampf(10.0 + float(c["population"]), 10.0, 100.0)
+		added += 1
+	return added
+
+
+func _clear_map_records(sector_id: String) -> void:
+	# Legacy saves and the sandbox have cities without a sector link. The first
+	# real map replaces them wholesale; later sectors only replace their own.
+	var any_sector := false
+	for id in cities:
+		if str(cities[id].get("sector_id", "")) != "":
+			any_sector = true
+			break
+	if not any_sector:
+		cities.clear()
+		armies.clear()
+		units.clear()
+		return
+	for id in cities.keys():
+		var c: Dictionary = cities[id]
+		if bool(c.get("fixture", false)) or str(c.get("sector_id", "")) == sector_id:
+			cities.erase(id)
+	for id in armies.keys():
+		var a: Dictionary = armies[id]
+		if bool(a.get("fixture", false)) or str(a.get("sector_id", "")) == sector_id:
+			armies.erase(id)
+	for id in units.keys():
+		var u: Dictionary = units[id]
+		if bool(u.get("fixture", false)):
+			units.erase(id)
+
+
+func _faction_for_race(race: String) -> Dictionary:
+	for id in factions:
+		var f: Dictionary = factions[id]
+		if str(f.get("race", "")) == race:
+			return f
+	var label := str(RACE_FACTION_LABEL.get(race, race))
+	var lore = load("res://scripts/lore.gd")
+	if lore != null:
+		var fd: Dictionary = lore.faction(race) as Dictionary
+		if str(fd.get("label", "")) != "":
+			label = str(fd.get("label"))
+	return new_faction(label, race)
+
+
+func _region_for_sector(sector_id: String, region_name: String) -> Dictionary:
+	for id in regions:
+		var r: Dictionary = regions[id]
+		if str(r.get("sector_id", "")) == sector_id:
+			return r
+	var r: Dictionary = new_region(region_name if region_name != "" else "Сектор " + sector_id)
+	r["sector_id"] = sector_id
+	return r
+
 func get_unit(u: String) -> Dictionary:
 	return units.get(u, {})
 
@@ -397,6 +503,28 @@ func get_region(r: String) -> Dictionary:
 	return regions.get(r, {})
 
 # --- Мир 4x3: инициализация и доступ -----------------------------------------
+
+## Fresh run (04.11): a new game must not inherit the SIM of the previous one.
+## Loaded saves never go through this path.
+func reset_for_new_game() -> void:
+	units.clear()
+	cities.clear()
+	factions.clear()
+	armies.clear()
+	regions.clear()
+	sectors.clear()
+	outposts.clear()
+	relations.clear()
+	hero_reputation.clear()
+	journal.clear()
+	day = 0
+	global_threat = 0.0
+	_u = 0
+	_c = 0
+	_f = 0
+	_a = 0
+	_r = 0
+
 
 ## Собрать состояние 12 секторов по сиду мира. Вызывается один раз для новой
 ## игры; загруженный сейв приходит уже готовым через from_dict().

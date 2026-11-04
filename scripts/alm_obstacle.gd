@@ -9,6 +9,14 @@ extends Node2D
 
 var folder := ""            # имя папки спрайтов: "pine1", "maple2/dead"
 var frame_count := 1
+# Destructible world object (04.11): HP comes from
+# assets/map-objects/destructibles.json. 0 = indestructible (e.g. lantern).
+signal destroyed(at: Vector2i)
+var cell := Vector2i(-1, -1)
+var hp := 0
+var max_hp := 0
+var destructible := false
+var broken := false
 var base_index := 0         # вариант кадра (0-based) для phases==1
 var reg_w := 128            # размер из реестра (для нормировки якоря)
 var reg_h := 128
@@ -38,8 +46,13 @@ static func _load_cached(path: String) -> Texture2D:
 	_tex_cache[path] = tex
 	return tex
 
-func setup(obs_folder: String, n_frames: int, w: int, h: int, a_cx: int, a_cy: int, index: int = 0) -> void:
+func setup(obs_folder: String, n_frames: int, w: int, h: int, a_cx: int, a_cy: int, index: int = 0,
+		hp_value: int = 0) -> void:
 	folder = obs_folder
+	hp = maxi(hp_value, 0)
+	max_hp = hp
+	destructible = hp > 0
+	broken = false
 	frame_count = maxi(n_frames, 1)
 	base_index = maxi(index, 0)
 	reg_w = maxi(w, 1)
@@ -128,7 +141,8 @@ func _apply_frame() -> void:
 ## ВЕРШИНЫ спрайтов, а не земля: чем объект выше, тем раньше он рисуется.
 ## Камень (h=56) оказывался на 72 px "выше" дерева (h=128) и перекрывал его,
 ## хотя стоял на клетку выше по ряду — жалоба игрока 10.10.
-func place_at(cell: Vector2i, tile: int, relief: float) -> void:
+func place_at(cell_pos: Vector2i, tile: int, relief: float) -> void:
+	cell = cell_pos
 	var x := cell.x * tile + tile / 2.0
 	var y := cell.y * tile + tile / 2.0 - relief
 	position = Vector2(x, y)
@@ -174,3 +188,37 @@ func _in_camera_view() -> bool:
 	var center: Vector2 = cam.get_screen_center_position()
 	var rect := Rect2(center - half, half * 2.0)
 	return rect.has_point(global_position)
+
+## Area-spell damage. Returns true only when the object actually lost HP:
+## indestructible props (lanterns) and already broken nodes ignore it.
+func take_damage(dmg: int) -> bool:
+	if broken or not destructible or dmg <= 0:
+		return false
+	hp -= dmg
+	_flash_hit()
+	if hp <= 0:
+		_break_apart()
+	return true
+
+func _flash_hit() -> void:
+	if _sprite == null:
+		return
+	_sprite.modulate = Color(1.45, 1.3, 1.1)
+	var t := create_tween()
+	t.tween_property(_sprite, "modulate", Color.WHITE, 0.12)
+
+## The map clears the obstacle cell immediately, so pathfinding sees the hole
+## at once; the sprite fades out so the hit still reads on screen.
+func _break_apart() -> void:
+	broken = true
+	hp = 0
+	set_process(false)
+	if _shadow != null:
+		_shadow.visible = false
+	destroyed.emit(cell)
+	if _sprite == null:
+		queue_free()
+		return
+	var t := create_tween()
+	t.tween_property(_sprite, "modulate:a", 0.0, 0.15)
+	t.tween_callback(queue_free)
