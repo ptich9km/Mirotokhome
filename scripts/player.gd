@@ -1,6 +1,10 @@
 extends CharacterBody2D
 class_name Player
 
+## Emitted once on a lethal hit. The game owns the death screen and the freeze;
+## the actor only latches its own state.
+signal died
+
 # Первичные характеристики (оригинальная система Allods 2)
 @export var body: int = 10
 @export var mind: int = 10
@@ -32,6 +36,9 @@ var max_mana: int = 50
 var current_hp: int
 var current_mana: int
 var state: String = "idle"
+## Latched death: unlike `state`, nothing (stop_movement, a panel, a load-time
+## state reset) may clear it by accident. Only reset_death_state() does.
+var is_dead: bool = false
 var attack_target: Node2D = null
 var attack_cooldown: float = 0.0
 var _impact_timer := -1.0            # отсчёт до кадра удара (замах); <0 = нет удара в полёте
@@ -428,6 +435,24 @@ func reload_hero_state() -> void:
 		health_bar.update_bars(current_hp, current_mana)
 	if has_method("refresh_animation"):
 		refresh_animation()
+	reset_death_state()
+
+## Undo the death latch after a slot load / a new game. The actor must be
+## visible and idle BEFORE the world is rebuilt; otherwise a loaded hero stayed
+## a frozen corpse (the old code never reset `state`).
+func reset_death_state() -> void:
+	is_dead = false
+	state = "idle"
+	velocity = Vector2.ZERO
+	_path.clear()
+	visible = true
+	if health_bar != null and is_instance_valid(health_bar):
+		health_bar.visible = true
+	_cancel_casting()
+	Game.hero_dead = false
+	Game.player_target = global_position
+	if _anim != null:
+		_anim.play(UnitAnim.Anim.IDLE)
 
 ## Начальный опыт из стартовых навыков (skill -> exp, как у разработчиков:
 ## exp = (1.1^skill - 1) * 1000). Дальше навык растёт от получаемого опыта.
@@ -1199,7 +1224,6 @@ func _physics_process(delta):
 						# freeze_last_frame, у героя этого шага не было.
 						_anim.freeze_last_frame(UnitAnim.Anim.DYING)
 						state = "corpse"
-						get_tree().paused = true
 		"decay":
 			velocity = Vector2.ZERO
 			if _anim:
@@ -1207,7 +1231,6 @@ func _physics_process(delta):
 				if _anim.advance(delta):
 					_anim.freeze_last_frame(UnitAnim.Anim.DECAY)
 					state = "corpse"
-					get_tree().paused = true
 		"corpse":
 			# Труп: ни анимации, ни физики. Снятие паузы (Esc) больше не
 			# перезапускает падение — блок DYING уже отыграл.
@@ -1352,11 +1375,15 @@ func move_to_target(delta):
 
 ## Начать движение по маршруту (центры клеток из alm_map.find_path).
 func begin_path(path: Array) -> void:
+	if is_dead:
+		return
 	_path = path
 	_stuck_frames = 0
 
 ## Полная остановка (используется при входе в здание/паузах).
 func stop_movement() -> void:
+	if is_dead:
+		return   # панель не имеет права «поднять» труп в idle
 	_cancel_casting()
 	state = "idle"
 	velocity = Vector2.ZERO
@@ -1930,7 +1957,7 @@ func _heal_target(target: Node2D, spell_name: String, base: int) -> void:
 func heal_amount(amount: int) -> int:
 	if amount <= 0 or current_hp >= max_hp:
 		return 0
-	if state == "dead" or state == "decay" or state == "corpse":
+	if is_dead or state == "dead" or state == "decay" or state == "corpse":
 		return 0
 	var healed := mini(max_hp, current_hp + amount) - current_hp
 	if healed <= 0:
@@ -2242,8 +2269,8 @@ var _auto_scroll_accum := 0.0
 ## (жалоба 27.10). Теперь уровень авто-волшебства по умолчанию «Базовое»,
 ## и лечение идёт само, пока есть мана и заклинание известно.
 func _tick_auto_cast(delta: float) -> void:
-	if state == "casting" or state == "dead" or state == "corpse" \
-			or not Game.pending_spell.is_empty():
+	if is_dead or state == "casting" or state == "dead" or state == "corpse" \
+			or state == "decay" or not Game.pending_spell.is_empty():
 		return
 	if not Game.pending_scroll.is_empty():
 		return
@@ -2459,8 +2486,9 @@ func _auto_try_buffs() -> void:
 
 
 func take_damage(damage: int, _attacker: Node2D) -> int:
-	# Мёртвый герой больше не получает урон
-	if state == "dead" or state == "decay" or state == "corpse":
+	# Мёртвый герой больше не получает урон. `is_dead` — защёлка: `state`
+	# мог быть случайно сброшен панелью/stop_movement, и труп «вставал».
+	if is_dead or state == "dead" or state == "decay" or state == "corpse":
 		return 0
 	damage = Game.shield_reduce(self, damage)
 	if damage <= 0:
@@ -2472,7 +2500,12 @@ func take_damage(damage: int, _attacker: Node2D) -> int:
 	StatusEffects.break_invisibility(self)
 	_cancel_casting()
 	if current_hp <= 0:
-		# Смерть: играем падение DYING + разложение DECAY, затем пауза
+		# Смерть: играем падение DYING + разложение DECAY. Паузу и экран
+		# Game Over ставит ВЛАДЕЛЕЦ (game.gd::_on_hero_died), а не сам актёр:
+		# get_tree().paused здесь ничего не останавливал (корень Main — ALWAYS).
+		current_hp = 0
+		is_dead = true
+		Game.hero_dead = true
 		velocity = Vector2.ZERO
 		state = "dead"
 		_path.clear()
@@ -2480,6 +2513,7 @@ func take_damage(damage: int, _attacker: Node2D) -> int:
 		_hero_voice("death", 1)
 		if health_bar:
 			health_bar.visible = false
+		died.emit()
 	elif randf() < 0.45:
 		_hero_voice("pain", randi_range(1, 2))
 	return damage

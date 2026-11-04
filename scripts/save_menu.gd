@@ -54,10 +54,19 @@ var _status: Label
 var _menu_btn: Button
 var _app_btn: Button
 var _focusables: Array[Button] = []
+## "manage" (Esc menu) or "load_only" (game over). Load-only hides Save/Delete,
+## ignores Esc, puts the autosave first and shows a black backdrop.
+var _mode := "manage"
+var _title_text := ""
+var _hint_text := ""
+var _backdrop: ColorRect = null
 
 
-func setup() -> void:
+func setup(mode: String = "manage", title_text: String = "", hint_text: String = "") -> void:
 	layer = 20
+	_mode = mode
+	_title_text = title_text
+	_hint_text = hint_text
 
 
 func _ready() -> void:
@@ -66,8 +75,26 @@ func _ready() -> void:
 	_build()
 	_refresh()
 	_update_layout()
-	if not _focusables.is_empty():
+	if _mode == "load_only":
+		# Compact screen with the title first, the load list 0.4 s later
+		# (player decision 04.11: title -> tight screen -> load menu).
+		_slot_box.visible = false
+		_status.visible = false
+		await get_tree().create_timer(0.4).timeout
+		if not is_inside_tree():
+			return
+		_slot_box.visible = true
+		_status.visible = true
+		_focus_first()
+	elif not _focusables.is_empty():
 		_focusables[0].call_deferred("grab_focus")
+
+
+func _focus_first() -> void:
+	for b in _focusables:
+		if is_instance_valid(b) and not b.disabled:
+			b.grab_focus()
+			return
 
 
 func _build() -> void:
@@ -75,6 +102,16 @@ func _build() -> void:
 	_root.name = "Root"
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_root)
+
+	# Game over: the world is gone behind a black card. The Esc menu keeps its
+	# old transparent look (player asked for «edges of the game visible»).
+	if _mode == "load_only":
+		_backdrop = ColorRect.new()
+		_backdrop.name = "Backdrop"
+		_backdrop.color = Color(0, 0, 0, 1)
+		_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+		_root.add_child(_backdrop)
 
 	# Затемнения нет: панель непрозрачная, мир виден вокруг.
 	var inset := MarginContainer.new()
@@ -108,9 +145,18 @@ func _build() -> void:
 	var title := Label.new()
 	title.name = "Title"
 	title.theme_type_variation = &"SaveTitle"
-	title.text = Loc.t("ui.save.title")
+	title.text = _title_text if _title_text != "" else Loc.t("ui.save.title")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	content.add_child(title)
+
+	if _hint_text != "":
+		var hint := Label.new()
+		hint.name = "Hint"
+		hint.theme_type_variation = &"SaveStatus"
+		hint.text = _hint_text
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		content.add_child(hint)
 
 	# Сетка 2 колонки: слот | слот — высота ~4 ряда вместо 7.
 	_slot_box = GridContainer.new()
@@ -191,12 +237,24 @@ func _refresh() -> void:
 		elif s.begins_with("slot_"):
 			player.append(e)
 	player.sort_custom(func(a, b): return str(a.get("slot")) < str(b.get("slot")))
-	if not auto.is_empty():
-		player.append(auto)
-	for entry in player:
+	# Esc menu: slots then autosave. Game over: autosave FIRST — it is the
+	# primary «continue» action after a death.
+	var ordered: Array = []
+	if _mode == "load_only":
+		if not auto.is_empty():
+			ordered.append(auto)
+		ordered.append_array(player)
+	else:
+		ordered.append_array(player)
+		if not auto.is_empty():
+			ordered.append(auto)
+	for entry in ordered:
 		_slot_box.add_child(_make_slot_row(entry))
 	_focusables.append(_menu_btn)
-	_focusables.append(_app_btn)
+	if _mode == "load_only":
+		_app_btn.visible = false
+	else:
+		_focusables.append(_app_btn)
 	# Сетка фокуса по 2 колонки; выходные кнопки — после сетки.
 	var grid_btns: Array[Button] = []
 	for c in _slot_box.get_children():
@@ -207,9 +265,10 @@ func _refresh() -> void:
 	if not grid_btns.is_empty():
 		grid_btns[-1].focus_neighbor_bottom = _menu_btn.get_path()
 		_menu_btn.focus_neighbor_top = grid_btns[-1].get_path()
-		_menu_btn.focus_neighbor_right = _app_btn.get_path()
-		_app_btn.focus_neighbor_left = _menu_btn.get_path()
-		_app_btn.focus_neighbor_top = grid_btns[-1].get_path()
+		if _mode != "load_only":
+			_menu_btn.focus_neighbor_right = _app_btn.get_path()
+			_app_btn.focus_neighbor_left = _menu_btn.get_path()
+			_app_btn.focus_neighbor_top = grid_btns[-1].get_path()
 
 
 func _buttons_in(node: Node) -> Array:
@@ -257,12 +316,13 @@ func _make_slot_row(entry: Dictionary) -> Control:
 	box.add_child(buttons)
 
 	var save_btn := Button.new()
-	save_btn.theme_type_variation = &"SavePrimary"
-	save_btn.text = Loc.t("ui.save.save_short")
-	save_btn.custom_minimum_size = _BTN_SMALL
-	save_btn.pressed.connect(func() -> void: save_requested.emit(slot))
-	buttons.add_child(save_btn)
-	_focusables.append(save_btn)
+	if _mode != "load_only":
+		save_btn.theme_type_variation = &"SavePrimary"
+		save_btn.text = Loc.t("ui.save.save_short")
+		save_btn.custom_minimum_size = _BTN_SMALL
+		save_btn.pressed.connect(func() -> void: save_requested.emit(slot))
+		buttons.add_child(save_btn)
+		_focusables.append(save_btn)
 
 	var load_btn := Button.new()
 	load_btn.theme_type_variation = &"SavePrimary"
@@ -274,7 +334,7 @@ func _make_slot_row(entry: Dictionary) -> Control:
 	if not load_btn.disabled:
 		_focusables.append(load_btn)
 
-	if exists:
+	if exists and _mode != "load_only":
 		var del_btn := Button.new()
 		del_btn.theme_type_variation = &"SaveGhost"
 		del_btn.text = Loc.t("ui.save.delete_short")
@@ -310,6 +370,10 @@ func _update_layout() -> void:
 
 func _input(event: InputEvent) -> void:
 	if UiKit.esc_pressed(event):
+		# The game-over menu must not be dismissed back into a corpse.
+		if _mode == "load_only":
+			get_viewport().set_input_as_handled()
+			return
 		close()
 		get_viewport().set_input_as_handled()
 

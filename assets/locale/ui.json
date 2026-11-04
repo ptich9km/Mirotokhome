@@ -150,6 +150,18 @@
   "ru": "СОХРАНЕНИЯ",
   "en": "SAVES"
  },
+ "ui.gameover.title": {
+  "ru": "ВЫ ПОГИБЛИ",
+  "en": "YOU DIED"
+ },
+ "ui.gameover.sub": {
+  "ru": "Герой пал",
+  "en": "The hero has fallen"
+ },
+ "ui.gameover.hint": {
+  "ru": "Загрузите сохранение, чтобы продолжить путь.",
+  "en": "Load a save to continue."
+ },
  "ui.save.to_main": {
   "ru": "В главное меню",
   "en": "Main Menu"

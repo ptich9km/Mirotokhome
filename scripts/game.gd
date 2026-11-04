@@ -622,6 +622,11 @@ var _pending_herb: HerbNode = null
 var _pending_archmage: Node2D = null      # капитан-маг, к которому подходим
 var _pending_city_head: Node2D = null     # глава города, к которому подходим
 var _save_menu: SaveMenu = null
+## Death sequence (04.11): the actor emits `died`, the game owns the 1 s fall,
+## the full-screen title and the load menu. One flag prevents a second lethal
+## hit (or a re-entrant signal) from stacking two screens.
+var _death_screen: CanvasLayer = null
+var _death_sequence_running := false
 ## Сцена уступает место главному меню или процесс завершается (_quit_to_menu/
 ## _quit_app): автосейв уже записан, при сносе узла повторять его нельзя.
 var _leaving_for_quit: bool = false
@@ -1011,6 +1016,10 @@ func _setup_post_pass() -> void:
 
 func _ready():  # Инициализация мира и боя
 	process_mode = PROCESS_MODE_ALWAYS  # Работает даже на паузе
+	# A fresh main scene is a fresh life: the death flag is static and could
+	# survive a redirect/restart from a dead run.
+	Game.hero_dead = false
+	_death_sequence_running = false
 	MusicDB.start_playlist.call_deferred()
 
 	# Тематический анимированный курсор (обычный + прицел, см. cursor_layer.gd).
@@ -1047,6 +1056,11 @@ func _ready():  # Инициализация мира и боя
 	wf.post("world", Loc.f("ui.feed.arrival", [_sector_name(Game.map_sector)]))
 	_spawn_player_on_walkable()
 	Game.hero = player
+	Game.hero_dead = false
+	_death_sequence_running = false
+	if is_instance_valid(player) and player.has_signal("died") \
+			and not player.died.is_connected(_on_hero_died):
+		player.died.connect(_on_hero_died)
 	Game.party.clear()
 	_restore_pending_party()
 	# enemies/npcs — static var, они ПЕРЕЖИВАЮТ смену сцены: узлы прежней
@@ -1340,6 +1354,11 @@ func _is_open_spot(tx: int, ty: int) -> bool:
 	return open_neighbors >= 2
 
 func _input(event):
+	# Dead hero: every world command and the normal Esc menu are off. The
+	# game-over panel has its own _input and still receives the event; Esc is
+	# deliberately ignored there (player decision 04.11).
+	if Game.hero_dead:
+		return
 	# Окно портала само обрабатывает Esc (Esc = «Остаться»).
 	if _portal_confirm != null and is_instance_valid(_portal_confirm):
 		return
@@ -1455,6 +1474,8 @@ func _input(event):
 func handle_click(world_position: Vector2):
 	# Тактическая пауза: клик по миру — это приказ герою, на паузе его нет.
 	if is_paused:
+		return
+	if Game.hero_dead:
 		return
 	# Герой мёртв (падение/разложение) — управление не работает
 	if is_instance_valid(player) and player.state in ["dead", "decay"]:
@@ -2369,7 +2390,7 @@ func _setup_world_feed() -> void:
 func _regen_hero(delta: float) -> void:
 	if not is_instance_valid(player):
 		return
-	if player.state == "dead" or player.state == "decay":
+	if Game.hero_dead or player.state == "dead" or player.state == "decay":
 		return
 	mana_regen_accum += delta
 	if mana_regen_accum < 1.0:
@@ -2929,6 +2950,68 @@ func _process_action_mode():
 # сохранение и загрузка - здесь, потому что только у game.gd есть живой
 # игрок, WorldBus с состоянием мира и сцена, которую надо пересобрать.
 
+## The hero has fallen. The world keeps rendering for one second so the fall
+## is readable, but the hero is already no target and every command is blocked
+## by Game.hero_dead. Then the black title, then the compact load menu.
+const DEATH_TO_TITLE := 1.0
+const DEATH_TO_MENU := 1.0
+
+func _on_hero_died() -> void:
+	if _death_sequence_running:
+		return
+	_death_sequence_running = true
+	Game.hero_dead = true
+	await get_tree().create_timer(DEATH_TO_TITLE).timeout
+	if not is_instance_valid(player) or not player.is_dead:
+		_death_sequence_running = false
+		return
+	_death_screen = DeathScreen.new()
+	add_child(_death_screen)
+	await get_tree().create_timer(DEATH_TO_MENU).timeout
+	if not is_instance_valid(player) or not player.is_dead:
+		return
+	# Freeze the world with the REAL flag: the root Main is PROCESS_MODE_ALWAYS,
+	# so SceneTree.paused alone never stopped enemies or the hero (the old
+	# death only paused the tree and the corpse kept getting hit).
+	Game.is_paused = true
+	get_tree().paused = true
+	if is_instance_valid(_death_screen):
+		_death_screen.queue_free()
+		_death_screen = null
+	_open_game_over()
+
+## Load-only save menu under a black screen. No Save/Delete, no Esc close,
+## only «Загрузить» and «В главное меню» (player decision 04.11).
+func _open_game_over() -> void:
+	if _save_menu != null and is_instance_valid(_save_menu):
+		return
+	_save_menu = SaveMenu.new()
+	_save_menu.setup("load_only", Loc.t("ui.gameover.title"),
+		Loc.t("ui.gameover.hint"))
+	_save_menu.load_requested.connect(_load_from_slot)
+	_save_menu.quit_requested.connect(_quit_to_menu)
+	_save_menu.quit_app_requested.connect(_quit_app)
+	_save_menu.closed.connect(func() -> void:
+		_save_menu = null)
+	add_child(_save_menu)
+
+## Reset every death-owned flag before a slot rebuild. Must run BEFORE
+## _restart_scene: _set_menu_pause() refuses to unpause a corpse.
+func _close_game_over() -> void:
+	_death_sequence_running = false
+	if is_instance_valid(_death_screen):
+		_death_screen.queue_free()
+		_death_screen = null
+	if _save_menu != null and is_instance_valid(_save_menu):
+		var menu := _save_menu
+		_save_menu = null
+		menu.queue_free()
+	Game.hero_dead = false
+	Game.is_paused = false
+	get_tree().paused = false
+	if is_instance_valid(player) and player.has_method("reset_death_state"):
+		player.call("reset_death_state")
+
 ## Открыть меню сохранений (Esc). Повторный вызов игнорируется.
 ##
 ## Пока меню открыто, мир стоит на паузе (жалоба игрока 22.10: «вызвал меню
@@ -2952,9 +3035,11 @@ func open_save_menu() -> void:
 	add_child(_save_menu)
 
 
-## Мир на паузе, пока открыто меню сохранений. Герой мёртв — дерево уже
-## стоит на паузе по своей причине (player.gd corpse), её не снимаем.
+## Мир на паузе, пока открыто меню сохранений. Герой мёртв — паузу держит
+## экран смерти (_on_hero_died), снимать её обычным путём нельзя.
 func _set_menu_pause(on: bool) -> void:
+	if Game.hero_dead:
+		return
 	if is_instance_valid(player) and player.state in ["dead", "decay", "corpse"]:
 		return
 	Game.is_paused = on
@@ -2983,6 +3068,10 @@ func _build_save_payload() -> Dictionary:
 
 
 func _save_to_slot(slot: String) -> void:
+	# Never write a corpse: the autosave on quit/interior must not destroy the
+	# last living save after a game over.
+	if Game.hero_dead:
+		return
 	var err := SaveSystem.save(slot, _build_save_payload())
 	if err != "":
 		if _save_menu != null and is_instance_valid(_save_menu):
@@ -3008,6 +3097,10 @@ func _load_from_slot(slot: String) -> void:
 	if res.is_empty():
 		_set_menu_status(tr("Слот пуст."))
 		return
+	# A game-over load must release the corpse/pause/menu BEFORE _restart_scene:
+	# _set_menu_pause() refuses to unpause while player.state is dead, and the
+	# old menu would stay on top of the rebuilt world.
+	_close_game_over()
 	# Сначала применяем героя и карту слота, потом пересобираем сцену:
 	# AlmMap читает Game.pending_map_path/map_seed/map_zone в _ready.
 	SaveSystem.apply_payload(res.get("data", {}), player, slot)
@@ -3025,21 +3118,27 @@ func _delete_slot(slot: String) -> void:
 
 
 func _quit_to_menu() -> void:
+	# Autosave first: while the hero is dead _save_to_slot is a no-op, so the
+	# last living save survives «В главное меню» from the game-over screen.
+	_save_to_slot(SaveSystem.AUTOSAVE_SLOT)
+	_close_game_over()
 	# Паузу обязательно снять: иначе главное меню откроется в остановленном
 	# дереве — без анимации фона и без реакции на ввод. Меню сохранений ставит
 	# паузу при открытии (22.10), и «В главное меню» не испускает closed.
 	_menu_release_pause()
 	is_paused = false
 	get_tree().paused = false
-	_save_to_slot(SaveSystem.AUTOSAVE_SLOT)
 	_set_leaving_scene(true)
 	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 
 ## Полный выход из процесса (кнопка «Выйти из игры» в Esc-меню).
 func _quit_app() -> void:
-	_menu_release_pause()
+	# Same order as «В главное меню»: save (skipped while dead), release the
+	# death screen, then let the process go.
 	_save_to_slot(SaveSystem.AUTOSAVE_SLOT)
+	_close_game_over()
+	_menu_release_pause()
 	_set_leaving_scene(true)
 	get_tree().quit()
 
@@ -3136,6 +3235,8 @@ func _set_menu_status(text: String) -> void:
 
 ## Разовый автосейв (портал, выход из интерьера). Тот же слот, что и таймер.
 func autosave_now() -> void:
+	if Game.hero_dead:
+		return
 	if not is_instance_valid(player):
 		return
 	if _save_menu != null and is_instance_valid(_save_menu):
@@ -3148,6 +3249,8 @@ func autosave_now() -> void:
 ## Автосейв по таймеру. Пропускаем, если открыто меню сохранений (иначе
 ## игрок жмёт «Сохранить» и тут же получает автосейв поверх).
 func _autosave_tick(delta: float) -> void:
+	if Game.hero_dead:
+		return
 	_autosave_accum += delta
 	if _autosave_accum < autosave_interval():
 		return
@@ -3170,6 +3273,8 @@ func _notification(what: int) -> void:
 	if what != NOTIFICATION_WM_CLOSE_REQUEST:
 		return
 	if _leaving_for_quit or not is_inside_tree():
+		return
+	if Game.hero_dead:
 		return
 	if is_instance_valid(player):
 		SaveSystem.save(SaveSystem.AUTOSAVE_SLOT, _build_save_payload())
