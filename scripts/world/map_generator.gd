@@ -418,7 +418,7 @@ func _generate() -> void:
 	_report(90, 9)
 
 	# 9b. Точки интереса вне городов: статичные группы NPC. Выключено по
-	# умолчанию (interest_points = 0 во всех зонах), включает игрок.
+	# умолчанию (poi.count = 0), включает игрок.
 	# Отдельный поток RNG, чтобы включение точек интереса НЕ сдвигало
 	# деревья, травы и Серых — иначе старая карта менялась бы целиком.
 	_place_interest_points(rng_from_seed(_seed + STREAM_POI))
@@ -539,10 +539,15 @@ const GRAY_TIER_BAND := {
 	"faction": [4, 5],
 }
 
-# Усиление за тир поверх статов зоны (формула из §13, пакет C).
-# Тир 1 — x1.0, тир 5 — hp x2.4, урон x2.0.
-const GRAY_TIER_HP_STEP := 0.35
-const GRAY_TIER_DMG_STEP := 0.25
+# Усиление за тир поверх базовых статов Серых ([grey] в game.cfg).
+# Тир 1 — x1.0, тир 5 — hp x2.4, урон x2.0. Шаги живут в [mob_tier], чтобы
+# баланс правился в одном месте, а не в коде. Тир берётся из units_db.json,
+# а не разбирается из имени: имя — это строка, база — источник истины.
+static func gray_tier_mults(set_name: String) -> Array:
+	var tier := int(UnitDB.get_set(set_name).get("tier", 1))
+	var step := float(maxi(tier - 1, 0))
+	return [1.0 + GameConfig.getf("mob_tier", "hp_step") * step,
+		1.0 + GameConfig.getf("mob_tier", "damage_step") * step]
 
 
 static func gray_set_name(species: String, tier: int) -> String:
@@ -560,18 +565,6 @@ static func gray_pool_for_zone(zone: String) -> Array:
 				out.append(set_name)
 	return out
 
-
-## [hp_mult, dmg_mult] для тира. Тир берётся из units_db.json, а не разбирается
-## из имени: имя — это строка, база — источник истины.
-static func gray_tier_mults(set_name: String) -> Array:
-	var tier := int(UnitDB.get_set(set_name).get("tier", 1))
-	var step := float(maxi(tier - 1, 0))
-	return [1.0 + GRAY_TIER_HP_STEP * step, 1.0 + GRAY_TIER_DMG_STEP * step]
-
-# Числа зон (количество Серых, hp, урон) живут в `assets/config/game.cfg`
-# и читаются через `GameConfig.zonei`, а не здесь. Прежний `GRAY_ZONE`
-# держал вторую копию этих чисел и пул наборов; и то и другое заменено
-# на `GRAY_TIER_BAND` + `gray_pool_for_zone`.
 
 # Здания в городах: функциональные + жильё + декор (folder -> StructureDB).
 # 10.10: арт seedream (tests/extract_seedream_buildings.py), папки *_sN.
@@ -1295,7 +1288,7 @@ func _place_city_npcs(rng: RandomNumberGenerator, center: Vector2i,
 		Vector2i(3, 5), Vector2i(-3, 5), Vector2i(3, -5), Vector2i(-3, -5),
 	]
 	var guards_n := rng.randi_range(
-		GameConfig.zonei(_zone, "guard_count_min"), GameConfig.zonei(_zone, "guard_count_max"))
+		GameConfig.geti("city", "guard_count_min"), GameConfig.geti("city", "guard_count_max"))
 	if GameConfig.geti("stress", "enabled") != 0:
 		guards_n = GameConfig.geti("stress", "city_guard_count")
 	for i in range(guards_n):
@@ -1303,37 +1296,37 @@ func _place_city_npcs(rng: RandomNumberGenerator, center: Vector2i,
 		if post.x < 0:
 			continue
 		var set_name: String = _pick(rng, pop["guards"])
-		# Стали NPC по зоне приходят из GameConfig [zone] - сейчас значения
-		# одинаковые для всех зон (было: hp 60-100, урон 6-10 зашито здесь).
+		# City guards are the same in every zone ([city]); zone danger is the
+		# Grey tier band, not a per-zone guard stat.
 		var hp := rng.randi_range(
-			GameConfig.zonei(_zone, "guard_hp_min"), GameConfig.zonei(_zone, "guard_hp_max"))
+			GameConfig.geti("city", "guard_hp_min"), GameConfig.geti("city", "guard_hp_max"))
 		var dmg := rng.randi_range(
-			GameConfig.zonei(_zone, "guard_damage_min"), GameConfig.zonei(_zone, "guard_damage_max"))
+			GameConfig.geti("city", "guard_damage_min"), GameConfig.geti("city", "guard_damage_max"))
 		_npcs_out.append(_npc_rec(post, set_name, "guard", i < 2, hp, dmg, city_id, center))
-	# Капитан у площади — он же ВЕЛИКИЙ МАГ города (решение игрока 07.10),
-	# и маг СВОЕЙ расы (09.10): в орк-городе не должен стоятьdruид-маг.
+	# Captain at the square — also the town archmage (player decision 07.10),
+	# a mage of ITS OWN race (09.10): an orc town must not get a druid mage.
 	var cap := _post_cell(center, [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)], posts_taken)
 	if cap.x >= 0:
 		var cap_rec := _npc_rec(cap, str(pop["captain"]), "guard", false,
-			GameConfig.zonei(_zone, "captain_hp"), GameConfig.zonei(_zone, "captain_damage"),
+			GameConfig.geti("city", "captain_hp"), GameConfig.geti("city", "captain_damage"),
 			city_id)
 		# The captain keeps the square, the edge rule is about the ordinary guards.
 		cap_rec.erase("city_x")
 		cap_rec.erase("city_y")
 		cap_rec["archmage"] = true
 		_npcs_out.append(cap_rec)
-	# Глава города — квестодатель. Стоит у площади, набор своей расы.
+	# Town head — the quest giver. Stands by the square, set of its own race.
 	var head_set := str(pop.get("head", pop["citizens"][0]))
 	var head := _post_cell(center, [Vector2i(0, 1), Vector2i(0, -1),
 		Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)], posts_taken)
 	if head.x >= 0:
 		var head_rec := _npc_rec(head, head_set, "head", false,
-			GameConfig.zonei(_zone, "citizen_hp"), 0, city_id)
+			GameConfig.geti("city", "citizen_hp"), 0, city_id)
 		head_rec["head"] = true
 		_npcs_out.append(head_rec)
-	# Жители (стоят, не патрулируют) — кольца 3–4
+	# Citizens (standing, no patrol) — rings 3–4
 	var cit_n := rng.randi_range(
-		GameConfig.zonei(_zone, "citizen_count_min"), GameConfig.zonei(_zone, "citizen_count_max"))
+		GameConfig.geti("city", "citizen_count_min"), GameConfig.geti("city", "citizen_count_max"))
 	if GameConfig.geti("stress", "enabled") != 0:
 		cit_n = GameConfig.geti("stress", "city_citizen_count")
 	for i in range(cit_n):
@@ -1342,7 +1335,7 @@ func _place_city_npcs(rng: RandomNumberGenerator, center: Vector2i,
 			continue
 		var set_name: String = _pick(rng, pop["citizens"])
 		_npcs_out.append(_npc_rec(post, set_name, "citizen", false,
-			GameConfig.zonei(_zone, "citizen_hp"), 0, city_id, center))
+			GameConfig.geti("city", "citizen_hp"), 0, city_id, center))
 
 ## id города для квестов: "c<индекс>t<раса-в-списке>". Индекс — порядок
 ## города в генераторе; суффикс t0.. повторяет расу из CITY_RACES.
@@ -1502,11 +1495,11 @@ func _npc_rec(post: Vector2i, set_name: String, role: String, patrol: bool,
 ## ошибиться, ради функции, выключенной по умолчанию. Поэтому POI пишутся
 ## обычными записями в .npcs.json с добавленным полем "poi".
 ##
-## Выключено по умолчанию: interest_points = 0 во всех зонах ([zone]).
+## Выключено по умолчанию: poi.count = 0 ([poi]).
 ## Пока игрок не поднимет число, поведение игры не отличается от прежнего.
 const POI_KINDS := [
 	# Аллодовские humans/* убраны (07.10). Пока арта мало — точки выключены
-	# (interest_points=0). Под ork_mage вернём, когда будет достаточно ступеней.
+	# (poi.count=0). Под ork_mage вернём, когда будет достаточно ступеней.
 ]
 
 ## Минимальные дистанции POI (клетки). Отдельны от трав: точка интереса
@@ -1517,9 +1510,9 @@ const POI_MIN_EACH_OTHER := 16         # разрежены между собо�
 
 
 func _place_interest_points(rng: RandomNumberGenerator) -> void:
-	var target := GameConfig.zonei(_zone, "interest_points")
+	var target := GameConfig.geti("poi", "count")
 	if target <= 0:
-		print("POI: выключено (interest_points=%d в зоне %s)" % [target, _zone])
+		print("POI: выключено (poi.count=0)")
 		return
 	var placed := 0
 	var tries := 0
@@ -1531,8 +1524,8 @@ func _place_interest_points(rng: RandomNumberGenerator) -> void:
 		var kind: Dictionary = POI_KINDS[rng.randi() % POI_KINDS.size()]
 		# небольшая группа вокруг якоря: 2-3 NPC, стоят рядом
 		var members := rng.randi_range(2, 3)
-		var hp := GameConfig.zonei(_zone, "poi_hp")
-		var dmg := GameConfig.zonei(_zone, "poi_damage")
+		var hp := GameConfig.geti("poi", "hp")
+		var dmg := GameConfig.geti("poi", "damage")
 		var taken := 0
 		for i in range(members):
 			var spot := anchor + Vector2i(rng.randi_range(-2, 2), rng.randi_range(-2, 2))
@@ -1690,10 +1683,10 @@ func _build_outpost(index: int, faction: String, anchor: Vector2i,
 	var count := GameConfig.geti("outpost", "guards_min") \
 		+ rng.randi_range(0, maxi(0, GameConfig.geti("outpost", "guards_max")
 			- GameConfig.geti("outpost", "guards_min")))
-	var hp := rng.randi_range(GameConfig.zonei(_zone, "guard_hp_min"),
-		GameConfig.zonei(_zone, "guard_hp_max"))
-	var dmg := rng.randi_range(GameConfig.zonei(_zone, "guard_damage_min"),
-		GameConfig.zonei(_zone, "guard_damage_max"))
+	var hp := rng.randi_range(GameConfig.geti("city", "guard_hp_min"),
+		GameConfig.geti("city", "guard_hp_max"))
+	var dmg := rng.randi_range(GameConfig.geti("city", "guard_damage_min"),
+		GameConfig.geti("city", "guard_damage_max"))
 	var oid := "op%d" % index
 	var taken := {}
 	for i in range(count):
@@ -1811,10 +1804,9 @@ func _outpost_tier() -> int:
 
 ## Этап 7: деревья/объекты в _obstacles (ID из alm_objects.json). Кластерный
 ## шум по биому; не ставим на дорогу, у дорог, в городах и у спавна/портала.
-# Плотность деревьев по зонам. Раньше была словарём прямо в коде:
-# start 0.06, mid 0.08, hard 0.10, faction 0.09. Значения из GameConfig.
+# Tree density per zone lives in [zone_design] (map design, not combat rates).
 func _zone_tree_density() -> float:
-	var v := GameConfig.zonef(_zone, "tree_density")
+	var v := GameConfig.designf(_zone, "tree_density")
 	return 0.08 if v < 0.0 else v
 
 
@@ -1976,7 +1968,7 @@ func _herb_cell_ok(cell: Vector2i) -> bool:
 ## потом добираем случайно — так покрытие карты гарантировано.
 func _place_greys(rng: RandomNumberGenerator) -> void:
 	var count: int = rng.randi_range(
-		GameConfig.zonei(_zone, "gray_count_min"), GameConfig.zonei(_zone, "gray_count_max"))
+		GameConfig.designi(_zone, "gray_count_min"), GameConfig.designi(_zone, "gray_count_max"))
 	if GameConfig.geti("stress", "enabled") != 0:
 		count = GameConfig.geti("stress", "gray_count")
 	var placed := 0
@@ -2188,15 +2180,14 @@ func _gray_cluster(rng: RandomNumberGenerator, anchor: Vector2i) -> int:
 		var cc: Vector2i = cells[i]
 		_gray_cells["%d,%d" % [cc.x, cc.y]] = true
 		var set_name: String = str(_pick(rng, pool))
-		# Тир усиливает зверя поверх статов зоны. Множитель по тиру НЕ должен
-		# искажать среднюю силу зоны, поэтому он и берётся из полосы зоны: в
-		# `start` полоса 1-2, и тир 2 — это +35% hp, а не ×2.4.
+		# The tier scales the global [grey] base (see gray_tier_mults), so the
+		# zone band, not a per-zone DPS table, decides how hard a map hits.
 		var mults: Array = gray_tier_mults(set_name)
 		var hp := int(round(float(rng.randi_range(
-			GameConfig.zonei(_zone, "gray_hp_min"), GameConfig.zonei(_zone, "gray_hp_max")))
+			GameConfig.geti("grey", "hp_min"), GameConfig.geti("grey", "hp_max")))
 			* float(mults[0])))
 		var dmg := int(round(float(rng.randi_range(
-			GameConfig.zonei(_zone, "gray_damage_min"), GameConfig.zonei(_zone, "gray_damage_max")))
+			GameConfig.geti("grey", "damage_min"), GameConfig.geti("grey", "damage_max")))
 			* float(mults[1])))
 		_npcs_out.append({
 			"x": int(cc.x), "y": int(cc.y), "set": set_name,
@@ -2250,9 +2241,9 @@ func _spawn_encounter(rng: RandomNumberGenerator, anchor: Vector2i, ed: Dictiona
 		var set_name: String = str(sets[i % sets.size()])
 		var is_core := i == 0
 		var hp := int(round(float(rng.randi_range(
-			GameConfig.zonei(_zone, "gray_hp_min"), GameConfig.zonei(_zone, "gray_hp_max"))) * hp_mult * (1.25 if is_core else 1.0)))
+			GameConfig.geti("grey", "hp_min"), GameConfig.geti("grey", "hp_max"))) * hp_mult * (1.25 if is_core else 1.0)))
 		var dmg := int(round(float(rng.randi_range(
-			GameConfig.zonei(_zone, "gray_damage_min"), GameConfig.zonei(_zone, "gray_damage_max"))) * dmg_mult))
+			GameConfig.geti("grey", "damage_min"), GameConfig.geti("grey", "damage_max"))) * dmg_mult))
 		var rec := {
 			"x": int(cc.x), "y": int(cc.y), "set": set_name,
 			"hp_max": hp, "damage": dmg,

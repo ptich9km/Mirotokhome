@@ -19,6 +19,9 @@ var _fails: Array = []
 
 
 func _initialize() -> void:
+	# Отладочный набор магии нужен этому тесту явно: с 04.11 `[debug]
+	# all_magic = 0`, и маг в игре стартует с одной книгой школы.
+	Game.debug_magic = true
 	Game.hero_stats = {"body": 12, "agility": 11, "mind": 13, "spirit": 12,
 		"blade": 10, "bludgeon": 10, "pike": 10, "shooting": 10,
 		"fire": 20, "water": 20, "air": 20, "earth": 20, "astral": 20,
@@ -41,6 +44,17 @@ func _run() -> void:
 	_test_no_duplicate_keys()
 	_check(SpellDB.all_spell_names().size() == 31,
 		"в базе 31 заклинание (найдено %d)" % SpellDB.all_spell_names().size())
+
+	# 04.11: стартовое заклинание школы обязано быть БОЕВЫМ. Раньше первым
+	# ключом была мана, и маг воздуха/земли получал защитный бафф («мне дали
+	# щит — как мне кого-то убить?»).
+	for sphere in ["Fire", "Water", "Air", "Earth", "Astral"]:
+		var starter := SpellDB.simplest_spell_of_sphere(sphere)
+		var kind := SpellDB.kind_of(starter)
+		var dmg := SpellDB.damage(starter)
+		_check(kind in ["attack", "area"] and dmg > 0,
+			"стартовая магия %s боевая: %s (kind=%s, урон=%d)"
+				% [sphere, starter, kind, dmg])
 
 	# Каждый свиток мага должен резолвиться в реальное заклинание
 	var bad_scrolls: Array = []

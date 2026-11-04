@@ -2778,8 +2778,8 @@ func _gray_respawn_tick(delta: float) -> void:
 		return
 	var target := GameConfig.geti("spawn", "gray_target")
 	if target <= 0:
-		target = maxi(GameConfig.zonei(Game.map_zone, "gray_count_min"),
-			GameConfig.zonei(Game.map_zone, "gray_count_max"))
+		target = maxi(GameConfig.designi(Game.map_zone, "gray_count_min"),
+			GameConfig.designi(Game.map_zone, "gray_count_max"))
 	if not is_instance_valid(player) or not is_instance_valid(alm_map):
 		return
 	_gray_respawn_accum += delta
@@ -2805,10 +2805,10 @@ func _gray_respawn_tick(delta: float) -> void:
 	e2.anim_set = set_name
 	# Тир усиливает респавненного зверя так же, как при генерации карты.
 	var mults: Array = MapGenerator.gray_tier_mults(set_name)
-	e2.max_hp = int(round(float(randi_range(GameConfig.zonei(Game.map_zone, "gray_hp_min"),
-		GameConfig.zonei(Game.map_zone, "gray_hp_max"))) * float(mults[0])))
-	e2.damage = int(round(float(randi_range(GameConfig.zonei(Game.map_zone, "gray_damage_min"),
-		GameConfig.zonei(Game.map_zone, "gray_damage_max"))) * float(mults[1])))
+	e2.max_hp = int(round(float(randi_range(GameConfig.geti("grey", "hp_min"),
+		GameConfig.geti("grey", "hp_max"))) * float(mults[0])))
+	e2.damage = int(round(float(randi_range(GameConfig.geti("grey", "damage_min"),
+		GameConfig.geti("grey", "damage_max"))) * float(mults[1])))
 	e2.position = spot
 	e2.home_position = spot
 	add_child(e2)

@@ -256,11 +256,11 @@ func _spawn_group(map: Node, ev: Dictionary, side: String, set_name: String,
 		e.name = "EventMonster_%s" % set_name.get_file()
 		e.anim_set = set_name
 		e.max_hp = int(round(float(randi_range(
-			GameConfig.zonei(Game.map_zone, "gray_hp_min"),
-			GameConfig.zonei(Game.map_zone, "gray_hp_max"))) * float(mults[0])))
+			GameConfig.geti("grey", "hp_min"),
+			GameConfig.geti("grey", "hp_max"))) * float(mults[0])))
 		e.damage = int(round(float(randi_range(
-			GameConfig.zonei(Game.map_zone, "gray_damage_min"),
-			GameConfig.zonei(Game.map_zone, "gray_damage_max"))) * float(mults[1])))
+			GameConfig.geti("grey", "damage_min"),
+			GameConfig.geti("grey", "damage_max"))) * float(mults[1])))
 		e.position = pos
 		e.home_position = pos
 		e.event_tag = my_tag

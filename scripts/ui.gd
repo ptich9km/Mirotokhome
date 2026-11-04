@@ -1983,10 +1983,11 @@ func _on_inventory_changed() -> void:
 	if is_instance_valid(_inventory_panel) and _inventory_panel.has_method("_refresh_stats"):
 		_inventory_panel._refresh_stats()
 	_update_gold(int(player.gold) if player != null else 0)
-	# У воина книга магии — это склад со свитками: купил/подобрал свиток —
-	# ячейка должна появиться сразу, а не после переоткрытия игры.
-	if is_instance_valid(player) and not player.has_mana:
-		refresh_spell_book()
+	# The book rebuilds on ANY inventory change: a warrior's bought scroll and a
+	# mage's learned spell must appear while the panel is still open. Before
+	# 04.11 this branch ran for warriors only, so a learned spell showed up
+	# after reopening the panel (player report).
+	refresh_spell_book()
 
 func refresh_inventory() -> void:
 	if is_instance_valid(_inventory_panel):
