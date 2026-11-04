@@ -242,6 +242,46 @@ static func unit_defense(u: Node2D) -> int:
 static func unit_absorption(u: Node2D) -> int:
 	return int(u.call("get_absorption")) if u != null and u.has_method("get_absorption") else 0
 
+## Weapon damage kind of a unit for the Allods weapon-kind resistance:
+## sword | axe | club | pike | bow. "" means the blow bypasses the table
+## (bare hands, a staff — its normal hit is magic anyway, a ranged row that
+## the original would clear to slot zero).
+static func weapon_kind_of(u: Node2D) -> String:
+	if u == null or not is_instance_valid(u) or not ("weapon" in u):
+		return ""
+	match str(u.get("weapon")):
+		"sword", "axe", "club", "pike":
+			return str(u.get("weapon"))
+		"bow", "xbow":
+			return "bow"
+	return ""
+
+## Creature type of a damage target: human | undead | beast | insect | monster.
+## The hero is always human; a unit without an animation set (a crate, a wall)
+## returns "" so the weapon table is skipped.
+static func creature_type_of(u: Node2D) -> String:
+	if u == null or not is_instance_valid(u):
+		return ""
+	if u is Player:
+		return "human"
+	if "anim_set" in u:
+		var set_name := str(u.get("anim_set"))
+		if set_name != "":
+			return UnitDB.creature_type_of(set_name)
+	return ""
+
+## Allods weapon-kind damage: `percent` is 125 / 100 / 75 …; the `+75` is the
+## source's 0.75 rounding before truncation.
+static func apply_weapon_percent(dmg: int, percent: int) -> int:
+	if percent == 100:
+		return maxi(0, dmg)
+	return maxi(0, int((dmg * percent + 75) / 100.0))
+
+## Spell power from the raw numbers (no caster node): skill + mind - offset.
+## The creation screen uses it to show a mage's damage before the hero exists.
+static func spell_power_value(skill: float, mind: float) -> float:
+	return maxf(0.0, skill + mind - GameConfig.getf("magic", "sp_offset"))
+
 ## Сопротивление стихии в ПРОЦЕНТАХ: сколько процентов магического урона
 ## не пройдёт. Так в оригинале (main.txt: «shows the percentage of the
 ## magical effects… which will not affect the character») и это не ломается
@@ -267,7 +307,7 @@ static func spell_power(caster: Node2D, sphere: String) -> float:
 	var skill := 0.0
 	if caster.has_method("sphere_skill"):
 		skill = float(caster.call("sphere_skill", sphere))
-	return maxf(0.0, skill + mind - GameConfig.getf("magic", "sp_offset")) + float(StatusEffects.stat_flat(caster, "power"))
+	return spell_power_value(skill, mind) + float(StatusEffects.stat_flat(caster, "power"))
 
 
 ## Кулдаун заклинания от ПОЗНАНИЯ магии, а не только база из spells_db.
@@ -333,6 +373,16 @@ static func deal_damage(target: Node2D, dmg: int, kind: String, sphere: String, 
 		final = maxi(0, int(round(float(dmg) * (1.0 - float(prot) / 100.0))))
 	else:
 		final = maxi(0, final - unit_absorption(target))
+		# Allods weapon-kind resistance: a physical blow is reduced (or
+		# boosted) by the target's creature type. Only a weapon with a known
+		# kind takes part — bare hands, a staff's weak hit and magic do not.
+		# Source formula: trunc(damage * (100 - resistance) / 100 + 0.75),
+		# i.e. 125% vs undead for a club is resistance -25.
+		var wkind := weapon_kind_of(attacker)
+		if wkind != "":
+			var ctype := creature_type_of(target)
+			if ctype != "":
+				final = apply_weapon_percent(final, UnitDB.weapon_percent(wkind, ctype))
 	if final <= 0:
 		# Полное поглощение ДО take_damage. Причина важна игроку: «стойкость» —
 		# защита стихии, «броня» — физический удар. Раньше обе подписи были
@@ -597,7 +647,14 @@ static var hero_portrait: String = ""       # res:// путь к портрет�
 static var hero_race: String = "human"      # human | necro | druid | ork
 static var hero_stats: Dictionary = {}      # стартовые характеристики
 static var hero_start_book: String = ""     # книга простейшего заклинания школы мага
-
+## The chosen development direction (skill id: blade/axe/.../fire/...). Its
+## level drives survivability: life for both classes, mana for a mage,
+## defence for a warrior. The auxiliary skill counts at 60% (see [skill_stats]).
+static var hero_primary_skill: String = ""
+static var hero_aux_skill: String = ""
+## Death latch (package 2 will own the screen): set on a lethal hit, reset by a
+## new game or a slot load. Kept here now so character creation can clear it.
+static var hero_dead: bool = false
 ## Позиция героя из сохранения. Кладёт SaveSystem.apply_payload; применяет
 ## _spawn_player_on_walkable после пересборки сцены (иначе герой всегда на спавне).
 static var load_position: Vector2 = Vector2.ZERO
