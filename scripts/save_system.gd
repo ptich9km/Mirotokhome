@@ -604,6 +604,8 @@ static func build_payload(player, world_dict: Dictionary, world_meta: Dictionary
 		"race": Game.hero_race,
 		"stats": Game.hero_stats.duplicate(true),
 		"start_book": Game.hero_start_book,
+		"primary_skill": Game.hero_primary_skill,
+		"aux_skill": Game.hero_aux_skill,
 		"max_hp": int(player.max_hp),
 		"max_mana": int(player.max_mana),
 		"current_hp": int(player.current_hp),
@@ -976,6 +978,8 @@ static func apply_payload(d: Dictionary, player, slot: String = "") -> void:
 	if st is Dictionary:
 		Game.hero_stats = (st as Dictionary).duplicate(true)
 	Game.hero_start_book = str(h.get("start_book", ""))
+	Game.hero_primary_skill = str(h.get("primary_skill", ""))
+	Game.hero_aux_skill = str(h.get("aux_skill", ""))
 	# Позиция героя: всегда кладём в Game (для player==null и для apply до
 	# пересборки сцены). Раньше поле писалось в файл, но не применялось —
 	# герой после «Продолжить» всегда вставал на спавн.
