@@ -123,8 +123,9 @@
 **Что нужно на машине разработчика:**
 
 - **Пересобрать набор из уже готовых полос — ключ НЕ нужен.** Исходники
-  `import/Player/hero_{stand,walk,attack,die}_nb5.png` лежат в git, нужны
-  только `numpy` и `pillow`: `python tests/extract_hero_nb.py`.
+  `import/Player/hero_{stand,walk,attack,die}_nb5.png` держим **на диске
+  локально** (с 06.11 листы `import/*.png` не в git — см. `.gitignore`),
+  нужны только `numpy` и `pillow`: `python tests/extract_hero_nb.py`.
 - **Сгенерировать новые полосы — нужен ключ KodikRouter.** Он намеренно НЕ в
   git и НЕ в папке проекта (`.gitignore: *.kodik_key` — страховка). Ключи лежат
   вне репозитория: `%APPDATA%\Mirotokhome\kodik_key` и `kodik_audio_key`;
