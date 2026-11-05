@@ -657,9 +657,21 @@ func use_potion(item_key: String) -> bool:
 		return false
 	if not remove_item(item_key):
 		return false
+	var hp_before := current_hp
+	var mana_before := current_mana
 	current_hp = mini(max_hp, current_hp + heal)
 	if max_mana > 0:
 		current_mana = mini(max_mana, current_mana + mana)
+	# The bottle is a deliberate action, so it deserves the same feedback as a heal spell:
+	# a real restored amount (not the nominal one — a full HP hero would see a lie).
+	var hp_gain := current_hp - hp_before
+	var mana_gain := current_mana - mana_before
+	if hp_gain > 0:
+		DamageNumber.show_at(global_position, hp_gain, "heal")
+	if mana_gain > 0:
+		DamageNumber.show_at(global_position, mana_gain, "mana")
+	if health_bar:
+		health_bar.update_bars(current_hp, current_mana)
 	SoundDB.play("magic.heal")
 	return true
 
@@ -1665,7 +1677,10 @@ func _play_cast_swing() -> void:
 
 ## Use a spell by name. Returns true if the cast started.
 ## With cast_time > 0 it enters the "casting" state and applies the effect later.
-func cast_spell(name: String, target_position: Vector2, target_node: Node2D = null) -> bool:
+## silent — the cast produces no spell sound. Auto-magic uses it: a heal that fires
+## every second must not beep every second (player report 06.11).
+func cast_spell(name: String, target_position: Vector2, target_node: Node2D = null,
+		silent: bool = false) -> bool:
 	# Safety net: during a tactical pause we cast neither by click, nor by auto-cast,
 	# nor by scroll. Before, there was no check at all (the scene root is Always).
 	if Game.is_paused:
@@ -1678,19 +1693,19 @@ func cast_spell(name: String, target_position: Vector2, target_node: Node2D = nu
 	var target: Node2D = target_node if is_instance_valid(target_node) else self
 	var cast_time := SpellDB.cast_time_of(name)
 	if cast_time > 0.0 and not Game.debug_magic:
-		_begin_casting(name, spell, target_position, target, cast_time)
+		_begin_casting(name, spell, target_position, target, cast_time, silent)
 		return true
-	_commit_cast(name, spell, target_position, target)
+	_commit_cast(name, spell, target_position, target, silent)
 	return true
 
 
 ## Preparation phase: the hero stands still, a telegraph is shown.
 func _begin_casting(name: String, spell: Dictionary, target_position: Vector2,
-		target: Node2D, cast_time: float) -> void:
+		target: Node2D, cast_time: float, silent: bool = false) -> void:
 	_pending_cast = {
 		"name": name, "spell": spell,
 		"pos": target_position, "target": target,
-		"left": cast_time, "total": cast_time,
+		"left": cast_time, "total": cast_time, "silent": silent,
 	}
 	state = "casting"
 	velocity = Vector2.ZERO
@@ -1715,13 +1730,15 @@ func _tick_casting(delta: float) -> void:
 	var pspell: Dictionary = _pending_cast["spell"]
 	var ppos: Vector2 = _pending_cast["pos"]
 	var ptarget: Node2D = _pending_cast["target"]
+	var psilent := bool(_pending_cast.get("silent", false))
 	_pending_cast = {}
 	state = "idle"
-	_commit_cast(pname, pspell, ppos, ptarget)
+	_commit_cast(pname, pspell, ppos, ptarget, psilent)
 
 
 ## Resource deduction + cooldown + the effect itself. Called at the moment of application.
-func _commit_cast(name: String, spell: Dictionary, target_position: Vector2, target: Node2D) -> void:
+func _commit_cast(name: String, spell: Dictionary, target_position: Vector2, target: Node2D,
+		silent: bool = false) -> void:
 	var charges := spell_charges(name)
 	if charges > 0:
 		var left := charges - 1
@@ -1734,7 +1751,7 @@ func _commit_cast(name: String, spell: Dictionary, target_position: Vector2, tar
 	# Cooldown — from knowledge of magic (sphere skill + mind), not just the base.
 	cast_cooldowns[name] = Game.spell_cooldown(self, name)
 	StatusEffects.break_invisibility(self)   # an attack breaks invisibility
-	_cast_spell_effect(name, spell, target_position, target)
+	_cast_spell_effect(name, spell, target_position, target, -1.0, silent)
 	_apply_spell_experience(str(spell.get("sphere", "")))
 
 
@@ -1769,6 +1786,7 @@ func apply_scroll_to_target_point(name: String, point: Vector2, power: float = -
 	return true
 
 ## Spell sound: the database key, with a per-sphere fallback.
+## last_cast_sound — an observable note for smoke tests: empty means a silent cast.
 func _play_spell_sound(name: String, sphere: String) -> void:
 	var key := SpellDB.sound_of(name)
 	if key == "":
@@ -1778,6 +1796,7 @@ func _play_spell_sound(name: String, sphere: String) -> void:
 			"Air": key = "magic.lightning"
 			"Earth": key = "magic.earth.bolt"
 			"Astral": key = "magic.heal"
+	last_cast_sound = key
 	if key != "":
 		SoundDB.play(key)
 
@@ -1787,12 +1806,13 @@ func _play_spell_sound(name: String, sphere: String) -> void:
 ## computing DAMAGE. For buffs and healing the scroll power is not applied (the player's
 ## decision: the scroll affects damage only).
 func _cast_spell_effect(name: String, spell: Dictionary, target_position: Vector2,
-		target_node: Node2D, power_override: float = -1.0) -> void:
+		target_node: Node2D, power_override: float = -1.0, silent: bool = false) -> void:
 	var sphere := str(spell.get("sphere", ""))
 	var kind := str(spell.get("kind", "buff"))
 	var dmg := int(spell.get("damage", 0))
 	var area := float(spell.get("area", 0))
-	_play_spell_sound(name, sphere)
+	if not silent:
+		_play_spell_sound(name, sphere)
 	# Cast animation: raising and lowering the staff. The magic flies out of the centre
 	# (cast_origin), but the hero does not stand like a post (player report 21.10).
 	_play_cast_swing()
@@ -1954,7 +1974,8 @@ func _heal_target(target: Node2D, spell_name: String, base: int) -> void:
 
 
 ## Restore HP to self or an ally. Returns the amount actually restored.
-func heal_amount(amount: int) -> int:
+## show_number = false — for passive regeneration: a "+3" every second is spam, not feedback.
+func heal_amount(amount: int, show_number: bool = true) -> int:
 	if amount <= 0 or current_hp >= max_hp:
 		return 0
 	if is_dead or state == "dead" or state == "decay" or state == "corpse":
@@ -1963,7 +1984,8 @@ func heal_amount(amount: int) -> int:
 	if healed <= 0:
 		return 0
 	current_hp += healed
-	DamageNumber.show_at(global_position, healed, "heal")
+	if show_number:
+		DamageNumber.show_at(global_position, healed, "heal")
 	if health_bar:
 		health_bar.update_bars(current_hp, current_mana)
 	return healed
@@ -2260,6 +2282,9 @@ func get_nearest_enemy(click_pos: Vector2, attack_range: float) -> Node2D:
 var _auto_buff_accum := 0.0
 var _auto_heal_accum := 0.0
 var _auto_scroll_accum := 0.0
+## The last spell sound key the hero actually played ("" — the cast was silent).
+## Auto-magic keeps it empty; smoke tests read it instead of listening to the mixer.
+var last_cast_sound: String = ""
 
 
 ## Mage auto-magic: healing self and the target + buffs by the level from settings.
@@ -2353,8 +2378,10 @@ func _tick_auto_scroll(delta: float) -> void:
 	var scroll_power := SpellDB.scroll_power_of(scroll_item)
 	# Cooldown — by the magic inside the scroll (50/100), not by using the item.
 	cast_cooldowns[spell] = Game.spell_cooldown(self, spell, scroll_power)
+	# A heal scroll is auto-restoration: silent, like the mage auto-heal. Buff scrolls keep
+	# their sound — the player marked them on purpose and they fire once per cooldown.
 	_cast_spell_effect(spell, SpellDB.get_spell(spell), global_position, self,
-		scroll_power)
+		scroll_power, kind == "heal")
 	_apply_spell_experience(SpellDB.sphere_of(spell))
 
 
@@ -2415,7 +2442,8 @@ func _auto_try_heal(spell_name: String, ratio: float) -> void:
 			best = u
 	if best == null:
 		return
-	cast_spell(spell_name, best.global_position, best)
+	# Silent: auto-magic heals every second — a sound every second is noise, not feedback.
+	cast_spell(spell_name, best.global_position, best, true)
 
 
 ## Buff spells by auto-magic level.

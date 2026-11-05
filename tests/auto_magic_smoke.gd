@@ -64,10 +64,36 @@ func _run() -> void:
 	_hero.state = "idle"
 	_hero.current_hp = maxi(5, int(float(_hero.max_hp) * 0.2))
 	var hp_before := int(_hero.current_hp)
+	_hero.last_cast_sound = ""
 	_hero._tick_auto_cast(1.05)
 	await create_timer(1.2).timeout
 	_check(int(_hero.current_hp) > hp_before,
 		"лечится сам без auto_spell (%d -> %d)" % [hp_before, int(_hero.current_hp)])
+	# 1b. Авто-лечение молчит (жалоба 06.11: звук при каждом тике восстановления).
+	# Вызываем тик напрямую: за 1.2 с ожидания авто-бафф успевал сыграть свой звук
+	# и затирал наблюдение.
+	_hero.state = "idle"
+	_hero.cast_cooldowns.clear()
+	_hero.current_hp = maxi(5, int(float(_hero.max_hp) * 0.2))
+	var hp_silent := int(_hero.current_hp)
+	_hero.last_cast_sound = ""
+	_hero._auto_try_heal("Heal", 0.45)
+	_check(int(_hero.current_hp) > hp_silent,
+		"авто-лечение сработало (%d -> %d)" % [hp_silent, int(_hero.current_hp)])
+	_check(_hero.last_cast_sound != "magic.heal",
+		"авто-лечение не играет звук (последний ключ: '%s')" % _hero.last_cast_sound)
+
+	# 1c. Ручной каст лечения по-прежнему звучит.
+	Game.auto_buff_tier = "none"
+	_hero.state = "idle"
+	_hero.cast_cooldowns.clear()
+	_hero.current_hp = maxi(5, int(float(_hero.max_hp) * 0.2))
+	_hero.last_cast_sound = ""
+	_hero.cast_spell("Heal", _hero.global_position, _hero)
+	await create_timer(0.8).timeout
+	_check(_hero.last_cast_sound == "magic.heal",
+		"ручной каст лечения звучит (последний ключ: '%s')" % _hero.last_cast_sound)
+	Game.auto_buff_tier = "base"
 
 	# 2. Бафф себя на «Базовом».
 	_hero.state = "idle"

@@ -72,16 +72,40 @@ func _ready() -> void:
 		set_physics_process(false)
 
 
-## Маркер «!»/«?» над головой главы. Вид ставит QuestSystem через
-## Npc.refresh_quest_marker(): сам NPC про квесты не знает.
+## The "!"/"?" marker above the head of a city head. The kind is set by
+## QuestSystem through Npc.refresh_quest_marker(): the NPC itself knows no quests.
+##
+## The height is measured from the TOP OF THE FIGURE, not from sel_box. Before,
+## `sel_box().position.y` was used — a coordinate inside the texture (10 px for a
+## 64 px frame), not "pixels above the feet" — so the marker hung at 24 px, which is
+## waist level (player report 06.11: "the question mark sits over the crotch").
 func _make_quest_marker() -> void:
 	quest_marker = QuestMarker.new()
 	quest_marker.name = "QuestMarker"
-	var box := UnitDB.sel_box(anim_set)
-	var top := float(box.position.y) if box.size.y > 0 else 0.0
-	quest_marker.set_height_px(maxf(top, 24.0))
+	quest_marker.set_height_px(_quest_marker_height())
 	add_child(quest_marker)
 	refresh_quest_marker()
+
+
+## Figure top above the feet + gap + half of the marker icon.
+## The main source is content_rect() (the alpha frame of the current frame, it already
+## contains the set scale); the fallback is frame height minus the sel_box top, the
+## last resort is the old 24 px.
+func _quest_marker_height() -> float:
+	const GAP := 6.0
+	const MARKER_HALF := 12.0   # marks/*.png are 24×24 and the sprite is centered
+	const FALLBACK := 24.0
+	var figure_top := 0.0
+	if _anim != null:
+		var r: Rect2 = _anim.content_rect()
+		if r.size.y > 0.5:
+			figure_top = -r.position.y
+		elif _anim.sprite_height() > 0.0:
+			var box := UnitDB.sel_box(anim_set)
+			figure_top = _anim.sprite_height() - float(box.position.y)
+	if figure_top <= 0.0:
+		return FALLBACK
+	return figure_top + GAP + MARKER_HALF
 
 
 ## Пересчитать вид маркера по состоянию квестов города.

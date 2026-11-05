@@ -2419,12 +2419,13 @@ func _regen_hero(delta: float) -> void:
 	if mana_regen_accum < 1.0:
 		return
 	mana_regen_accum -= 1.0
+	# Passive regeneration is background bookkeeping: no floating number, no sound.
+	# Floating text belongs to hits, spells and bottles (player report 06.11).
 	if player.current_hp < player.max_hp:
-		player.heal_amount(player._calc_hp_regen())
+		player.heal_amount(player._calc_hp_regen(), false)
 	if player.has_mana and player.current_mana < player.max_mana:
 		var gain: int = player._calc_mana_regen()
 		player.current_mana = mini(player.max_mana, player.current_mana + gain)
-		DamageNumber.show_at(player.global_position, gain, "mana")
 
 func _check_portal() -> void:
 	if not is_instance_valid(player) or not is_instance_valid(alm_map):
