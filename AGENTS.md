@@ -42,13 +42,16 @@
 
 | | Путь проекта | Консольный Godot |
 |---|---|---|
-| **Домашний (эта машина)** | `D:\Work\Allodshome` | `D:\Work\UnityProjects\Godot_v4.7.2-stable_win64_console.exe` |
-| **Рабочий** | `C:\Work\Allodshome` | `C:\Games\Godot_v4.7.2-stable_win64_console.exe` |
+| **Домашний ноутбук (эта машина, сверено 06.11)** | `C:\Work\Allodshome` | `C:\Work\Godot_v4.7.2-stable_win64_console.exe` |
+| **Рабочий ПК** | `C:\Work\Allodshome` | `C:\Games\Godot_v4.7.2-stable_win64_console.exe` |
 
 - GUI-вариант движка лежит рядом (суффикс `_win64.exe`).
 - **Где работать (игрок, 14.10):** рабочая папка — `C:\Work`. Вне неё ничего не
   трогаем; во временные папки (`%TEMP%`, `C:\Temp`, …) пишем **только после
   согласования** с игроком.
+- Путь `D:\Work\UnityProjects\...` (в т.ч. `Allodshome_Godot` в старых
+  `scripts/*.py`) — это сентябрьский прототип и исторические заготовки, а не
+  проект; на домашнем ноутбуке такого диска нет.
 - Карт для обучения генератора больше нет: корпус `assets/maps/pvm/` (14 оригинальных
   карт Аллодов) удалён 29.10 вместе с артом зданий. `shapes_db.json` и
   `transition_db.json` — уже зафиксированные производные данные, генератор читает
@@ -56,10 +59,10 @@
 
 ## 3. Проверка после правок
 
-Контрольная точка после **любых** правок — headless-парсинг (команда для домашнего ПК):
+Контрольная точка после **любых** правок — headless-парсинг (команда для домашнего ноутбука):
 
 ```powershell
-& 'D:\Work\UnityProjects\Godot_v4.7.2-stable_win64_console.exe' --headless --path 'D:\Work\Allodshome' --quit 2>&1 | Select-String 'SCRIPT ERROR|Parse Error|ERROR:'
+& 'C:\Work\Godot_v4.7.2-stable_win64_console.exe' --headless --path 'C:\Work\Allodshome' --quit 2>&1 | Select-String 'SCRIPT ERROR|Parse Error|ERROR:'
 ```
 
 - **Нет `SCRIPT ERROR`** = скрипты компилируются.
