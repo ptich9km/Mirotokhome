@@ -75,6 +75,14 @@ import/loot_icons_derived/
 ## и сравнения. Пересоздаётся одной командой; в git уходят установленные иконки.
 import/broken_overlay/
 
+# Raw AI art source sheets — the inputs of tests/gen_*.py and tests/extract_*.py.
+# The game only loads the sliced sprites in assets/, so these sheets are dev-only
+# and cost ~0.5 GB in every clone. Kept in git: manifests and slicing notes
+# (*.json / *.md / *.properties) that document the atlas layout. The files stay
+# on disk, they are simply no longer tracked.
+import/*.png
+import/**/*.png
+
 # Контакт-листы курсора и диагностика нарезки (tests/extract_cursor_frames.py,
 # tests/gen_cursor_strip.py) — выход dev-инструмента, пересоздаётся одной командой.
 assets/ui/cursor/*_contact_sheet*.png
