@@ -1,0 +1,20 @@
+{
+  "prop_barrel": 12,
+  "prop_barrel2": 12,
+  "prop_crate": 15,
+  "prop_crate2": 15,
+  "prop_sack": 8,
+  "prop_pot": 8,
+  "tree_oak": 45,
+  "tree_oak2": 50,
+  "tree_pine": 40,
+  "tree_birch": 35,
+  "tree_willow": 45,
+  "tree_dead": 30,
+  "bush_berry": 10,
+  "bush_thorn": 12,
+  "palm": 35,
+  "cactus": 25,
+  "rock": 90,
+  "rock2": 80
+}

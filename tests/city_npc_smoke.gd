@@ -1,7 +1,6 @@
 extends SceneTree
-## Городские NPC: статичные жители и бюджет pathfinding (23.10).
-##
-## Запуск: godot --headless --path . --script res://tests/city_npc_smoke.gd
+## City NPCs: a citizen stands still, and the guard pathfinding budget holds
+## (23.10). Run: godot --headless --path . --script res://tests/city_npc_smoke.gd
 
 var _checks := 0
 var _fails: Array[String] = []
@@ -22,11 +21,11 @@ func _run() -> void:
 	GameConfig.load_all()
 	UnitDB.ensure_loaded()
 
-	# Жителей вдвое меньше: 12–18 -> 6–9 во всех зонах.
-	for zone in ["start", "mid", "hard", "faction"]:
-		var mn := GameConfig.zonei(zone, "citizen_count_min")
-		var mx := GameConfig.zonei(zone, "citizen_count_max")
-		_check(mn == 6 and mx == 9, "%s: жителей 6..9 (сейчас %d..%d)" % [zone, mn, mx])
+	# Citizen count is the same in every zone (3x.11): the numbers live in
+	# [city] instead of four identical per-zone blocks.
+	var mn := GameConfig.geti("city", "citizen_count_min")
+	var mx := GameConfig.geti("city", "citizen_count_max")
+	_check(mn == 6 and mx == 9, "citizens 6..9 (got %d..%d)" % [mn, mx])
 
 	var set_name := "city_human_mage/t1"
 	if not UnitDB.has(set_name):
@@ -42,8 +41,8 @@ func _run() -> void:
 	citizen.city_id = "c0t0"
 	root.add_child(citizen)
 	await process_frame
-	_check(citizen.is_physics_processing() == false, "житель не тикает физику")
-	_check(citizen.velocity == Vector2.ZERO, "житель стоит на месте")
+	_check(citizen.is_physics_processing() == false, "a citizen does not simulate physics")
+	_check(citizen.velocity == Vector2.ZERO, "a citizen stands still")
 
 	var budget = npc_script.new()
 	budget.anim_set = set_name
@@ -56,8 +55,8 @@ func _run() -> void:
 	var a: bool = budget._can_pathfind()
 	var b: bool = budget._can_pathfind()
 	var c: bool = budget._can_pathfind()
-	_check(a and b and not c, "бюджет A*: два запроса за кадр, третий ждёт")
-	_check(budget.is_physics_processing(), "патрульная стража тикает физику")
+	_check(a and b and not c, "A* budget: two searches per frame, the third is denied")
+	_check(budget.is_physics_processing(), "a patrolling guard simulates physics")
 
 	citizen.queue_free()
 	budget.queue_free()

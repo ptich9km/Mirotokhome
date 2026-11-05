@@ -9,11 +9,11 @@ extends SceneTree
 ##    взяв из заметок AGENTS §8.2, и его В БАЗЕ НЕТ — militia не существует.
 ##    Точка интереса такого вида молча не дала бы ни одного NPC. Тест
 ##    ловит это до запуска игры, а не после.
-## 2. Выключено по умолчанию: interest_points = 0 во всех зонах, поэтому
+## 2. Выключено по умолчанию: poi.count = 0, поэтому
 ##    поведение игры не отличается от прежнего, пока игрок не включит.
 ##    Это главный инвариант безопасности ночной правки.
 ## 3. В закоммиченной карте нет ни одной записи POI.
-## 4. Наборы POI — люди (не Серые), и их статы берутся из [zone] (poi_*),
+## 4. Наборы POI — люди (не Серые), и их статы берутся из [poi] (hp/damage),
 ##    а не из потолка в коде.
 ##
 ## ЗАПУСК
@@ -94,7 +94,7 @@ func _run() -> void:
 		_check(units.has(key),
 			"набор %s есть в units_db (оставлен для отката и панелей)" % key)
 
-	# POI выключены (решение игрока 07.10: арта мало, interest_points=0).
+	# POI выключены (решение игрока 07.10: арта мало, poi.count=0).
 	var kinds := {}
 	var code_kinds := _code_poi_sets()
 	_check(code_kinds.is_empty(),
@@ -111,17 +111,14 @@ func _run() -> void:
 		return
 	_check(true, "game.cfg грузится")
 
-	# Все зоны: interest_points = 0 (пока арта мало).
-	var want_poi := {"start": 0, "mid": 0, "hard": 0, "faction": 0}
-
-	for zone in ZONES:
-		var n := int(cfg.get_value("zone", "%s.interest_points" % zone, -999))
-		_check(n == int(want_poi.get(zone, 0)),
-			"interest_points в зоне %s = %d (ожидалось 0)" % [zone, n])
-		_check(int(cfg.get_value("zone", "%s.poi_hp" % zone, 0)) > 0,
-			"у зоны %s заданы статы NPC точки (poi_hp)" % zone)
-		_check(int(cfg.get_value("zone", "%s.poi_damage" % zone, -1)) >= 0,
-			"у зоны %s задан урон NPC точки (poi_damage)" % zone)
+	# POI выключены (решение игрока 07.10: арта мало): одна глобальная
+	# секция [poi], а не по зоне — 3x.11 зональные боевые ключи убраны.
+	_check(int(cfg.get_value("poi", "count", -999)) == 0,
+		"poi.count = 0 (точки интереса выключены)")
+	_check(int(cfg.get_value("poi", "hp", 0)) > 0,
+		"у NPC точки заданы HP (poi.hp)")
+	_check(int(cfg.get_value("poi", "damage", -1)) >= 0,
+		"у NPC точки задан урон (poi.damage)")
 
 	print("-- городские NPC: раса города -> наборы (CITY_POPULATION) --")
 	# 09.10: карта генерируется здесь, а не читается из закоммиченного

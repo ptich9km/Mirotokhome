@@ -35,7 +35,10 @@ const DEFAULTS := {
 		"damage_multiplier": 1.0,   # global damage multiplier (taken from AION)
 		"attack_cooldown": 1.0,     # before, 1.0 was duplicated in three files
 		"enemy_defense_div": 25,    # it was max_hp/25
-		"enemy_attack_dmg_div": 2,  # it was damage/2
+		# 2 -> 5 (player tuning, 15.10): enemy hits were cutting the fight
+		# short. The value has lived in the reference file since then, so the
+		# default follows it (rule 2 in the module header).
+		"enemy_attack_dmg_div": 5,
 		"enemy_attack_hp_div": 30,  # it was max_hp/30
 		"enemy_absorption_div": 40, # it was max_hp/40
 		"protection_max": 95,       # elemental resistance cap, %
@@ -67,6 +70,18 @@ const DEFAULTS := {
 	},
 	"progression": {
 		"unit_exp_base": 100,
+	},
+	"skill_stats": {
+		# The chosen direction (primary skill) and the auxiliary skill give
+		# survivability on top of the attributes: life for both classes, mana
+		# for a mage, defence for a warrior. The auxiliary counts at 60% of its
+		# level (player decision 04.11), so 20 + 10 reads as 26 development
+		# points, not 30. Damage is NOT added here: it already scales with the
+		# weapon/sphere skill in the damage formulas.
+		"hp_per_point": 0.5,
+		"mana_per_point": 0.5,
+		"defense_per_point": 0.2,
+		"aux_factor": 0.6,
 	},
 	"npc": {
 		# Aggro radius of the city guard against Greys. 190 -> 133 (-30%):
@@ -210,70 +225,68 @@ const DEFAULTS := {
 		"gray_respawn_seconds": 20.0,
 		"gray_respawn_min_dist": 26,
 	},
-	"mob_tier": {
-		# Multipliers per mob tier (an idea from AION). Grey tiers do not exist in the game yet,
-		# the place is reserved in advance — see the audit, package C.
-		"hp_multiplier": 1.0,
-		"damage_multiplier": 1.0,
-	},
-	"zone": {
-		# Flat keys of the form zone.<name>.<key> — ConfigFile has no nested
-		# sections, so the zones live in one section with a prefix.
+	"grey": {
+		# Base stats of a tier-1 Grey (3x.11 cleanup): zone difficulty is NOT
+		# set here. A zone picks a tier band (MapGenerator.GRAY_TIER_BAND) and
+		# the tier scales these numbers by the [mob_tier] steps. This is the
+		# AION rates model: global numbers, per-monster multipliers, and no
+		# per-zone DPS.
 		#
-		# IMPORTANT: the values below = the CURRENT generator behaviour, not the desired one.
-		# Right now the zones differ only by Greys (GRAY_ZONE), while the guards and
-		# the townsfolk are the same everywhere. The balance stage will raise the Greys in the early zones,
-		# the spawn stage will spread the guards over the zones. For now the defaults = as before.
+		# Damage 4-6 -> 18-26 (playtest 04.11): a starter hero absorbs 5-8 and
+		# has ~100 HP, so 10-15 raw meant 5-10 per hit and a dozen hits to die
+		# — packs were cleared without crafting or potions.
+		"hp_min": 25,
+		"hp_max": 45,
+		"damage_min": 18,
+		"damage_max": 26,
+	},
+	"mob_tier": {
+		# Growth per tier above the first: mult = 1 + step * (tier - 1).
+		# Tier 5 is x2.4 HP and x2.0 damage over the tier-1 base. The tier
+		# itself comes from units_db.json, so the formula lives in one place
+		# (MapGenerator.gray_tier_mults) and the numbers live here.
+		"hp_step": 0.35,
+		"damage_step": 0.25,
+	},
+	"city": {
+		# City NPCs are the same in every zone: a guard is a guard, and zone
+		# danger lives in the Grey tiers. Counts are per city. Before 3x.11
+		# these numbers were duplicated four times under a per-zone prefix
+		# while every zone carried identical values.
+		"guard_count_min": 5,
+		"guard_count_max": 8,
+		"guard_hp_min": 60,
+		"guard_hp_max": 100,
+		"guard_damage_min": 6,
+		"guard_damage_max": 10,
+		"captain_hp": 120,
+		"captain_damage": 12,
+		"citizen_hp": 30,
+		"citizen_count_min": 6,
+		"citizen_count_max": 9,
+	},
+	"poi": {
+		# Points of interest (ruins, camps, shrines). count = 0 keeps the
+		# feature off: there is not enough art yet (player decision 07.10).
+		"count": 0,
+		"hp": 60,
+		"damage": 6,
+	},
+	"zone_design": {
+		# Map design per zone, not combat rates: how many Greys a map holds
+		# and how dense the trees are. A Grey's HP and damage come from
+		# [grey] plus the tier of its set, so nothing here changes a fight's
+		# DPS. Flat prefixed keys because ConfigFile has no nested sections.
 		"start.gray_count_min": 40,     "start.gray_count_max": 60,
-		"start.gray_hp_min": 25,       "start.gray_hp_max": 45,
-		"start.gray_damage_min": 4,    "start.gray_damage_max": 6,
-		"start.guard_hp_min": 60,      "start.guard_hp_max": 100,
-		"start.guard_damage_min": 6,   "start.guard_damage_max": 10,
-		"start.guard_count_min": 5,    "start.guard_count_max": 8,
-		"start.citizen_hp": 30,
-		"start.citizen_count_min": 6, "start.citizen_count_max": 9,
-		"start.captain_hp": 120,       "start.captain_damage": 12,
-		"start.interest_points": 0,    # ruins/camps/shrines. The beginner zone stays quiet: points near the start kill the point of the first city.
-		"start.poi_hp": 60,           "start.poi_damage": 6,
 		"start.tree_density": 0.18,
 
 		"mid.gray_count_min": 120,     "mid.gray_count_max": 150,
-		"mid.gray_hp_min": 45,         "mid.gray_hp_max": 75,
-		"mid.gray_damage_min": 6,      "mid.gray_damage_max": 9,
-		"mid.guard_hp_min": 60,        "mid.guard_hp_max": 100,
-		"mid.guard_damage_min": 6,     "mid.guard_damage_max": 10,
-		"mid.guard_count_min": 5,      "mid.guard_count_max": 8,
-		"mid.citizen_hp": 30,
-		"mid.citizen_count_min": 6,   "mid.citizen_count_max": 9,
-		"mid.captain_hp": 120,         "mid.captain_damage": 12,
-		"mid.interest_points": 0,
-		"mid.poi_hp": 60,             "mid.poi_damage": 6,
 		"mid.tree_density": 0.20,
 
 		"hard.gray_count_min": 140,    "hard.gray_count_max": 180,
-		"hard.gray_hp_min": 70,        "hard.gray_hp_max": 120,
-		"hard.gray_damage_min": 9,     "hard.gray_damage_max": 14,
-		"hard.guard_hp_min": 60,       "hard.guard_hp_max": 100,
-		"hard.guard_damage_min": 6,    "hard.guard_damage_max": 10,
-		"hard.guard_count_min": 5,     "hard.guard_count_max": 8,
-		"hard.citizen_hp": 30,
-		"hard.citizen_count_min": 6,  "hard.citizen_count_max": 9,
-		"hard.captain_hp": 120,        "hard.captain_damage": 12,
-		"hard.interest_points": 0,
-		"hard.poi_hp": 60,            "hard.poi_damage": 6,
 		"hard.tree_density": 0.22,
 
 		"faction.gray_count_min": 100, "faction.gray_count_max": 130,
-		"faction.gray_hp_min": 50,     "faction.gray_hp_max": 95,
-		"faction.gray_damage_min": 7,  "faction.gray_damage_max": 11,
-		"faction.guard_hp_min": 60,    "faction.guard_hp_max": 100,
-		"faction.guard_damage_min": 6, "faction.guard_damage_max": 10,
-		"faction.guard_count_min": 5,  "faction.guard_count_max": 8,
-		"faction.citizen_hp": 30,
-		"faction.citizen_count_min": 6, "faction.citizen_count_max": 9,
-		"faction.captain_hp": 120,     "faction.captain_damage": 12,
-		"faction.interest_points": 0,
-		"faction.poi_hp": 60,         "faction.poi_damage": 6,
 		"faction.tree_density": 0.20,
 	},
 	"events": {
@@ -304,7 +317,9 @@ const DEFAULTS := {
 		"blueprint_min_difficulty": 3,
 		"kill_elite_hp_mult": 2.5,
 		"kill_elite_dmg_mult": 1.5,
-		"gray_kill_base": 4,       # base amount in "kill N creatures"
+		# gray_kill_base was removed on 03.11: the target count comes from the
+		# quest template (`count_by_difficulty` in quest_db.json), the key was
+		# read by nobody, so tuning it silently did nothing.
 		"rep_base": 5,             # faction reputation for difficulty 1
 		"power_base": 0.2,         # mage power for difficulty 1
 		"prep_min_dist": 6,        # cells from the hero to the target at spawn
@@ -348,11 +363,13 @@ const DEFAULTS := {
 		# profiler costs time itself — for measurements, not for playing.
 		"perf": 0,
 		#
-		# all_magic: all 31 spells + infinite mana. Until 03.10 this was a
-		# hard `static var debug_magic = true` in game.gd — that is, the beta build
-		# handed out all the magic, and it could not be turned off without editing the code.
-		# Now it is just a key.
-		"all_magic": 1,
+		# all_magic: all 31 spells + infinite mana for a mage. Until 03.10 this was
+		# a hard `static var debug_magic = true` in game.gd. Since 04.11 the key is
+		# OFF by default: a playable mage starts with one school book
+		# (hero_start_book), learns it in one click and spends mana.
+		# Turn it on for magic debugging only: with 1 the mage loses the mana
+		# economy and the starting progression — the imbalance the player noticed.
+		"all_magic": 0,
 		#
 		# fog_of_war: fog of war on the hero map (19.10, FogOfWar). Visibility
 		# radius ~14 cells, explored terrain stays dimmed, enemies
@@ -457,13 +474,15 @@ static func getf(section: String, key: String) -> float:
 	return float(d)
 
 
-## A zone key like "start.gray_hp_min" lives in the [zone] section.
-static func zonei(zone: String, key: String) -> int:
-	return geti("zone", "%s.%s" % [zone, key])
+## A zone design key such as "start.gray_count_min" lives in [zone_design].
+## Combat numbers are NOT per zone any more: Greys scale by tier, city NPCs
+## are identical everywhere.
+static func designi(zone: String, key: String) -> int:
+	return geti("zone_design", "%s.%s" % [zone, key])
 
 
-static func zonef(zone: String, key: String) -> float:
-	return getf("zone", "%s.%s" % [zone, key])
+static func designf(zone: String, key: String) -> float:
+	return getf("zone_design", "%s.%s" % [zone, key])
 
 
 static func unknown_keys() -> PackedStringArray:

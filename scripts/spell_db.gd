@@ -360,7 +360,11 @@ static func make_book_item(spell: String) -> Dictionary:
 		"sphere": sphere,
 	}
 
-## The simplest spell of a sphere: minimum mana, attack/heal preferred.
+## Simplest COMBAT spell of a sphere: attack/area first, then heal, then
+## everything else; inside a group the cheapest mana wins.
+## Mana used to be the primary key, so an Air or Earth mage started with a
+## protective buff instead of a hit (player report 04.11: "it gave me a shield —
+## how do I kill anyone?").
 static func simplest_spell_of_sphere(sphere: String) -> String:
 	ensure_loaded()
 	var best := ""
@@ -370,12 +374,15 @@ static func simplest_spell_of_sphere(sphere: String) -> String:
 			continue
 		var o: Dictionary = _db[name]
 		var kind := str(o.get("kind", ""))
-		var pref := 2
-		if kind in ["attack", "area"]:
+		var damage := int(o.get("damage", 0))
+		var pref := 3
+		if kind in ["attack", "area"] and damage > 0:
 			pref = 0
 		elif kind == "heal":
 			pref = 1
-		var key := [int(o.get("mana_cost", 0)), pref, int(o.get("damage", 0)), name]
+		elif kind in ["attack", "area"]:
+			pref = 2
+		var key := [pref, int(o.get("mana_cost", 0)), -damage, name]
 		if best_key.is_empty() or key < best_key:
 			best_key = key
 			best = name

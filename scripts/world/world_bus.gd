@@ -61,8 +61,27 @@ func reseed() -> void:
 	var a_e: Dictionary = state.new_army(f_e.id, Vector2(700, 400))
 	a_h["unit_ids"] = [u1.id]
 	a_e["unit_ids"] = [u2.id]
+	# Fixture marker: apply_map_cities() removes these when the first real map
+	# arrives, while headless tests keep the sandbox exactly as before.
+	_c_h["fixture"] = true
+	c_e["fixture"] = true
+	u1["fixture"] = true
+	u2["fixture"] = true
+	a_h["fixture"] = true
+	a_e["fixture"] = true
 	state.relations["%s:%s" % [f_h.id, f_e.id]] = -40
 	state.relations["%s:%s" % [f_e.id, f_h.id]] = -40
+
+
+## Feed the SIM from the live map's cities (04.11). Idempotent: a sector that
+## already has cities (loaded save or a second visit) keeps its economy.
+func sync_sector_map(sector_id: String, map_cities: Array,
+		region_name: String = "") -> int:
+	if state == null or sector_id == "" or map_cities.is_empty():
+		return 0
+	if state.has_sector_cities(sector_id):
+		return 0
+	return int(state.apply_map_cities(sector_id, map_cities, region_name))
 
 
 func advance(days: int) -> void:

@@ -18,21 +18,21 @@ static func races() -> Array:
 const PRESETS := [
 	{
 		"role": "warrior", "gender": "male", "title": "Воин",
-		"desc": "Сила и выносливость, меч и щит.",
+		"desc": "Сила и выносливость. Бронзовое оружие и щит.",
 		"stats": {"body": 12, "agility": 11, "mind": 9, "spirit": 8,
 			"blade": 30, "bludgeon": 15, "pike": 10, "fire": 5, "water": 5, "air": 5, "earth": 5, "astral": 5,
 			"weapon": "sword", "shield": true, "armor": "heavy"},
 	},
 	{
 		"role": "warrior", "gender": "female", "title": "Воин",
-		"desc": "Быстрая и ловкая, лёгкий клинок.",
+		"desc": "Быстрая и ловкая. Бронзовое оружие, без щита.",
 		"stats": {"body": 10, "agility": 13, "mind": 9, "spirit": 8,
 			"blade": 30, "bludgeon": 15, "pike": 10, "fire": 5, "water": 5, "air": 5, "earth": 5, "astral": 5,
 			"weapon": "sword", "shield": false, "armor": "heavy"},
 	},
 	{
 		"role": "mage", "gender": "male", "title": "Маг",
-		"desc": "Могучий разум, школа магии.",
+		"desc": "Могучий разум. Посох и книга школы.",
 		"stats": {"body": 8, "agility": 9, "mind": 13, "spirit": 12,
 			"blade": 5, "bludgeon": 5, "pike": 5,
 			"fire": 5, "water": 5, "air": 5, "earth": 5, "astral": 5,
@@ -40,7 +40,7 @@ const PRESETS := [
 	},
 	{
 		"role": "mage", "gender": "female", "title": "Маг",
-		"desc": "Дух и интуиция, школа магии.",
+		"desc": "Дух и интуиция. Посох и книга школы.",
 		"stats": {"body": 7, "agility": 10, "mind": 12, "spirit": 13,
 			"blade": 5, "bludgeon": 5, "pike": 5,
 			"fire": 5, "water": 5, "air": 5, "earth": 5, "astral": 5,
@@ -94,23 +94,33 @@ var _cards: Array = []
 var _name_idx := -1  # последнее сгенерированное имя (для повторной кнопки)
 var _root: VBoxContainer   # корневая колонка-раскладка
 var _start_btn: Button
+var _next_btn: Button
+var _back_btn: Button
 var _name_row: HBoxContainer
+
+# --- Two-step creation: identity (step 1) and development (step 2) ---
+var _step1_box: VBoxContainer
+var _step2_box: VBoxContainer
+var _title_label: Label
+var _subtitle_label: Label
+var _dir_list: VBoxContainer
+var _dir_detail: VBoxContainer
+var _dir_buttons: Dictionary = {}   # skill id -> Button (primary only)
+var _aux_button: Button
+var _selected_primary := ""
+var _detail_skill := ""
 
 # --- «Мир»: сид / зона / готовая карта (пакет «своя игра») ---
 var _world_btn: Button
 var _world_panel: Node = null     # WorldSetupPanel (CanvasLayer), пока открыта
 var _start_setup: StartSetup      # что применится при «В ПУТЬ!»
 
-# --- Настройка героя (как в оригинале): атрибуты и склонность навыка ---
+# --- Настройка героя: атрибуты (склонность = выбранное направление) ---
 var _edit: Dictionary = {}          # редактируемые статы (копия пресета)
 var _stat_labels := {}              # "body" -> Label значения
 var _pool_label: Label
-var _affinity_buttons: Array[Button] = []   # кнопки склонности (field)
-const AFFINITIES := [
-	["Меч", "blade"], ["Топор", "axe"], ["Булава", "bludgeon"], ["Копьё", "pike"],
-	["Стрельба", "shooting"], ["Огонь", "fire"], ["Вода", "water"],
-	["Воздух", "air"], ["Земля", "earth"], ["Астрал", "astral"],
-]
+const SKILL_IDS := ["blade", "axe", "bludgeon", "pike", "shooting",
+	"fire", "water", "air", "earth", "astral"]
 const STATS_ORDER := ["body", "agility", "mind", "spirit"]
 const STAT_TITLES := {
 	"body": "ТЕЛО", "agility": "ЛОВКОСТЬ", "mind": "РАЗУМ", "spirit": "ДУХ",
@@ -128,14 +138,18 @@ func _ready():
 	_setup_background()
 	_setup_layout()
 	_setup_title()
+	_setup_step1()
 	_setup_race_row()
 	_setup_cards()
 	_setup_name_row()
-	_setup_start_button()
+	_setup_step2()
+	_setup_directions()
 	_setup_editor()
+	_setup_step2_buttons()
+	_show_step(1)
 	_select.call_deferred(0)
-	if is_instance_valid(_start_btn):
-		_start_btn.call_deferred("grab_focus")
+	if is_instance_valid(_next_btn):
+		_next_btn.call_deferred("grab_focus")
 
 
 ## Portrait key: {race}_{m|f}_{war|mage}, plus a style for humans (human/human2).
@@ -170,7 +184,7 @@ func _setup_race_row() -> void:
 	row.name = "RaceRow"
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 8)
-	_root.add_child(row)
+	_step1_box.add_child(row)
 	_race_buttons.clear()
 	var race_list := races()
 	for i in range(race_list.size()):
@@ -294,11 +308,50 @@ func _setup_title() -> void:
 	title.text = "MIROTOKHOME"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
+	_title_label = title
 	var sub := Label.new()
 	sub.theme_type_variation = &"CsSub"
-	sub.text = "Выберите героя"
+	sub.text = "Шаг 1 из 2 · Класс и пол"
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sub)
+	_subtitle_label = sub
+
+
+## Step 1: identity — race, class/gender cards, name. Step 2: development.
+func _setup_step1() -> void:
+	_step1_box = VBoxContainer.new()
+	_step1_box.name = "Step1"
+	_step1_box.add_theme_constant_override("separation", 10)
+	_step1_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_root.add_child(_step1_box)
+
+
+func _setup_step2() -> void:
+	_step2_box = VBoxContainer.new()
+	_step2_box.name = "Step2"
+	_step2_box.add_theme_constant_override("separation", 8)
+	_step2_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_step2_box.visible = false
+	_root.add_child(_step2_box)
+
+
+## Switch the wizard step. Esc/«Назад» go back here, not to the main menu.
+func _show_step(step: int) -> void:
+	if is_instance_valid(_step1_box):
+		_step1_box.visible = step == 1
+	if is_instance_valid(_step2_box):
+		_step2_box.visible = step == 2
+	if is_instance_valid(_subtitle_label):
+		_subtitle_label.text = "Шаг 1 из 2 · Класс и пол" if step == 1 \
+			else "Шаг 2 из 2 · Путь развития"
+	if step == 2:
+		_refresh_direction_buttons()
+		_refresh_direction_detail()
+		_refresh_editor()
+		if is_instance_valid(_start_btn):
+			_start_btn.call_deferred("grab_focus")
+	elif is_instance_valid(_next_btn):
+		_next_btn.call_deferred("grab_focus")
 
 ## Esc — назад в главное меню. До этого экран выбора героя не обрабатывал
 ## отмену: из «Новой игры» можно было выйти только через «В ПУТЬ!» или
@@ -310,6 +363,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		_world_panel.close()
 		get_viewport().set_input_as_handled()
 		return
+	# Step 2 backs out to identity, not all the way to the main menu. The old
+	# single-screen behaviour (Esc = menu) remains on step 1.
+	if is_instance_valid(_step2_box) and _step2_box.visible:
+		SoundDB.play("ui.click")
+		get_viewport().set_input_as_handled()
+		_show_step(1)
+		return
 	SoundDB.play("ui.click")
 	get_viewport().set_input_as_handled()
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
@@ -320,7 +380,7 @@ func _setup_cards() -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", int(CARD_GAP))
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_root.add_child(row)
+	_step1_box.add_child(row)
 	for i in range(CHARACTERS.size()):
 		row.add_child(_make_card(CHARACTERS[i], i))
 
@@ -399,7 +459,7 @@ func _setup_name_row() -> void:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 10)
-	_root.add_child(row)
+	_step1_box.add_child(row)
 	_name_row = row
 
 	var lab := Label.new()
@@ -432,6 +492,18 @@ func _setup_name_row() -> void:
 	_world_btn.pressed.connect(_open_world_panel)
 	row.add_child(_world_btn)
 	_update_world_button()
+
+	# Шаг 1 → шаг 2. «В ПУТЬ!» живёт на шаге развития: выбор направления
+	# обязан случиться до старта.
+	_next_btn = Button.new()
+	_next_btn.name = "NextStep"
+	_next_btn.text = "Далее: развитие →"
+	_next_btn.custom_minimum_size = Vector2(220, 48)
+	_next_btn.add_theme_font_size_override("font_size", 20)
+	_next_btn.pressed.connect(func() -> void:
+		SoundDB.play("ui.click")
+		_show_step(2))
+	row.add_child(_next_btn)
 
 	if name_input.text == "":
 		_random_name()
@@ -483,12 +555,23 @@ func _random_name() -> void:
 	_name_idx = i
 	name_input.text = str(pool[i])
 
-func _setup_start_button() -> void:
-	var row: HBoxContainer = _name_row if is_instance_valid(_name_row) else HBoxContainer.new()
-	if not is_instance_valid(_name_row):
-		row.alignment = BoxContainer.ALIGNMENT_CENTER
-		row.add_theme_constant_override("separation", 10)
-		_root.add_child(row)
+func _setup_step2_buttons() -> void:
+	var row := HBoxContainer.new()
+	row.name = "Step2Buttons"
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 16)
+	_step2_box.add_child(row)
+
+	_back_btn = Button.new()
+	_back_btn.name = "BackStep"
+	_back_btn.text = "← Назад"
+	_back_btn.custom_minimum_size = Vector2(160, 44)
+	_back_btn.add_theme_font_size_override("font_size", 18)
+	_back_btn.pressed.connect(func() -> void:
+		SoundDB.play("ui.click")
+		_show_step(1))
+	row.add_child(_back_btn)
+
 	_start_btn = Button.new()
 	_start_btn.text = "В ПУТЬ!"
 	_start_btn.custom_minimum_size = Vector2(220, 48)
@@ -496,11 +579,12 @@ func _setup_start_button() -> void:
 	_start_btn.pressed.connect(_start_game)
 	row.add_child(_start_btn)
 	# «Продолжить» перенесён в главное меню → «Загрузить игру» (05.10).
-## Панель настройки внизу: атрибуты (очки) и склонность навыка (+20).
+## Панель настройки внизу: атрибуты и остаток очков. Направление развития
+## выбирается выше, в списке шага 2.
 func _setup_editor() -> void:
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = &"CsEditor"
-	_root.add_child(panel)
+	_step2_box.add_child(panel)
 
 	var margin := MarginContainer.new()
 	UiKit.set_margins(margin, 12, 8, 12, 8)
@@ -563,27 +647,12 @@ func _setup_editor() -> void:
 	_pool_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row1.add_child(_pool_label)
 
-	# --- Строка 2: склонность (+20 к навыку) ---
-	var row2 := HBoxContainer.new()
-	row2.add_theme_constant_override("separation", 8)
-	col.add_child(row2)
-
-	var alab := Label.new()
-	alab.text = "Склонность (+20 к навыку):"
-	alab.add_theme_font_size_override("font_size", 13)
-	alab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row2.add_child(alab)
-
-	for i in range(AFFINITIES.size()):
-		var b := Button.new()
-		b.text = str(AFFINITIES[i][0])
-		b.toggle_mode = true
-		b.custom_minimum_size = Vector2(92, 30)
-		b.pressed.connect(_pick_affinity.bind(i))
-		row2.add_child(b)
-		_affinity_buttons.append(b)
-	# Сквозная навигация по ряду кнопок (мышь/клавиатура/геймпад)
-	UiKit.wire_grid_focus(_affinity_buttons, AFFINITIES.size())
+	# The link the player asked about: which stat feeds which number.
+	var hint := Label.new()
+	hint.theme_type_variation = &"CsDesc"
+	hint.text = "Тело → жизнь и поглощение   ·   Ловкость → защита, скорость и меткость   ·   Разум → сила магии   ·   Дух → мана (магу) и сопротивление стихиям"
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(hint)
 
 func _change_stat(name: String, delta: int) -> void:
 	if not _edit.has(name):
@@ -603,30 +672,323 @@ func _change_stat(name: String, delta: int) -> void:
 			return
 		_edit[name] = v + 1
 	_refresh_editor()
+	_refresh_direction_detail()
 
-func _pick_affinity(idx: int) -> void:
-	for i in range(_affinity_buttons.size()):
-		(_affinity_buttons[i] as Button).button_pressed = (i == idx)
-	if idx < 0 or idx >= AFFINITIES.size():
+# --- Step 2: development directions (replaces the old 10-button affinity row) ---
+
+## Build the step-2 picker: primary buttons on the left, the live description
+## on the right, the auxiliary skill below the primaries. Only a class's own
+## five directions are shown — a warrior must not invest in magic he cannot use.
+func _setup_directions() -> void:
+	var row := HBoxContainer.new()
+	row.name = "Directions"
+	row.add_theme_constant_override("separation", 14)
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_step2_box.add_child(row)
+
+	var left := VBoxContainer.new()
+	left.name = "DirectionList"
+	left.custom_minimum_size = Vector2(280, 0)
+	left.add_theme_constant_override("separation", 6)
+	left.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.add_child(left)
+
+	var head := Label.new()
+	head.theme_type_variation = &"CsStatTitle"
+	head.text = "ОСНОВНОЕ УМЕНИЕ"
+	left.add_child(head)
+
+	_dir_list = VBoxContainer.new()
+	_dir_list.add_theme_constant_override("separation", 4)
+	left.add_child(_dir_list)
+
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left.add_child(spacer)
+
+	var aux_head := Label.new()
+	aux_head.theme_type_variation = &"CsStatTitle"
+	aux_head.text = "ВСПОМОГАТЕЛЬНОЕ · 60%"
+	left.add_child(aux_head)
+
+	_aux_button = Button.new()
+	_aux_button.toggle_mode = true
+	_aux_button.custom_minimum_size = Vector2(0, 38)
+	_aux_button.add_theme_font_size_override("font_size", 16)
+	_aux_button.pressed.connect(func() -> void:
+		SoundDB.play("ui.click")
+		_detail_skill = str(_aux_button.get_meta("skill", ""))
+		_refresh_direction_buttons()
+		_refresh_direction_detail())
+	left.add_child(_aux_button)
+
+	var scroll := ScrollContainer.new()
+	scroll.name = "DirectionDetailScroll"
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	row.add_child(scroll)
+
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = &"CsEditor"
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(panel)
+
+	var margin := MarginContainer.new()
+	UiKit.set_margins(margin, 14, 10, 14, 10)
+	panel.add_child(margin)
+
+	_dir_detail = VBoxContainer.new()
+	_dir_detail.add_theme_constant_override("separation", 5)
+	_dir_detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.add_child(_dir_detail)
+
+	_rebuild_direction_buttons()
+
+
+## Rebuild the primary buttons for the selected class. Called when the class
+## (card) changes; the values are always 20/10/0.
+func _rebuild_direction_buttons() -> void:
+	if _dir_list == null or CHARACTERS.is_empty():
 		return
-	var skill := str(AFFINITIES[idx][1])
-	_edit[skill] = 20   # выбранная склонность
-	# Маг: выбранная сфера магии — его «школа» (даёт стартовую книгу заклинания).
-	if str(CHARACTERS[selected]["role"]) == "mage":
-		var sphere := _magic_sphere_of(skill)
-		if sphere != "":
-			_edit["_school"] = sphere
+	for c in _dir_list.get_children():
+		_dir_list.remove_child(c)
+		c.queue_free()
+	_dir_buttons.clear()
+	var role := str(CHARACTERS[selected]["role"])
+	var order: Array = []
+	for d in HeroDirections.primaries(role):
+		var skill := str((d as Dictionary).get("skill", ""))
+		var b := Button.new()
+		b.text = "  " + str((d as Dictionary).get("label", skill))
+		b.toggle_mode = true
+		b.custom_minimum_size = Vector2(0, 40)
+		b.add_theme_font_size_override("font_size", 18)
+		b.pressed.connect(func() -> void:
+			SoundDB.play("ui.click")
+			_pick_direction(skill))
+		_dir_list.add_child(b)
+		_dir_buttons[skill] = b
+		order.append(b)
+	var typed: Array[Button] = []
+	for b in order:
+		typed.append(b as Button)
+	UiKit.wire_grid_focus(typed, 1)
+	var aux := HeroDirections.aux(role)
+	if _aux_button != null:
+		_aux_button.text = "  " + str(aux.get("label", "—")) + "  ·  10"
+		_aux_button.set_meta("skill", str(aux.get("skill", "")))
+
+
+## Which skill the step-2 description currently shows (a primary or the aux).
+func _pick_direction(skill: String) -> void:
+	var d := HeroDirections.by_skill(skill)
+	if d.is_empty():
+		return
+	if str(d.get("role", "")) != "primary":
+		_detail_skill = skill
+		_refresh_direction_buttons()
+		_refresh_direction_detail()
+		return
+	_apply_direction(skill)
+	_refresh_direction_buttons()
+	_refresh_direction_detail()
 	_refresh_editor()
 
-## Сфера магии по имени навыка (для выбора школы мага); "" — не магия.
-func _magic_sphere_of(skill: String) -> String:
-	match skill:
-		"fire": return "Fire"
-		"water": return "Water"
-		"air": return "Air"
-		"earth": return "Earth"
-		"astral": return "Astral"
-	return ""
+
+## 20 / 10 / 0 rule: the chosen direction is 20, the class auxiliary is 10,
+## every other skill is 0. The auxiliary can never become the main direction.
+func _apply_direction(skill: String) -> void:
+	if _edit.is_empty():
+		return
+	var role := str(CHARACTERS[selected]["role"])
+	var d := HeroDirections.by_skill(skill)
+	if d.is_empty() or str(d.get("role", "")) != "primary":
+		return
+	for s in SKILL_IDS:
+		_edit[s] = 0
+	_edit[skill] = 20
+	var aux := HeroDirections.aux(role)
+	var aux_skill := str(aux.get("skill", ""))
+	if aux_skill != "":
+		_edit[aux_skill] = 10
+	_edit["_primary"] = skill
+	_edit["_aux"] = aux_skill
+	_edit["weapon"] = str(d.get("weapon_kind", "sword"))
+	_selected_primary = skill
+	_detail_skill = skill
+
+
+func _refresh_direction_buttons() -> void:
+	for skill in _dir_buttons:
+		var b: Button = _dir_buttons[skill]
+		if is_instance_valid(b):
+			b.button_pressed = str(skill) == _selected_primary
+	if _aux_button != null:
+		_aux_button.button_pressed = str(_aux_button.get_meta("skill", "")) == _detail_skill
+	# The primary list flows into «В ПУТЬ!» and the auxiliary button too, so a
+	# gamepad user is never stuck in the list.
+	if is_instance_valid(_start_btn) and not _dir_buttons.is_empty():
+		var first: Button = _dir_buttons.get(_selected_primary, _dir_buttons.values()[0])
+		_start_btn.focus_neighbor_top = first.get_path()
+		var last: Button = _dir_buttons.values()[-1]
+		last.focus_neighbor_bottom = _start_btn.get_path()
+		if is_instance_valid(_aux_button):
+			_aux_button.focus_neighbor_bottom = _start_btn.get_path()
+
+
+func _add_detail_label(text: String, font_size: int = 13,
+		color: Color = Color(0.85, 0.82, 0.75)) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", font_size)
+	l.add_theme_color_override("font_color", color)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_dir_detail.add_child(l)
+	return l
+
+
+func _add_detail_list(keys: Array) -> void:
+	for k in keys:
+		var it := ItemDB.find(str(k))
+		var nm := str(it.get("name_ru", str(k)))
+		_add_detail_label("  • " + nm, 12, Color(0.80, 0.90, 0.75))
+
+
+func _starter_keys(role: String, skill: String) -> Array:
+	var kind := HeroDirections.weapon_kind_of(skill)
+	var book := ""
+	if role == "mage":
+		var sphere := HeroDirections.sphere_of(skill)
+		if sphere != "":
+			book = SpellDB.book_key_for_spell(SpellDB.simplest_spell_of_sphere(sphere))
+	return Player.starter_items(role, kind, bool(_edit.get("shield", false)), book)
+
+
+## The whole right-hand card: role, real numbers, the weapon-vs-creature table
+## and the exact starter kit. Rebuilt on every direction/attribute change.
+func _refresh_direction_detail() -> void:
+	if _dir_detail == null or _edit.is_empty() or CHARACTERS.is_empty():
+		return
+	for c in _dir_detail.get_children():
+		_dir_detail.remove_child(c)
+		c.queue_free()
+
+	var skill := _detail_skill
+	if skill == "":
+		skill = _selected_primary
+	var d := HeroDirections.by_skill(skill)
+	if d.is_empty():
+		return
+	var role := str(CHARACTERS[selected]["role"])
+	var is_aux := str(d.get("role", "")) == "aux"
+	_add_detail_label(str(d.get("label", skill)), 22, UiKit.SECTION_COLOR)
+	_add_detail_label(
+		"Вспомогательное умение · 10 очков · 60% прибавки" if is_aux
+		else "Основное умение · 20 очков",
+		13, Color(0.88, 0.78, 0.55))
+	_add_detail_label(str(d.get("desc", "")), 13, Color(0.82, 0.80, 0.74))
+
+	var body := int(_edit.get("body", 10))
+	var agility := int(_edit.get("agility", 10))
+	var mind := int(_edit.get("mind", 10))
+	var spirit := int(_edit.get("spirit", 10))
+	var aux_skill := str(_edit.get("_aux", ""))
+	var skill_points := int(_edit.get(skill, 0))
+	var aux_points := int(_edit.get(aux_skill, 0)) if aux_skill != "" else 0
+	var dev := float(skill_points) \
+		+ float(aux_points) * GameConfig.getf("skill_stats", "aux_factor")
+	var hp := Player.max_hp_of(body) \
+		+ int(dev * GameConfig.getf("skill_stats", "hp_per_point"))
+
+	# Gear of the ACTUAL starter kit (the card must not promise 13 defence
+	# while the hero starts with a buckler worth 3). The auxiliary card shows
+	# the same build, so the gear comes from the chosen primary, not from the
+	# auxiliary's example bow.
+	var kit_skill := _selected_primary if _selected_primary != "" else skill
+	var kit_kind := HeroDirections.weapon_kind_of(kit_skill)
+	var kit_weapon := Player.starter_weapon_key(role, kit_kind)
+	var kit := _starter_keys(role, kit_skill)
+	var gear_def := int(ItemDB.find(kit_weapon).get("defence", 0))
+	var gear_abs := int(ItemDB.find(kit_weapon).get("absorption", 0))
+	if kit.has("Common bronze Buckler"):
+		var buckler := ItemDB.find("Common bronze Buckler")
+		gear_def += int(buckler.get("defence", 0))
+		gear_abs += int(buckler.get("absorption", 0))
+	var defense := Player.defense_of(agility, body, gear_def)
+	if role != "mage":
+		defense += int(dev * GameConfig.getf("skill_stats", "defense_per_point"))
+	var absorption := Player.absorption_of(body, gear_abs)
+
+	_add_detail_label("————————————————————————————————————————————", 9, Color(0.35, 0.30, 0.25))
+	_add_detail_label("Развитие: %d очков (основной 100%% + вспомогательный 60%%)"
+		% int(dev), 12, Color(0.72, 0.68, 0.58))
+
+	if role == "mage":
+		var sphere := HeroDirections.sphere_of(skill)
+		var sp := Game.spell_power_value(float(skill_points), float(mind))
+		var mana := Player.max_mana_of(spirit) \
+			+ int(dev * GameConfig.getf("skill_stats", "mana_per_point"))
+		_add_detail_label("Жизнь: %d    ·    Мана: %d" % [hp, mana],
+			15, Color(0.95, 0.90, 0.80))
+		if sphere != "":
+			var starter := SpellDB.simplest_spell_of_sphere(sphere)
+			if starter != "":
+				var base := SpellDB.damage(starter)
+				var coef := SpellDB.power_coef_of(starter)
+				var dmg := maxi(SpellDB.min_damage_of(starter),
+					int(round(base * coef * (1.0 + sp / 100.0))))
+				_add_detail_label("Сила магии: %d%%    ·    Стартовое: %s — %d урона, %d маны"
+					% [int(round(sp)), starter.replace("_", " "), dmg,
+						SpellDB.mana_cost(starter)], 13, Color(0.82, 0.86, 0.95))
+		if not is_aux:
+			_add_detail_label("С собой:", 14, Color(0.88, 0.78, 0.55))
+			_add_detail_list(_starter_keys(role, skill))
+		else:
+			_add_detail_label("Стартовой книги не даёт — это запасная школа.", 12,
+				Color(0.70, 0.66, 0.58))
+	else:
+		var kind := str(d.get("weapon_kind", "sword"))
+		var item_key := Player.starter_weapon_key("warrior", kind)
+		if is_aux:
+			item_key = "Common bronze Long Bow"
+		var item := ItemDB.find(item_key)
+		var dmin := int(item.get("damage_min", 0))
+		var dmax := int(item.get("damage_max", 0))
+		var d_lo := Player.damage_min_of(dmin, skill_points, agility)
+		var d_hi := Player.damage_max_of(dmax, skill_points, body)
+		var attack := Player.attack_of(agility, skill_points, int(item.get("to_hit", 0)))
+		var hit := Game.hit_chance(attack, 10)
+		_add_detail_label("Жизнь: %d    ·    Защита: %d    ·    Поглощение: %d"
+			% [hp, defense, absorption], 15, Color(0.95, 0.90, 0.80))
+		_add_detail_label("Урон %s: %d–%d    ·    Атака: %d    ·    Попадание по защите 10: %d%%"
+			% [str(item.get("name_ru", item_key)), d_lo, d_hi, attack, hit],
+			13, Color(0.90, 0.86, 0.76))
+		_add_detail_label("Против кого:", 14, Color(0.88, 0.78, 0.55))
+		var table := ContentRules.dict("combat.weapon_vs_type")
+		var row: Dictionary = table.get(kind, {})
+		var labels := ContentRules.dict("combat.creature_types")
+		for ctype in labels:
+			var pct := int(row.get(ctype, 100))
+			var lo := Game.apply_weapon_percent(d_lo, pct)
+			var hi := Game.apply_weapon_percent(d_hi, pct)
+			var mark := "+" if pct > 100 else ("−" if pct < 100 else "=")
+			_add_detail_label("%s %s: %d%%  (%d–%d)"
+				% [mark, str(labels[ctype]), pct, lo, hi], 12,
+				Color(0.78, 0.88, 0.76) if pct > 100 else (
+					Color(0.95, 0.72, 0.66) if pct < 100 else Color(0.75, 0.73, 0.68)))
+		if not is_aux:
+			_add_detail_label("С собой:", 14, Color(0.88, 0.78, 0.55))
+			_add_detail_list(_starter_keys(role, skill))
+		else:
+			_add_detail_label("Стартового лука нет — вспомогательный навык.", 12,
+				Color(0.70, 0.66, 0.58))
+
+	var hint := _add_detail_label(
+		"Жизнь = 20 + Тело×8 + очки×0.5.  Урон = база оружия × (1 + навык/40 + Ловкость/80) … (1 + навык/40 + Тело/60).  Защита = Ловкость/2 + Тело/4 + очки×0.2.  Попадание = 70×(атака+5)/(защита+5), 5–95%.",
+		11, Color(0.60, 0.57, 0.50))
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 ## Обновить подписи статов/очков после правок.
 func _refresh_editor() -> void:
@@ -643,18 +1005,27 @@ func _select(idx: int) -> void:
 	if idx < 0 or idx >= CHARACTERS.size():
 		return
 	selected = idx
-	# Редактируемая копия статов пресета + фиксированная сумма («очки»)
+	# Редактируемая копия статов пресета + фиксированная сумма («очки»).
+	# Skills are NOT preset values any more: the 20/10/0 rule is applied below.
 	var base: Dictionary = CHARACTERS[idx]["stats"]
 	_edit = base.duplicate(true)
-	_edit.erase("_school")   # сброс выбора школы мага при смене персонажа
+	for s in SKILL_IDS:
+		_edit[s] = 0
 	var total := 0
 	for n in STATS_ORDER:
 		total += int(_edit.get(n, 0))
 	_edit["_preset_total"] = total
+
+	# Default main direction: the first primary of the class (sword / fire).
+	# The player can change it; the choice is never empty.
+	var role := str(CHARACTERS[idx]["role"])
+	var primaries := HeroDirections.primaries(role)
+	if not primaries.is_empty():
+		_apply_direction(str((primaries[0] as Dictionary).get("skill", "")))
+	_rebuild_direction_buttons()
+	_refresh_direction_buttons()
+	_refresh_direction_detail()
 	_refresh_editor()
-	# Сброс склонности
-	for i in range(_affinity_buttons.size()):
-		(_affinity_buttons[i] as Button).button_pressed = false
 	for i in range(_cards.size()):
 		_update_card_style(_cards[i])
 		var desc: Label = _cards[i].get_node_or_null("Desc")
@@ -669,28 +1040,31 @@ func _start_game() -> void:
 	var c: Dictionary = CHARACTERS[selected]
 	var st: Dictionary = _edit.duplicate(true)
 	if st.is_empty():
-		st = c["stats"]
+		st = (c["stats"] as Dictionary).duplicate(true)
 	st.erase("_preset_total")
-	st.erase("_school")
+	st.erase("_primary")
+	st.erase("_aux")
 	Game.hero_class = str(c["role"])
 	Game.hero_gender = str(c["gender"])
 	Game.hero_name = name_input.text.strip_edges()
 	if Game.hero_name == "":
 		Game.hero_name = "Герой"
-	# Маг: выбранная школа магии развита до 20 очков, в склад кладётся книга
-	# простейшего заклинания этой школы (учится двойным кликом по ячейке).
+	# The skills are already 20 (main) / 10 (aux) / 0 (rest) in _edit.
+	Game.hero_primary_skill = str(_edit.get("_primary", _selected_primary))
+	Game.hero_aux_skill = str(_edit.get("_aux", ""))
+	# Маг: выбранная школа даёт книгу простейшего БОЕВОГО заклинания этой
+	# школы (учится одним кликом по ячейке склада).
 	Game.hero_start_book = ""
 	if Game.hero_class == "mage":
-		var school := str(_edit.get("_school", ""))
-		if school == "":
-			school = _default_mage_school(st)
-		st[school.to_lower()] = 20
-		var starter := SpellDB.simplest_spell_of_sphere(school)
-		Game.hero_start_book = SpellDB.book_key_for_spell(starter)
+		var sphere := HeroDirections.sphere_of(Game.hero_primary_skill)
+		if sphere != "":
+			var starter := SpellDB.simplest_spell_of_sphere(sphere)
+			Game.hero_start_book = SpellDB.book_key_for_spell(starter)
 	Game.hero_stats = st
 	Game.hero_character_id = str(c["id"])
 	Game.hero_portrait = str(c["image"])
 	Game.hero_race = _race
+	Game.hero_dead = false
 	# Мир из блока «Мир»: случайный сид, конкретный сид или готовая карта.
 	# `StartSetup.apply()` сам раскладывает сид мира по секторам через
 	# world_map.seed_of (то же правило, что было в new_random_map).
@@ -708,11 +1082,3 @@ func _start_game() -> void:
 	# Карта 96x96 генерируется в фоне на отдельном экране с полосой прогресса:
 	# раньше main.tscn открывался с чёрной паузой на генерацию.
 	get_tree().change_scene_to_file("res://scenes/loading.tscn")
-
-## Школа по умолчанию, если склонность не трогали: первая сфера с навыком >= 20
-## в пресете; иначе — Огонь.
-func _default_mage_school(st: Dictionary) -> String:
-	for sk in ["fire", "water", "air", "earth", "astral"]:
-		if int(st.get(sk, 0)) >= 20:
-			return _magic_sphere_of(sk)
-	return "Fire"

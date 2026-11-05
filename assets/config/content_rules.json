@@ -116,5 +116,25 @@
 	{
 		"key": "inn.candidates",
 		"value": ["ork_mage_a52/t0", "ork_mage_a52/t1", "ork_mage_a52/t2", "ork_mage_a52/t3"]
+	},
+	{
+		"key": "combat.weapon_vs_type",
+		"value": {
+			"sword": {"human": 100, "undead": 75, "beast": 110, "insect": 100, "monster": 90},
+			"axe": {"human": 110, "undead": 75, "beast": 100, "insect": 90, "monster": 110},
+			"club": {"human": 75, "undead": 125, "beast": 90, "insect": 110, "monster": 80},
+			"pike": {"human": 90, "undead": 90, "beast": 90, "insect": 80, "monster": 125},
+			"bow": {"human": 100, "undead": 90, "beast": 110, "insect": 100, "monster": 90}
+		}
+	},
+	{
+		"key": "combat.creature_types",
+		"value": {
+			"human": "люди",
+			"undead": "нежить",
+			"beast": "звери",
+			"insect": "насекомые",
+			"monster": "чудовища"
+		}
 	}
 ]

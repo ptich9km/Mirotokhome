@@ -130,15 +130,18 @@ func _run() -> void:
 		"у всех объектов файлы кадров на диске (без файлов: %d)" % missing)
 
 	print("-- конфиг плотность не снижена --")
-	_check(GameConfig.geti("zone", "mid.gray_count_min") >= 120, "mid.gray_count_min>=120")
-	_check(GameConfig.zonef("mid", "tree_density") >= 0.18, "mid.tree_density>=0.18 (=%.2f)" % GameConfig.zonef("mid", "tree_density"))
+	_check(GameConfig.designi("mid", "gray_count_min") >= 120, "mid.gray_count_min>=120")
+	_check(GameConfig.designf("mid", "tree_density") >= 0.18, "mid.tree_density>=0.18 (=%.2f)" % GameConfig.designf("mid", "tree_density"))
 	_check(GameConfig.geti("spawn", "gray_target") >= 150, "gray_target>=150")
 
 	print("-- far-AI: код есть --")
 	var e_src := FileAccess.get_file_as_string("res://scripts/enemy.gd")
 	var n_src := FileAccess.get_file_as_string("res://scripts/npc.gd")
 	_check(e_src.contains("1600.0 * 1600.0"), "enemy far-pause порог есть")
-	_check(n_src.contains("1600.0 * 1600.0"), "npc far-pause порог есть")
+	# npc.gd since the guard split uses `sleep_r` (1100 for guards, 1600 for
+	# citizens) and compares squared distances; the old literal is gone.
+	_check(n_src.contains("var sleep_r :=") and n_src.contains("sleep_r * sleep_r"),
+		"npc far-pause порог есть (sleep_r по роли)")
 
 	print("-- minimap cache --")
 	var ui_src := FileAccess.get_file_as_string("res://scripts/ui.gd")

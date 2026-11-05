@@ -37,6 +37,8 @@ func _run() -> void:
 	_audio_reaches_master_bus()
 	_rebind_conflicts()
 	_rebind_reaches_inputmap()
+	_saved_rebind_applies_on_start()
+	_gameplay_reads_actions()
 	await _panel_opens_and_closes()
 
 	Settings.reset_to_defaults()
@@ -264,6 +266,68 @@ func _rebind_reaches_inputmap() -> void:
 
 	menu.queue_free()
 	await process_frame
+	Settings.reset_to_defaults()
+	Settings.reload_from_disk()
+
+
+## Persisted key must be applied at startup, not only in the panel's session.
+func _saved_rebind_applies_on_start() -> void:
+	Settings.reset_to_defaults()
+	Settings.reload_from_disk()
+	Settings.set_key_for("pause", KEY_F8)
+	Settings.save()
+	Settings.reload_from_disk()
+	# Simulate a fresh process: project defaults, then startup apply.
+	InputMap.load_from_project_settings()
+	Settings.apply_input()
+	var found := false
+	for e in InputMap.action_get_events("pause"):
+		if e is InputEventKey and (e as InputEventKey).physical_keycode == KEY_F8:
+			found = true
+	_check(found, "сохранённая клавиша применилась при старте (F8)")
+
+	InputMap.load_from_project_settings()
+	Settings.reset_to_defaults()
+	Settings.reload_from_disk()
+
+
+## Gameplay must read the six actions, not raw keycodes. This guards the exact
+## regressions the audit found: pause on Space and slot 1 as cast_1.
+func _gameplay_reads_actions() -> void:
+	Settings.reset_to_defaults()
+	Settings.reload_from_disk()
+	InputMap.load_from_project_settings()
+	Settings.apply_input()
+	var game = load("res://scripts/game.gd").new()
+
+	var space := InputEventKey.new()
+	space.pressed = true
+	space.keycode = KEY_SPACE
+	_check(space.is_action_pressed("pause"), "Space — это действие pause")
+
+	var one := InputEventKey.new()
+	one.pressed = true
+	one.keycode = KEY_1
+	_check(game.call("_cast_slot_of", one) == 0, "1 — это слот cast_1")
+
+	Settings.set_key_for("cast_1", KEY_Q)
+	Settings.apply_input()
+	var q := InputEventKey.new()
+	q.pressed = true
+	q.keycode = KEY_Q
+	q.physical_keycode = KEY_Q
+	_check(game.call("_cast_slot_of", q) == 0, "Q после переназначения — слот cast_1")
+	_check(game.call("_cast_slot_of", one) == -1,
+		"старая 1 больше не кастует слот 0 после переназначения")
+
+	# 4..9 остаются фиксированными до появления cast_4..9.
+	var four := InputEventKey.new()
+	four.pressed = true
+	four.keycode = KEY_4
+	_check(game.call("_cast_slot_of", four) == 3, "4 остаётся слотом 4")
+
+	game.free()
+	InputMap.load_from_project_settings()
 	Settings.reset_to_defaults()
 	Settings.reload_from_disk()
 

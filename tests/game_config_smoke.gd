@@ -39,7 +39,6 @@ const RANGES := {
 	# loot.npc_guard_gear_chance удалён 07.10 (NPC роняют сломанное всегда).
 	"metal.absorption_min": [0, 100],
 	"metal.absorption_max": [0, 100],
-	"spawn.tree_density": [0.0, 1.0],
 	"craft.chance_ordinary": [0.0, 100.0],
 	"craft.chance_improved": [0.0, 100.0],
 	"craft.chance_master": [0.0, 100.0],
@@ -53,8 +52,8 @@ const RANGES := {
 	"craft.xp_per_recycle": [0, 10000],
 	"craft.xp_tier_bonus": [0, 10000],
 	"craft.boss_intact_chance": [0, 100],
-	"mob_tier.hp_multiplier": [0.0, 100.0],
-	"mob_tier.damage_multiplier": [0.0, 100.0],
+	"mob_tier.hp_step": [0.0, 2.0],
+	"mob_tier.damage_step": [0.0, 2.0],
 }
 
 var _fails: Array = []
@@ -149,23 +148,34 @@ func _run() -> void:
 	_check(int(cfg.get_value("metal", "absorption_min", 0)) <= int(cfg.get_value("metal", "absorption_max", 0)),
 		"absorption_min <= absorption_max")
 
-	print("-- зоны: min <= max, зоны не пересекаются по силе --")
-	for zone in ["start", "mid", "hard", "faction"]:
-		var pairs := [
-			["gray_count_min", "gray_count_max"],
-			["gray_hp_min", "gray_hp_max"],
-			["gray_damage_min", "gray_damage_max"],
-			["guard_hp_min", "guard_hp_max"],
+	print("-- боевые ключи: база Серых, шаги тиров, город --")
+	_check(int(cfg.get_value("grey", "hp_min", 0)) <= int(cfg.get_value("grey", "hp_max", 0)),
+		"grey.hp_min <= grey.hp_max")
+	_check(int(cfg.get_value("grey", "damage_min", 0)) <= int(cfg.get_value("grey", "damage_max", 0)),
+		"grey.damage_min <= grey.damage_max")
+	# Tier 5 must not be a wall: 1 + step*4 stays below 3x.
+	var hp_step := float(cfg.get_value("mob_tier", "hp_step", 0.0))
+	var dmg_step := float(cfg.get_value("mob_tier", "damage_step", 0.0))
+	_check(hp_step > 0.0 and 1.0 + hp_step * 4.0 < 3.0,
+		"mob_tier.hp_step даёт разумный тир 5 (x%.2f)" % (1.0 + hp_step * 4.0))
+	_check(dmg_step > 0.0 and 1.0 + dmg_step * 4.0 < 3.0,
+		"mob_tier.damage_step даёт разумный тир 5 (x%.2f)" % (1.0 + dmg_step * 4.0))
+	for pair in [["guard_count_min", "guard_count_max"], ["guard_hp_min", "guard_hp_max"],
 			["guard_damage_min", "guard_damage_max"],
-		]
-		for p in pairs:
-			var lo: int = int(cfg.get_value("zone", "%s.%s" % [zone, p[0]], 0))
-			var hi: int = int(cfg.get_value("zone", "%s.%s" % [zone, p[1]], 0))
-			_check(lo <= hi, "zone.%s: %s(%d) <= %s(%d)" % [zone, p[0], lo, p[1], hi])
-	# стартовая зона должна быть слабее hardest
-	var s_hp: int = int(cfg.get_value("zone", "start.gray_hp_max", 0))
-	var f_hp: int = int(cfg.get_value("zone", "faction.gray_hp_max", 0))
-	_check(s_hp < f_hp, "start.gray_hp_max(%d) < faction.gray_hp_max(%d)" % [s_hp, f_hp])
+			["citizen_count_min", "citizen_count_max"]]:
+		var lo: int = int(cfg.get_value("city", pair[0], 0))
+		var hi: int = int(cfg.get_value("city", pair[1], 0))
+		_check(lo <= hi, "city: %s(%d) <= %s(%d)" % [pair[0], lo, pair[1], hi])
+
+	print("-- зоны: дизайн карты, без боевых статов --")
+	for zone in ["start", "mid", "hard", "faction"]:
+		var lo: int = int(cfg.get_value("zone_design", "%s.gray_count_min" % zone, 0))
+		var hi: int = int(cfg.get_value("zone_design", "%s.gray_count_max" % zone, 0))
+		var dens := float(cfg.get_value("zone_design", "%s.tree_density" % zone, -1.0))
+		_check(lo <= hi, "zone_design.%s: gray_count_min(%d) <= gray_count_max(%d)" % [zone, lo, hi])
+		_check(dens >= 0.0 and dens <= 1.0, "zone_design.%s: tree_density в [0..1] (%.2f)" % [zone, dens])
+	# No combat numbers per zone: the whole point of the 3x.11 cleanup.
+	_check(not cfg.has_section("zone"), "секции [zone] больше нет (зоны не настраивают ДПС)")
 
 	print("-- геттеры возвращают те же значения --")
 	GameConfig.load_all()
@@ -173,8 +183,10 @@ func _run() -> void:
 		"GameConfig.geti(combat, hit_base) = %d" % GameConfig.geti("combat", "hit_base"))
 	_check(is_equal_approx(GameConfig.getf("combat", "damage_multiplier"), 1.0),
 		"damage_multiplier = %s" % str(GameConfig.getf("combat", "damage_multiplier")))
-	_check(GameConfig.zonei("start", "gray_hp_max") == 45,
-		"zonei(start, gray_hp_max) = %d" % GameConfig.zonei("start", "gray_hp_max"))
+	_check(GameConfig.designi("start", "gray_count_min") == 40,
+		"designi(start, gray_count_min) = %d" % GameConfig.designi("start", "gray_count_min"))
+	_check(GameConfig.geti("grey", "hp_max") == 45,
+		"grey.hp_max = %d" % GameConfig.geti("grey", "hp_max"))
 
 	print("-- неизвестный ключ не роняет, а даёт дефолт --")
 	_check(GameConfig.geti("combat", "hit_base") == 70, "известный ключ читается")
@@ -192,8 +204,10 @@ func _run() -> void:
 	for dk in ["all_magic", "fog_of_war", "show_coords"]:
 		var dv := GameConfig.geti("debug", dk)
 		_check(dv == 0 or dv == 1, "debug.%s — переключатель 0/1 (сейчас %d)" % [dk, dv])
-	_check(GameConfig.geti("debug", "all_magic") != 0,
-		"все заклинания выдаются по умолчанию (иначе бету нечем тестировать)")
+	# С 04.11 cheat ВЫКЛЮЧЕН по умолчанию: маг начинает с одной книгой школы,
+	# иначе вся магия с первого кадра — это дисбаланс (жалоба игрока).
+	_check(GameConfig.geti("debug", "all_magic") == 0,
+		"все заклинания по умолчанию НЕ выдаются (all_magic = 0)")
 	# fog_of_war теперь РАБОЧИЙ ключ (19.10, FogOfWar): 0 = туман выключен,
 	# 1 = включён. Значение вне 0/1 считаем битым конфигом.
 	var fog_key := GameConfig.geti("debug", "fog_of_war")

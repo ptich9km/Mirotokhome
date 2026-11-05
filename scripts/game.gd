@@ -242,6 +242,46 @@ static func unit_defense(u: Node2D) -> int:
 static func unit_absorption(u: Node2D) -> int:
 	return int(u.call("get_absorption")) if u != null and u.has_method("get_absorption") else 0
 
+## Weapon damage kind of a unit for the Allods weapon-kind resistance:
+## sword | axe | club | pike | bow. "" means the blow bypasses the table
+## (bare hands, a staff — its normal hit is magic anyway, a ranged row that
+## the original would clear to slot zero).
+static func weapon_kind_of(u: Node2D) -> String:
+	if u == null or not is_instance_valid(u) or not ("weapon" in u):
+		return ""
+	match str(u.get("weapon")):
+		"sword", "axe", "club", "pike":
+			return str(u.get("weapon"))
+		"bow", "xbow":
+			return "bow"
+	return ""
+
+## Creature type of a damage target: human | undead | beast | insect | monster.
+## The hero is always human; a unit without an animation set (a crate, a wall)
+## returns "" so the weapon table is skipped.
+static func creature_type_of(u: Node2D) -> String:
+	if u == null or not is_instance_valid(u):
+		return ""
+	if u is Player:
+		return "human"
+	if "anim_set" in u:
+		var set_name := str(u.get("anim_set"))
+		if set_name != "":
+			return UnitDB.creature_type_of(set_name)
+	return ""
+
+## Allods weapon-kind damage: `percent` is 125 / 100 / 75 …; the `+75` is the
+## source's 0.75 rounding before truncation.
+static func apply_weapon_percent(dmg: int, percent: int) -> int:
+	if percent == 100:
+		return maxi(0, dmg)
+	return maxi(0, int((dmg * percent + 75) / 100.0))
+
+## Spell power from the raw numbers (no caster node): skill + mind - offset.
+## The creation screen uses it to show a mage's damage before the hero exists.
+static func spell_power_value(skill: float, mind: float) -> float:
+	return maxf(0.0, skill + mind - GameConfig.getf("magic", "sp_offset"))
+
 ## Elemental resistance in PERCENT: what percentage of magic damage
 ## does not get through. That is how the original does it (main.txt: "shows the percentage of the
 ## magical effects… which will not affect the character") and it does not break
@@ -267,7 +307,7 @@ static func spell_power(caster: Node2D, sphere: String) -> float:
 	var skill := 0.0
 	if caster.has_method("sphere_skill"):
 		skill = float(caster.call("sphere_skill", sphere))
-	return maxf(0.0, skill + mind - GameConfig.getf("magic", "sp_offset")) + float(StatusEffects.stat_flat(caster, "power"))
+	return spell_power_value(skill, mind) + float(StatusEffects.stat_flat(caster, "power"))
 
 
 ## Spell cooldown from KNOWLEDGE of magic, not just the base from spells_db.
@@ -333,6 +373,16 @@ static func deal_damage(target: Node2D, dmg: int, kind: String, sphere: String, 
 		final = maxi(0, int(round(float(dmg) * (1.0 - float(prot) / 100.0))))
 	else:
 		final = maxi(0, final - unit_absorption(target))
+		# Allods weapon-kind resistance: a physical blow is reduced (or
+		# boosted) by the target's creature type. Only a weapon with a known
+		# kind takes part — bare hands, a staff's weak hit and magic do not.
+		# Source formula: trunc(damage * (100 - resistance) / 100 + 0.75),
+		# i.e. 125% vs undead for a club is resistance -25.
+		var wkind := weapon_kind_of(attacker)
+		if wkind != "":
+			var ctype := creature_type_of(target)
+			if ctype != "":
+				final = apply_weapon_percent(final, UnitDB.weapon_percent(wkind, ctype))
 	if final <= 0:
 		# Full absorption BEFORE take_damage. The reason matters to the player: "resilience" is
 		# elemental defense, "armour" is a physical hit. Before, both labels were
@@ -572,6 +622,11 @@ var _pending_herb: HerbNode = null
 var _pending_archmage: Node2D = null      # the captain mage we are approaching
 var _pending_city_head: Node2D = null     # the city head we are approaching
 var _save_menu: SaveMenu = null
+## Death sequence (04.11): the actor emits `died`, the game owns the 1 s fall,
+## the full-screen title and the load menu. One flag prevents a second lethal
+## hit (or a re-entrant signal) from stacking two screens.
+var _death_screen: CanvasLayer = null
+var _death_sequence_running := false
 ## The scene gives way to the main menu or the process is closing (_quit_to_menu/
 ## _quit_app): the autosave is already written, it must not be repeated when the node is freed.
 var _leaving_for_quit: bool = false
@@ -597,7 +652,14 @@ static var hero_portrait: String = ""       # res:// path to the portrait
 static var hero_race: String = "human"      # human | necro | druid | ork
 static var hero_stats: Dictionary = {}      # starting stats
 static var hero_start_book: String = ""     # the book of the simplest spell of the mage school
-
+## The chosen development direction (skill id: blade/axe/.../fire/...). Its
+## level drives survivability: life for both classes, mana for a mage,
+## defence for a warrior. The auxiliary skill counts at 60% (see [skill_stats]).
+static var hero_primary_skill: String = ""
+static var hero_aux_skill: String = ""
+## Death latch (package 2 will own the screen): set on a lethal hit, reset by a
+## new game or a slot load. Kept here now so character creation can clear it.
+static var hero_dead: bool = false
 ## Hero position from a save. Placed by SaveSystem.apply_payload; applied by
 ## _spawn_player_on_walkable after the scene is rebuilt (otherwise the hero is always at spawn).
 static var load_position: Vector2 = Vector2.ZERO
@@ -954,6 +1016,13 @@ func _setup_post_pass() -> void:
 
 func _ready():  # World and combat initialisation
 	process_mode = PROCESS_MODE_ALWAYS  # Works even when paused
+	# Direct main.tscn launch (F6/tests) bypasses the main menu, which is the
+	# normal place where saved key bindings are applied.
+	Settings.apply_input()
+	# A fresh main scene is a fresh life: the death flag is static and could
+	# survive a redirect/restart from a dead run.
+	Game.hero_dead = false
+	_death_sequence_running = false
 	MusicDB.start_playlist.call_deferred()
 
 	# Themed animated cursor (normal + reticle, see cursor_layer.gd).
@@ -983,6 +1052,7 @@ func _ready():  # World and combat initialisation
 
 	# Spawn the player on a walkable tile in the centre of the map
 	_ensure_world_state()
+	_sync_sim_from_map()
 	# A fresh scene starts the feed with a single arrival line: after loading
 	# a save nothing from the previous session should remain.
 	var wf = load("res://scripts/world/world_feed.gd")
@@ -990,6 +1060,11 @@ func _ready():  # World and combat initialisation
 	wf.post("world", Loc.f("ui.feed.arrival", [_sector_name(Game.map_sector)]))
 	_spawn_player_on_walkable()
 	Game.hero = player
+	Game.hero_dead = false
+	_death_sequence_running = false
+	if is_instance_valid(player) and player.has_signal("died") \
+			and not player.died.is_connected(_on_hero_died):
+		player.died.connect(_on_hero_died)
 	Game.party.clear()
 	_restore_pending_party()
 	# enemies/npcs are static var, they SURVIVE a scene change: the nodes of the previous
@@ -1282,7 +1357,26 @@ func _is_open_spot(tx: int, ty: int) -> bool:
 			open_neighbors += 1
 	return open_neighbors >= 2
 
+## Hotbar slot 0..8 for this event. cast_1..3 are rebindable InputMap actions;
+## keys 4..9 stay fixed until cast_4..9 are added to project.godot.
+func _cast_slot_of(event: InputEvent) -> int:
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return -1
+	for i in range(3):
+		if event.is_action_pressed("cast_%d" % (i + 1)):
+			return i
+	var key := (event as InputEventKey).keycode
+	if key >= KEY_4 and key <= KEY_9:
+		return key - KEY_1
+	return -1
+
+
 func _input(event):
+	# Dead hero: every world command and the normal Esc menu are off. The
+	# game-over panel has its own _input and still receives the event; Esc is
+	# deliberately ignored there (player decision 04.11).
+	if Game.hero_dead:
+		return
 	# The portal window handles Esc itself (Esc = "Stay").
 	if _portal_confirm != null and is_instance_valid(_portal_confirm):
 		return
@@ -1293,8 +1387,7 @@ func _input(event):
 	if is_paused:
 		if event is InputEventMouseButton:
 			return
-		if event is InputEventKey and event.pressed and not event.echo \
-				and event.keycode >= KEY_1 and event.keycode <= KEY_9:
+		if _cast_slot_of(event) >= 0:
 			return
 	# Targeting (a scroll or a book spell): RMB or ESC cancels.
 	# The scroll is NOT spent, mana/charge are NOT deducted.
@@ -1317,8 +1410,8 @@ func _input(event):
 	# applies the assignment: a spell — with targeting, a potion — right away,
 	# a scroll — with target selection by click.
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode >= KEY_1 and event.keycode <= KEY_9:
-			var slot: int = event.keycode - KEY_1
+		var slot := _cast_slot_of(event)
+		if slot >= 0:
 			if event.ctrl_pressed:
 				var sn := str(Game.pending_spell.get("name", ""))
 				if sn != "":
@@ -1347,7 +1440,11 @@ func _input(event):
 						_use_hotbar_item(str(entry.get("key", "")))
 				return
 
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+	# Both actions are world clicks: attack_click is the second binding for the
+	# same contextual action (click an enemy to attack, ground to move).
+	if event is InputEventMouseButton and event.pressed \
+			and (event.is_action_pressed("move_click") \
+				or event.is_action_pressed("attack_click")):
 		# UI clicks (the spell book, inventory, panels, shop/tavern)
 		# must not move/attack the hero on the map
 		if ui != null and ui.has_method("is_editor_open") and ui.is_editor_open():
@@ -1365,9 +1462,11 @@ func _input(event):
 			return
 		handle_click(world_position)
 
-	if event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
+	if event is InputEventKey and event.pressed and not event.echo \
+			and event.is_action_pressed("pause"):
 		is_paused = !is_paused
 		get_tree().paused = is_paused
+		return
 
 	# Restart with Ctrl+R
 	if event is InputEventKey and event.pressed and event.keycode == KEY_R and event.ctrl_pressed:
@@ -1398,6 +1497,8 @@ func _input(event):
 func handle_click(world_position: Vector2):
 	# Tactical pause: a click on the world is an order to the hero, there is none during a pause.
 	if is_paused:
+		return
+	if Game.hero_dead:
 		return
 	# The hero is dead (falling/decomposing) — controls do not work
 	if is_instance_valid(player) and player.state in ["dead", "decay"]:
@@ -2312,7 +2413,7 @@ func _setup_world_feed() -> void:
 func _regen_hero(delta: float) -> void:
 	if not is_instance_valid(player):
 		return
-	if player.state == "dead" or player.state == "decay":
+	if Game.hero_dead or player.state == "dead" or player.state == "decay":
 		return
 	mana_regen_accum += delta
 	if mana_regen_accum < 1.0:
@@ -2604,6 +2705,27 @@ func _ensure_world_state() -> void:
 		bus.call("reset_day_timer")
 
 
+## Build the SIM from the live map's cities (04.11). The first real map replaces
+## the hardcoded sandbox; a loaded save keeps its economy because
+## WorldBus.sync_sector_map is a no-op once the sector already has cities.
+func _sync_sim_from_map() -> void:
+	var bus := _world_bus()
+	if bus == null or bus.state == null or alm_map == null:
+		return
+	if not alm_map.has_method("get_cities"):
+		return
+	var cities: Array = alm_map.call("get_cities")
+	if cities.is_empty():
+		return
+	var sector := Game.map_sector
+	if sector == "":
+		sector = "zone:" + Game.map_zone
+	var region_name := Game.map_zone
+	if Game.map_sector != "":
+		region_name = _sector_name(Game.map_sector)
+	bus.call("sync_sector_map", sector, cities, region_name)
+
+
 ## Sector map for a transition: first from the slot (a visited sector), then from
 ## The fog of the current sector goes into the world state before the map change.
 func _save_sector_fog(sector_id: String) -> void:
@@ -2778,8 +2900,8 @@ func _gray_respawn_tick(delta: float) -> void:
 		return
 	var target := GameConfig.geti("spawn", "gray_target")
 	if target <= 0:
-		target = maxi(GameConfig.zonei(Game.map_zone, "gray_count_min"),
-			GameConfig.zonei(Game.map_zone, "gray_count_max"))
+		target = maxi(GameConfig.designi(Game.map_zone, "gray_count_min"),
+			GameConfig.designi(Game.map_zone, "gray_count_max"))
 	if not is_instance_valid(player) or not is_instance_valid(alm_map):
 		return
 	_gray_respawn_accum += delta
@@ -2805,10 +2927,10 @@ func _gray_respawn_tick(delta: float) -> void:
 	e2.anim_set = set_name
 	# The tier strengthens a respawned beast the same way as at map generation.
 	var mults: Array = MapGenerator.gray_tier_mults(set_name)
-	e2.max_hp = int(round(float(randi_range(GameConfig.zonei(Game.map_zone, "gray_hp_min"),
-		GameConfig.zonei(Game.map_zone, "gray_hp_max"))) * float(mults[0])))
-	e2.damage = int(round(float(randi_range(GameConfig.zonei(Game.map_zone, "gray_damage_min"),
-		GameConfig.zonei(Game.map_zone, "gray_damage_max"))) * float(mults[1])))
+	e2.max_hp = int(round(float(randi_range(GameConfig.geti("grey", "hp_min"),
+		GameConfig.geti("grey", "hp_max"))) * float(mults[0])))
+	e2.damage = int(round(float(randi_range(GameConfig.geti("grey", "damage_min"),
+		GameConfig.geti("grey", "damage_max"))) * float(mults[1])))
 	e2.position = spot
 	e2.home_position = spot
 	add_child(e2)
@@ -2872,6 +2994,68 @@ func _process_action_mode():
 # saving and loading is here, because only game.gd has a live
 # player, a WorldBus with the world state and the scene to rebuild.
 
+## The hero has fallen. The world keeps rendering for one second so the fall
+## is readable, but the hero is already no target and every command is blocked
+## by Game.hero_dead. Then the black title, then the compact load menu.
+const DEATH_TO_TITLE := 1.0
+const DEATH_TO_MENU := 1.0
+
+func _on_hero_died() -> void:
+	if _death_sequence_running:
+		return
+	_death_sequence_running = true
+	Game.hero_dead = true
+	await get_tree().create_timer(DEATH_TO_TITLE).timeout
+	if not is_instance_valid(player) or not player.is_dead:
+		_death_sequence_running = false
+		return
+	_death_screen = DeathScreen.new()
+	add_child(_death_screen)
+	await get_tree().create_timer(DEATH_TO_MENU).timeout
+	if not is_instance_valid(player) or not player.is_dead:
+		return
+	# Freeze the world with the REAL flag: the root Main is PROCESS_MODE_ALWAYS,
+	# so SceneTree.paused alone never stopped enemies or the hero (the old
+	# death only paused the tree and the corpse kept getting hit).
+	Game.is_paused = true
+	get_tree().paused = true
+	if is_instance_valid(_death_screen):
+		_death_screen.queue_free()
+		_death_screen = null
+	_open_game_over()
+
+## Load-only save menu under a black screen. No Save/Delete, no Esc close,
+## only «Загрузить» and «В главное меню» (player decision 04.11).
+func _open_game_over() -> void:
+	if _save_menu != null and is_instance_valid(_save_menu):
+		return
+	_save_menu = SaveMenu.new()
+	_save_menu.setup("load_only", Loc.t("ui.gameover.title"),
+		Loc.t("ui.gameover.hint"))
+	_save_menu.load_requested.connect(_load_from_slot)
+	_save_menu.quit_requested.connect(_quit_to_menu)
+	_save_menu.quit_app_requested.connect(_quit_app)
+	_save_menu.closed.connect(func() -> void:
+		_save_menu = null)
+	add_child(_save_menu)
+
+## Reset every death-owned flag before a slot rebuild. Must run BEFORE
+## _restart_scene: _set_menu_pause() refuses to unpause a corpse.
+func _close_game_over() -> void:
+	_death_sequence_running = false
+	if is_instance_valid(_death_screen):
+		_death_screen.queue_free()
+		_death_screen = null
+	if _save_menu != null and is_instance_valid(_save_menu):
+		var menu := _save_menu
+		_save_menu = null
+		menu.queue_free()
+	Game.hero_dead = false
+	Game.is_paused = false
+	get_tree().paused = false
+	if is_instance_valid(player) and player.has_method("reset_death_state"):
+		player.call("reset_death_state")
+
 ## Open the save menu (Esc). A repeated call is ignored.
 ##
 ## While the menu is open the world is paused (player report 22.10: "opened the save
@@ -2895,9 +3079,11 @@ func open_save_menu() -> void:
 	add_child(_save_menu)
 
 
-## The world is paused while the save menu is open. The hero is dead — the tree is already
-## paused for its own reason (player.gd corpse), we do not remove that one.
+## The world is paused while the save menu is open. The hero is dead — the pause is held
+## by the death screen (_on_hero_died), and it must not be lifted the usual way.
 func _set_menu_pause(on: bool) -> void:
+	if Game.hero_dead:
+		return
 	if is_instance_valid(player) and player.state in ["dead", "decay", "corpse"]:
 		return
 	Game.is_paused = on
@@ -2926,6 +3112,10 @@ func _build_save_payload() -> Dictionary:
 
 
 func _save_to_slot(slot: String) -> void:
+	# Never write a corpse: the autosave on quit/interior must not destroy the
+	# last living save after a game over.
+	if Game.hero_dead:
+		return
 	var err := SaveSystem.save(slot, _build_save_payload())
 	if err != "":
 		if _save_menu != null and is_instance_valid(_save_menu):
@@ -2951,6 +3141,10 @@ func _load_from_slot(slot: String) -> void:
 	if res.is_empty():
 		_set_menu_status(tr("Слот пуст."))
 		return
+	# A game-over load must release the corpse/pause/menu BEFORE _restart_scene:
+	# _set_menu_pause() refuses to unpause while player.state is dead, and the
+	# old menu would stay on top of the rebuilt world.
+	_close_game_over()
 	# First we apply the hero and the slot map, then rebuild the scene:
 	# AlmMap reads Game.pending_map_path/map_seed/map_zone in _ready.
 	SaveSystem.apply_payload(res.get("data", {}), player, slot)
@@ -2968,21 +3162,27 @@ func _delete_slot(slot: String) -> void:
 
 
 func _quit_to_menu() -> void:
+	# Autosave first: while the hero is dead _save_to_slot is a no-op, so the
+	# last living save survives "To the main menu" from the game-over screen.
+	_save_to_slot(SaveSystem.AUTOSAVE_SLOT)
+	_close_game_over()
 	# The pause must be removed: otherwise the main menu opens in a stopped
 	# tree — with no background animation and no reaction to input. The save menu sets
 	# the pause when opening (22.10), and "To the main menu" does not emit closed.
 	_menu_release_pause()
 	is_paused = false
 	get_tree().paused = false
-	_save_to_slot(SaveSystem.AUTOSAVE_SLOT)
 	_set_leaving_scene(true)
 	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 
 ## Full exit from the process (the "Quit game" button in the Esc menu).
 func _quit_app() -> void:
-	_menu_release_pause()
+	# Same order as «В главное меню»: save (skipped while dead), release the
+	# death screen, then let the process go.
 	_save_to_slot(SaveSystem.AUTOSAVE_SLOT)
+	_close_game_over()
+	_menu_release_pause()
 	_set_leaving_scene(true)
 	get_tree().quit()
 
@@ -3079,6 +3279,8 @@ func _set_menu_status(text: String) -> void:
 
 ## One-off autosave (portal, leaving an interior). The same slot as the timer.
 func autosave_now() -> void:
+	if Game.hero_dead:
+		return
 	if not is_instance_valid(player):
 		return
 	if _save_menu != null and is_instance_valid(_save_menu):
@@ -3091,6 +3293,8 @@ func autosave_now() -> void:
 ## Timer autosave. Skipped if the save menu is open (otherwise
 ## the player presses "Save" and immediately gets an autosave on top).
 func _autosave_tick(delta: float) -> void:
+	if Game.hero_dead:
+		return
 	_autosave_accum += delta
 	if _autosave_accum < autosave_interval():
 		return
@@ -3113,6 +3317,8 @@ func _notification(what: int) -> void:
 	if what != NOTIFICATION_WM_CLOSE_REQUEST:
 		return
 	if _leaving_for_quit or not is_inside_tree():
+		return
+	if Game.hero_dead:
 		return
 	if is_instance_valid(player):
 		SaveSystem.save(SaveSystem.AUTOSAVE_SLOT, _build_save_payload())
