@@ -5,7 +5,7 @@
 
 ## Стек
 
-- **Godot 4.7**, GDScript 2.0, `GL Compatibility`.
+- **Godot 4.7**, GDScript 2.0, Forward+ (default renderer, `hdr_2d` включён).
 - Разрешение 1280×800, `canvas_items` stretch, равномерный масштаб UI.
 - Сетка карты 32×32, `TileMapLayer`, uint16-кодировка тайла.
 - Единственный autoload — `WorldBus` (SIM-мир).
