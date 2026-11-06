@@ -66,17 +66,11 @@ func _build() -> void:
 	# --- Сетка тайлов (Allods) ---
 	# Определить число блоков по реальным кадрам в папке
 	var grid := fw * fh
-	var dir := DirAccess.open("res://assets/structures/%s" % folder)
+	# Frame numbers through AssetFrames: pack listings name imported textures
+	# "<name>.png.import", a raw ".png" check would see no frames at all.
 	var max_frame := 0
-	if dir != null:
-		dir.list_dir_begin()
-		var fn := dir.get_next()
-		while fn != "":
-			if fn.begins_with("house-") and fn.ends_with(".png"):
-				var num := int(fn.trim_prefix("house-").trim_suffix(".png"))
-				max_frame = maxi(max_frame, num)
-			fn = dir.get_next()
-		dir.list_dir_end()
+	for num in AssetFrames.numbers("res://assets/structures/%s" % folder, "house-"):
+		max_frame = maxi(max_frame, int(num))
 	if max_frame <= 0 and grid > 0:
 		return  # папки нет — не рисуем
 	# Полных блоков: floor. Неполный хвост (church 50 при grid 20, bridge3 36 при 24)
