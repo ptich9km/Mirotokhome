@@ -7,9 +7,10 @@ Frames: 4 (bobbing animation)
 """
 
 import math
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
 
-DST = "/media/alexey/EEF4D0F9F4D0C4CD/Work/Allodshome/assets/loot_icons"
+DST = str(Path(__file__).resolve().parents[1] / "assets" / "loot_icons")
 
 
 def draw_potion(img, size, liquid_color, liquid_dark, glass_color, frame):

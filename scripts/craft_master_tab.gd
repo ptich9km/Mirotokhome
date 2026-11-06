@@ -1,11 +1,12 @@
 class_name CraftMasterTab
 extends CraftSmithTab
 
-## Вкладка мастера: улучшение крафтовой вещи на следующий уровень.
+## Master tab: +1..+7 on a crafted item.
 ##
-## Берёт Crafted / Crafted Fine из инвентаря и поднимает вверх по
-## TIER_QUALITY_LONG. Стоимость — доля ресурсов рецепта (50% до улучшенной,
-## 100% + эссенция до мастерской). Навык mastering растёт от улучшений.
+## Quality is decided at the anvil (Crafted/Fine/Master); the master only adds
+## plus levels. Every plus rolls one bonus from the item's class pool and stores
+## the roll as a seed inside the key. +1..+5 are guaranteed, +6 is 40% and +7 is
+## 25%; a failure consumes the materials but never the item.
 
 func _decor_path() -> String:
 	return "res://assets/professions/workshop/furnace.png"
@@ -17,106 +18,105 @@ func _items() -> Array:
 		var item: Dictionary = raw["item"]
 		if not ItemDB.is_equippable(item):
 			continue
-		var t := CraftDB.next_tier(item)
-		if t < 0:
+		if not ForgeDB.is_forgeable(item):
 			continue
-		var out_key := CraftDB.upgrade_key(item)
-		if out_key == "" or ItemDB.find(out_key).is_empty():
+		var key := str(raw["key"])
+		if ItemDB.plus_of(key) >= ForgeDB.MAX_PLUS:
 			continue
 		out.append({
-			"mode": RECYCLE_ID,
-			"key": str(raw["key"]),
+			"mode": "forge",
+			"key": key,
 			"item": item,
 			"count": int(raw["count"]),
-			"upgrade": out_key,
-			"next_tier": t,
+			"target": ItemDB.plus_of(key) + 1,
 		})
 	return out
 
 
 func _item_label(entry: Dictionary) -> String:
-	if str(entry.get("mode", "")) != RECYCLE_ID:
-		return super._item_label(entry)
 	var item: Dictionary = entry["item"]
-	var t := int(entry.get("next_tier", 0))
-	var tag := "→ Fine" if t == CraftDB.TIER_IMPROVED else "→ Master"
-	return "  %s  [%s]" % [str(item.get("name_ru", entry["key"])), tag]
+	var target := int(entry.get("target", 0))
+	return "  %s  [→ +%d]" % [str(item.get("name_ru", entry["key"])), target]
 
 
 func _action_label(entry: Dictionary) -> String:
-	if str(entry.get("mode", "")) == RECYCLE_ID and not entry.get("upgrade", "").is_empty():
+	if str(entry.get("mode", "")) == "forge":
 		return tr("Улучшить")
 	return super._action_label(entry)
 
 
 func _action_block_reason(entry: Dictionary) -> String:
-	if str(entry.get("mode", "")) == RECYCLE_ID and not entry.get("upgrade", "").is_empty():
-		if not is_instance_valid(player):
-			return tr("Нет героя")
-		var item: Dictionary = entry["item"]
-		var cost := CraftDB.upgrade_cost(item)
-		var ingot_key := ItemDB.ingot_key(str(item.get("material", "")))
-		var checks := [
-			[ingot_key, int(cost.get("ingot", 0))],
-			[CraftDB.FABRIC_KEY, int(cost.get("fabric", 0))],
-			[CraftDB.ESSENCE_KEY, int(cost.get("essence", 0))],
-		]
-		for c in checks:
-			var k := str(c[0])
-			var n := int(c[1])
-			if n <= 0:
-				continue
-			if _item_count(k) < n:
-				return tr("Не хватает: %s") % str(ItemDB.find(k).get("name_ru", k))
-		return ""
-	return super._action_block_reason(entry)
+	if str(entry.get("mode", "")) != "forge":
+		return super._action_block_reason(entry)
+	if not is_instance_valid(player):
+		return tr("Нет героя")
+	var item: Dictionary = entry["item"]
+	var block := ForgeDB.can_upgrade(item, player)
+	if block != "":
+		return block
+	var c := ForgeDB.cost(item, int(entry.get("target", 0)))
+	for pair in [["resource", "resource_count"], ["essence", "essence"],
+			["boss_core", "boss_core"]]:
+		var key := str(c.get(pair[0], ""))
+		var need := int(c.get(pair[1], 0))
+		if key == "" or need <= 0:
+			continue
+		if _item_count(key) < need:
+			return tr("Не хватает: %s") % str(ItemDB.find(key).get("name_ru", key))
+	return ""
 
 
 func _perform(entry: Dictionary) -> String:
-	if str(entry.get("mode", "")) == RECYCLE_ID and not entry.get("upgrade", "").is_empty():
-		return CraftDB.upgrade_item(player, str(entry.get("key", "")))
-	return super._perform(entry)
+	if str(entry.get("mode", "")) != "forge":
+		return super._perform(entry)
+	var res := ForgeDB.upgrade(player, str(entry.get("key", "")))
+	return str(res.get("message", ""))
 
 
 func _build_detail(entry: Dictionary) -> void:
-	if str(entry.get("mode", "")) != RECYCLE_ID or entry.get("upgrade", "").is_empty():
+	if str(entry.get("mode", "")) != "forge":
 		super._build_detail(entry)
 		return
 	var item: Dictionary = entry["item"]
-	var out_key := str(entry.get("upgrade", ""))
-	var out := ItemDB.find(out_key)
-	var cost := CraftDB.upgrade_cost(item)
+	var target := int(entry.get("target", 0))
+	var plus := ItemDB.plus_of(str(entry["key"]))
+	var cost := ForgeDB.cost(item, target)
 	_detail.add_child(_heading(str(item.get("name_ru", entry["key"]))))
+	_detail.add_child(_note(tr(
+		"Мастер улучшает только вещи, скравченные героем (Crafted / Fine / Master).")))
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", UiTheme.SPACE_3)
 	_detail.add_child(row)
 	row.add_child(_make_icon(item, Vector2(72, 72)))
 	var arrow := Label.new()
-	arrow.text = "→"
+	arrow.text = "→ +%d" % target
 	arrow.theme_type_variation = &"CraftTitle"
 	arrow.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(arrow)
-	row.add_child(_make_icon(out, Vector2(72, 72)))
 
 	_detail.add_child(_section(tr("Стоимость улучшения")))
-	var ingot_key := ItemDB.ingot_key(str(item.get("material", "")))
-	if int(cost.get("ingot", 0)) > 0:
-		_detail.add_child(_make_cost_row(ingot_key, int(cost["ingot"])))
-	if int(cost.get("fabric", 0)) > 0:
-		_detail.add_child(_make_cost_row(CraftDB.FABRIC_KEY, int(cost["fabric"])))
-	# The essence row is always there (player complaint 22.10: the essence was
-	# invisible on the Fine step and the player never learned the material existed).
-	_detail.add_child(_make_cost_row(CraftDB.ESSENCE_KEY, int(cost.get("essence", 0))))
-	_detail.add_child(_note(tr("Мастер улучшает крафтовые вещи. Навык растёт от улучшений.")))
+	if int(cost.get("resource_count", 0)) > 0:
+		_detail.add_child(_make_cost_row(str(cost.get("resource", "")),
+			int(cost.get("resource_count", 0))))
+	if int(cost.get("essence", 0)) > 0:
+		_detail.add_child(_make_cost_row(ForgeDB.ESSENCE_KEY, int(cost.get("essence", 0))))
+	if int(cost.get("boss_core", 0)) > 0:
+		_detail.add_child(_make_cost_row(ForgeDB.BOSS_CORE, int(cost.get("boss_core", 0))))
+
+	var chance := ForgeDB.success_chance(target)
+	if chance < 100:
+		_detail.add_child(_note(tr("Шанс успеха: %d%%. При неудаче вещь остаётся, материалы сгорают.") % chance))
+	else:
+		_detail.add_child(_note(tr("Улучшение гарантировано.")))
+	var cap := ForgeDB.cap_for(item, player)
+	_detail.add_child(_note(tr("Потолок: +%d (навык мастера). Сейчас +%d.") % [cap, plus]))
 
 
 func _make_cost_row(item_key: String, required: int) -> Control:
 	var current := _item_count(item_key)
 	var item := ItemDB.find(item_key)
 	var panel := PanelContainer.new()
-	# The essence is shown even when this step costs none (the Fine step): the 0 of
-	# the row tells the player the material exists and is only needed for Master.
 	if item.is_empty():
 		item = {"name_ru": item_key}
 	panel.name = "CostRow_%s" % item_key.replace(" ", "_")
@@ -148,4 +148,5 @@ func _variation_prefix() -> String:
 
 func _build_recipe_detail(entry: Dictionary) -> void:
 	_detail.add_child(_make_hint(tr(
-		"Выберите крафтовую вещь в списке — мастер улучшит её уровень.")))
+		"Здесь только вещи, скравченные героем (Crafted / Fine / Master).\n"
+		+ "Выберите вещь — мастер поднимет её на следующий плюс.")))

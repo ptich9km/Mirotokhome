@@ -996,37 +996,9 @@ func _ensure_card(_kind: String) -> PanelContainer:
 	card.theme = theme
 	return card
 
-## Item card lines: name, quality/material/type, combat stats, weight/price.
+## Item card lines live in UiKit: inventory adds the class-restriction line.
 func _item_card_lines(item: Dictionary) -> Array:
-	var lines: Array = [str(item.get("name_ru", item.get("key", "Предмет")))]
-	var sub: Array[String] = []
-	for f in ["quality", "material", "type"]:
-		var v := str(item.get(f, ""))
-		if v != "" and v != "None":
-			sub.append(v)
-	if not sub.is_empty():
-		lines.append(" · ".join(sub))
-	var stats: Array[String] = []
-	var dmin := int(item.get("damage_min", 0))
-	var dmax := int(item.get("damage_max", 0))
-	if dmin > 0 or dmax > 0:
-		stats.append("Урон %d–%d" % [dmin, dmax])
-	var th := int(item.get("to_hit", 0))
-	if th != 0:
-		stats.append("Атака +%d" % th)
-	var df := int(item.get("defence", 0))
-	if df > 0:
-		stats.append("Защита %d" % df)
-	var ab := int(item.get("absorption", 0))
-	if ab > 0:
-		stats.append("Поглощение %d" % ab)
-	var mc := int(item.get("magcap", 0))
-	if mc > 0:
-		stats.append("Магия %d" % mc)
-	if not stats.is_empty():
-		lines.append(" · ".join(stats))
-	lines.append("Вес %.1f · Цена %d" % [float(item.get("weight", 0.0)), int(item.get("price", 0))])
-	return lines
+	return UiKit.item_card_lines(item)
 
 ## Item card on an inventory cell (mouse + focus).
 func _attach_item_card(cell: Control, item: Dictionary) -> void:

@@ -198,7 +198,7 @@ const DEFAULTS := {
 		# family (beast / insect / undead / monster), and keeping
 		# half the table in the config and half in json is two sources of
 		# truth for one number.
-		"boss_intact_chance": 12,  # boss/dragon drops a WHOLE item instead of a broken one
+		# boss_intact_chance removed 06.11: finished gear comes only from the forge.
 	},
 	"spawn": {
 		# City size and density. city_gap — the gap between buildings, its

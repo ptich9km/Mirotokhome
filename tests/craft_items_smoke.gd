@@ -431,6 +431,10 @@ func _count(player: Player, key: String) -> int:
 ## Вызов CraftTab._craft напрямую: панель требует дерева сцены, а здесь нужен
 ## только сам алгоритм потребления.
 func _player_craft(player: Player, recipe: Dictionary) -> String:
+	# Crafting now requires knowledge: the test checks the craft itself, so it
+	# learns the recipe first (learning has its own forge_smoke).
+	if not player.known_recipes.has(str(recipe.get("id", ""))):
+		player.known_recipes.append(str(recipe.get("id", "")))
 	var tab := CraftTab.new()
 	tab.setup(player, CraftDB.SMITH)
 	return tab.call("_craft", recipe)

@@ -545,3 +545,40 @@ static func hide_hover_card(card: PanelContainer) -> void:
 static func add_hover_card_styles(theme: Theme) -> void:
 	add_label(theme, &"HoverCardTitle", TITLE_COLOR, 15)
 	add_label(theme, &"HoverCardLine", HINT_COLOR, 13)
+
+
+## Shared text of an item hover card. `class_block` is the class-restriction
+## line ("✖ …") that only the inventory shows; the world UI passes "".
+static func item_card_lines(item: Dictionary, class_block: String = "") -> Array:
+	var lines: Array = [str(item.get("name_ru", item.get("key", "Предмет")))]
+	var sub: Array[String] = []
+	for f in ["quality", "material", "type"]:
+		var v := str(item.get(f, ""))
+		if v != "" and v != "None":
+			sub.append(v)
+	if not sub.is_empty():
+		lines.append(" · ".join(sub))
+	var stats: Array[String] = []
+	var dmin := int(item.get("damage_min", 0))
+	var dmax := int(item.get("damage_max", 0))
+	if dmin > 0 or dmax > 0:
+		stats.append("Урон %d–%d" % [dmin, dmax])
+	var th := int(item.get("to_hit", 0))
+	if th != 0:
+		stats.append("Атака +%d" % th)
+	var df := int(item.get("defence", 0))
+	if df > 0:
+		stats.append("Защита %d" % df)
+	var ab := int(item.get("absorption", 0))
+	if ab > 0:
+		stats.append("Поглощение %d" % ab)
+	var mc := int(item.get("magcap", 0))
+	if mc > 0:
+		stats.append("Магия %d" % mc)
+	if not stats.is_empty():
+		lines.append(" · ".join(stats))
+	lines.append("Вес %.1f · Цена %d" % [
+		float(item.get("weight", 0.0)), int(item.get("price", 0))])
+	if class_block != "":
+		lines.append("✖ " + class_block)
+	return lines

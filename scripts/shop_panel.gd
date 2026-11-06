@@ -12,6 +12,7 @@ const CATEGORIES := [
 	{"id": "recipes_weapon", "label": "Рец. Оружие"},
 	{"id": "recipes_clothes", "label": "Рец. Маг. одежда"},
 	{"id": "potions", "label": "Зелья"},
+	{"id": "materials", "label": "Материалы"},
 	{"id": "books", "label": "Книги и свитки"},
 	{"id": "recipes_faction", "label": "Рец. Фракция"},
 ]
@@ -608,6 +609,9 @@ func _category_items(category_index: int) -> Array[Dictionary]:
 			"potions":
 				# Все зелья, включая эликсиры атрибутов за 1M.
 				matches = quality == "Potion" and price > 0
+			"materials":
+				# The common forge catalyst. Boss Core is drop-only.
+				matches = str(item.get("key", "")) == CraftDB.ESSENCE_KEY
 			"books":
 				# Scrolls from the base. Books of a SINGLE spell are added below
 				# via make_book_item. Since 2026-10-30 SCHOOL books are sold too
@@ -633,12 +637,18 @@ func _category_items(category_index: int) -> Array[Dictionary]:
 		if not matches:
 			continue
 		# Для не-зелья/книг/свитков: сломанное (price 0) и мусор >60k.
+		var materials_ok := category == "materials" \
+			and str(item.get("key", "")) == CraftDB.ESSENCE_KEY
 		if quality not in ["Potion", "Scroll", "SuperScroll"] \
-				and (price <= 0 or price > 60000):
+				and (price <= 0 or price > 60000) and not materials_ok:
 			continue
+		var shop_item := item
+		if materials_ok:
+			shop_item = item.duplicate(true)
+			shop_item["price"] = 60
 		if quality in ["Scroll", "SuperScroll"] and price <= 0:
 			continue
-		pool.append(item)
+		pool.append(shop_item)
 	# Книги заклинаний для мага — всегда в «Книги и свитки» (не только магу:
 	# свитки уже продаются, книги — продолжение той же петли).
 	if category == "books":

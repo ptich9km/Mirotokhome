@@ -615,6 +615,7 @@ static func build_payload(player, world_dict: Dictionary, world_meta: Dictionary
 		"equipped": player.equipped.duplicate(true),
 		"experience": player.experience.duplicate(true),
 		"known_spells": player.known_spells.duplicate(true),
+		"known_recipes": player.known_recipes.duplicate(),
 		"sphere_books": player.sphere_books.duplicate(true),
 		"position": player.global_position,
 		# v2: party and hotbar. Summoned creatures (lifespan > 0) are not saved: they
@@ -1019,6 +1020,9 @@ static func apply_payload(d: Dictionary, player, slot: String = "") -> void:
 	player.equipped = _dict(h.get("equipped", {}))
 	player.experience = _dict(h.get("experience", {}))
 	player.known_spells = _dict(h.get("known_spells", {}))
+	player.known_recipes.clear()
+	for raw in _str_array(h.get("known_recipes", [])):
+		player.known_recipes.append(str(raw))
 	player.sphere_books = _dict(h.get("sphere_books", {}))
 	player._recall_speed()
 	if Game.load_position_valid:

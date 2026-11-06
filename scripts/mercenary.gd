@@ -283,8 +283,10 @@ func get_protection_astral() -> int: return _resist("Astral")
 
 func _apply_relief_stand() -> void:
 	var h := 0.0
-	var map_node: Node2D = Game.hero
+	# The map, not Game.hero: the hero is a unit and never belongs to the
+	# "alm_map" group, so the old source returned 0 on every hill.
+	var map_node := get_tree().get_first_node_in_group("alm_map")
 	if map_node != null and is_instance_valid(map_node) \
-			and map_node.is_in_group("alm_map") and map_node.has_method("relief_at_world"):
+			and map_node.has_method("relief_at_world"):
 		h = float(map_node.call("relief_at_world", global_position))
 	_anim.position = Vector2(_anim.position.x, -h)
