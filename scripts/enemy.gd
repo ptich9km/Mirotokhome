@@ -1,4 +1,4 @@
-extends CharacterBody2D
+﻿extends CharacterBody2D
 class_name Enemy
 
 @export var max_hp: int = 50
@@ -602,15 +602,3 @@ func _gear_tier() -> int:
 ## A random INTACT item "by enemy power" (budget = HP × 12), from the real database.
 ## Only for the rare bonus (intact_gear_chance / bosses): the regular flow
 ## of gear from Greys is broken (_broken_gear).
-func _random_intact_gear() -> Dictionary:
-	var budget := maxi(20, max_hp * 12)
-	var pool: Array = []
-	for it in ItemDB.all():
-		if not ItemDB.is_equippable(it):
-			continue
-		var p := int(it.get("price", 0))
-		if p > 0 and p <= budget:
-			pool.append(it)
-	if pool.is_empty():
-		return {}
-	return {"key": str((pool[randi() % pool.size()] as Dictionary).get("key", ""))}
