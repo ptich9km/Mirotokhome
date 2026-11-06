@@ -15,6 +15,11 @@ extends Node2D
 var items: Array = []   # [{"gold": N}] / [{"key": "item_db key"}, ...]
 var _player: Node2D = null
 var _pick_radius := 26.0
+## Animated ground bottles (06.11): Sprite2D does not play frames by itself,
+## so the drop owns one timer for every bottle it spawned.
+var _animated: Array[Dictionary] = []
+var _anim_t := 0.0
+const ANIM_STEP := 0.22
 
 ## Размер баночки зелья: задаёт создатель добычи (см. enemy.gd/_make_loot).
 ## Логика: сильный враг роняет большую баночку, слабый — маленькую.
@@ -40,6 +45,7 @@ func _build_ground_sprites() -> void:
 	for c in get_children():
 		if c is Sprite2D:
 			c.queue_free()
+	_animated.clear()
 	var slots: Array[Dictionary] = []
 	for it in items:
 		if not (it is Dictionary):
@@ -47,11 +53,13 @@ func _build_ground_sprites() -> void:
 		var path := ""
 		var tier := 0
 		var coin := false
+		var frames: Array = []
 		if it.has("gold"):
 			path = LootIcons.gold_icon()
 			coin = true
 		elif it.has("key"):
 			var d := ItemDB.find(str(it.get("key", "")))
+			frames = LootIcons.ground_frames_for(d, potion_size)
 			if str(d.get("quality", "")) == "Potion":
 				path = LootIcons.icon_for_potion(d, potion_size)
 			if path == "":
@@ -60,8 +68,8 @@ func _build_ground_sprites() -> void:
 			# глаза на земле не меньше, чем в складе, иначе игрок не заметит,
 			# что именно выпало.
 			tier = CraftVFX.tier_of_item(d)
-		if path != "":
-			slots.append({"path": path, "tier": tier, "coin": coin})
+		if path != "" or not frames.is_empty():
+			slots.append({"path": path, "tier": tier, "coin": coin, "frames": frames})
 	if slots.is_empty():
 		return
 	_sprite_positions.clear()
@@ -79,8 +87,10 @@ func _build_ground_sprites() -> void:
 			_sprite_positions.append(Vector2(px, jitter + ICON_PX * 0.5))
 			continue
 		var s := Sprite2D.new()
-		s.texture = load(str(slots[i]["path"]))
-		var tex: Texture2D = s.texture
+		var frames: Array = slots[i].get("frames", [])
+		var tex: Texture2D = frames[0] if not frames.is_empty() \
+			else load(str(slots[i]["path"]))
+		s.texture = tex
 		# Иконки в loot_icons 32 px, а часть артов мельче — масштабируем от
 		# размера текстумы, иначе баночка была бы вдвое крупнее меча.
 		var k := ICON_PX / float(maxi(1, maxi(tex.get_width(), tex.get_height())))
@@ -88,6 +98,8 @@ func _build_ground_sprites() -> void:
 		s.position = Vector2(px, jitter)
 		s.z_index = 1
 		add_child(s)
+		if frames.size() > 1:
+			_animated.append({"sprite": s, "frames": frames, "frame": 0})
 		# Свечение уровня. Sprite2D — не Control, но наследует CanvasItem,
 		# поэтому material с canvas_item-шейдером работает так же.
 		CraftVFX.apply_to_icon(s, int(slots[i].get("tier", 0)))
@@ -111,13 +123,36 @@ func make_ground_coin(px: float = COIN_PX) -> CoinAnim:
 	return c
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_tick_anim(delta)
 	if not is_instance_valid(_player):
 		_player = get_tree().get_first_node_in_group("player")
 		if _player == null:
 			return
 	if global_position.distance_to(_player.global_position) < _pick_radius:
 		_collect()
+
+
+## One timer for every animated bottle on this drop (they share the pace).
+func _tick_anim(delta: float) -> void:
+	if _animated.is_empty():
+		return
+	_anim_t += delta
+	if _anim_t < ANIM_STEP:
+		return
+	_anim_t -= ANIM_STEP
+	for i in range(_animated.size() - 1, -1, -1):
+		var a: Dictionary = _animated[i]
+		var sprite: Sprite2D = a.get("sprite", null)
+		if not is_instance_valid(sprite):
+			_animated.remove_at(i)
+			continue
+		var frames: Array = a.get("frames", [])
+		if frames.size() < 2:
+			continue
+		var frame := (int(a.get("frame", 0)) + 1) % frames.size()
+		a["frame"] = frame
+		sprite.texture = frames[frame]
 
 
 func _collect() -> void:

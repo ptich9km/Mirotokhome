@@ -5315,7 +5315,7 @@
   "magcap": 0,
   "level": 1,
   "effects": [],
-  "icon": "res://assets/professions/workshop/magic_essence.png"
+  "icon": "res://assets/loot_icons/bottle_essence_frame00.png"
  },
  {
   "id": 1209,
@@ -10602,7 +10602,7 @@
   "magcap": 0,
   "level": 1,
   "effects": [],
-  "icon": "res://assets/professions/workshop/furnace.png",
+  "icon": "res://assets/loot_icons/bottle_boss_frame00.png",
   "id": 1476
  }
 ]

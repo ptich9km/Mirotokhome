@@ -84,6 +84,30 @@ static func gold_icon() -> String:
 	return "%sgold_ingot.png" % INGOT_DIR
 
 
+## Ground-only animation frames (06.11): the AI-looking bottles made for loot
+## on the ground. Inventory keeps the classic item icons; the drop animates.
+static func ground_frames_for(item: Dictionary, size: String) -> Array:
+	var key := str(item.get("key", ""))
+	if key == "Boss Core":
+		return _frames("boss")
+	if str(item.get("quality", "")) == "Essence":
+		return _frames("essence")
+	if str(item.get("quality", "")) == "Potion":
+		var kind := "mana" if _is_mana_potion(item) else "health"
+		return _frames(kind)
+	return []
+
+
+static func _frames(kind: String) -> Array:
+	var out: Array = []
+	for i in range(4):
+		var path := "%sbottle_%s_frame%02d.png" % [LOOT_DIR, kind, i]
+		if not ResourceLoader.exists(path):
+			return []
+		out.append(load(path))
+	return out
+
+
 static func icon_for_potion(item: Dictionary, size: String) -> String:
 	## Баночка по типу (health/mana) и размеру ("small"/"medium"/"large").
 	## size определяет вызывающий код: слабый врач -> small, босс -> large.
