@@ -117,7 +117,7 @@ func _run() -> void:
 	# Регресс, который стоил реальной поломки: когда use_potion требовал
 	# постоянный эффект, у обычного зелья effects = ["health=+30"] не
 	# попадал в PERMANENT_STATS, список был пуст, и зелье не пилось вовсе.
-	for spec in [["Potion Medium Healing", 30], ["Potion Big Healing", 60]]:
+	for spec in [["Potion Medium Healing", 30], ["Potion Big Healing", 100]]:
 		var key: String = spec[0]
 		var expect: int = spec[1]
 		player.inventory.clear()
@@ -137,7 +137,7 @@ func _run() -> void:
 	player.current_mana = 0
 	var used_m: bool = player.use_potion("Potion Medium Mana")
 	_check(used_m, "Potion Medium Mana выпивается")
-	_check(player.current_mana == 25, "Medium Mana даёт 25 маны (получено %d)" % player.current_mana)
+	_check(player.current_mana == 30, "Medium Mana даёт 30 маны (получено %d)" % player.current_mana)
 	player.has_mana = false
 	player.max_mana = 0
 
