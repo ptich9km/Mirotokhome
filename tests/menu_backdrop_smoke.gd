@@ -218,10 +218,16 @@ func _panel_opaque_with_visible_edges(menu: Node) -> void:
 		elif owner != null and owner is Window:
 			sb = (owner as Window).theme.get_stylebox("panel", &"MmPanel")
 		_check(sb != null, "у variation MmPanel есть стиль")
-		_check(sb is StyleBoxTexture,
-			"панель нарисована 9-slice рамкой, а не плоской заливкой")
-		if sb is StyleBoxTexture:
-			_check((sb as StyleBoxTexture).texture != null, "рамка загружена")
+		# The panel is a flat stylebox on purpose: the 9-slice frame from
+		# assets/ui/frames/ stretched its ornament into thick gold bars along the
+		# edges (see the comment in main_menu.gd). The guard still checks that
+		# the panel is a visible frame and not a bare transparent box.
+		_check(sb is StyleBoxFlat, "панель нарисована плоской рамкой (StyleBoxFlat)")
+		if sb is StyleBoxFlat:
+			var flat := sb as StyleBoxFlat
+			_check(flat.draw_center, "у панели есть заливка")
+			_check(flat.border_width_left > 0 and flat.border_width_top > 0,
+				"у панели есть рамка (границы > 0)")
 		# Панель не должна закрывать весь экран: справа обязан быть виден мир.
 		var vp2: Vector2 = root.get_visible_rect().size
 		var ps: Vector2 = (panel as PanelContainer).size
