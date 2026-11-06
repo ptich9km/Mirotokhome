@@ -134,6 +134,9 @@ godot --headless --path . --script res://scripts/world/sim_runner.gd
 
 # точечный тест
 godot --headless --path . --script res://tests/scroll_book_smoke.gd
+
+# все smoke-тесты (Windows PowerShell)
+powershell -ExecutionPolicy Bypass -File tests/run_all.ps1
 ```
 
 Перед первым прогоном в свежем клоне нужен импорт ассетов:
