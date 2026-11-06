@@ -283,10 +283,19 @@ func _craft(recipe: Dictionary) -> String:
 	for k: String in need:
 		if _item_count(k) < int(need[k]):
 			return tr("Не хватает: %s") % str(ItemDB.find(k).get("name_ru", k))
-	# 3. Списываем.
+	var recipe_id := str(recipe.get("id", ""))
+	if not CraftDB.has_recipe(player, recipe_id):
+		return tr("Рецепт не изучен")
+	var rare := CraftDB.is_rare_recipe(recipe)
+	var scroll_key := CraftDB.recipe_scroll_key(recipe_id)
+	if rare and not player.inventory.has(scroll_key):
+		return tr("Нужен свиток редкого рецепта")
+	# 3. Списываем. A rare scroll is the single-run permit for this craft.
 	for k: String in need:
 		for _i in int(need[k]):
 			player.remove_item(k)
+	if rare:
+		player.remove_item(scroll_key)
 	var tier := CraftDB.roll_tier(_skill())
 	var out_key := CraftDB.output_key(recipe, tier)
 	var out := ItemDB.find(out_key)
@@ -295,6 +304,8 @@ func _craft(recipe: Dictionary) -> String:
 		for k: String in need:
 			for _i in int(need[k]):
 				player.add_item(k)
+		if rare:
+			player.add_item(scroll_key)
 		return tr("Рецепт без результата")
 	player.add_item(out_key)
 	player.gain_skill_exp(str(CraftDB.SKILL_OF.get(craft, "")), CraftDB.xp_for_craft(tier))

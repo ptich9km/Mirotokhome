@@ -169,8 +169,7 @@ func _test_structure(panel: WorkshopPanel) -> void:
 		var master_items: Array = master.call("_items")
 		var master_has_upgrade := false
 		for e in master_items:
-			if str(e.get("mode", "")) == master.RECYCLE_ID \
-					and not str(e.get("upgrade", "")).is_empty():
+			if str(e.get("mode", "")) == "forge":
 				master_has_upgrade = true
 		_check(master_has_upgrade,
 			"мастер видит крафтовую вещь для улучшения (%d элементов)" % master_items.size())
@@ -191,15 +190,10 @@ func _test_essence_row(master: CraftTab) -> void:
 	var index := -1
 	for i in items.size():
 		var e: Dictionary = items[i]
-		if str(e.get("mode", "")) != master.RECYCLE_ID \
-				or str(e.get("upgrade", "")).is_empty():
+		if str(e.get("mode", "")) != "forge":
 			continue
-		if index < 0:
-			index = i
-		# Prefer the Fine step: there the cost is 0 and the row used to vanish.
-		if CraftDB.next_tier(e["item"]) == CraftDB.TIER_MASTER:
-			index = i
-			break
+		index = i
+		break
 	if index < 0:
 		return
 	master.set("_selected", index)

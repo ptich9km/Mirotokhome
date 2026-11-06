@@ -10584,5 +10584,25 @@
   "icon": "res://assets/items/faction_sets/druid/magic_feet.png",
   "faction": "druid",
   "id": 1475
+ },
+ {
+  "key": "Boss Core",
+  "name_ru": "Ядро босса",
+  "name_en": "Boss Core",
+  "quality": "Essence",
+  "material": "None",
+  "type": "Catalyst",
+  "price": 500,
+  "weight": 1.0,
+  "damage_min": 0,
+  "damage_max": 0,
+  "to_hit": 0,
+  "defence": 0,
+  "absorption": 0,
+  "magcap": 0,
+  "level": 1,
+  "effects": [],
+  "icon": "res://assets/professions/workshop/furnace.png",
+  "id": 1476
  }
 ]

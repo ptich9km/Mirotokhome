@@ -240,6 +240,9 @@ func _load_penalty() -> float:
 ## "Fire_Arrow" -> {"charges": 2} — scroll charges (a cast spends a charge, and the scroll
 ## disappears eventually). Warriors have no mana (max_mana = 0) — scrolls only.
 var known_spells: Dictionary = {}
+## Recipe ids learned from a common scroll (04.11). Rare faction scrolls are
+## not learned: one scroll = one craft, so they stay in the inventory.
+var known_recipes: Array[String] = []
 var sphere_books: Dictionary = {}   # "Fire" -> true (the element book was learned by the mage)
 var cast_cooldowns: Dictionary = {} # name -> remaining cooldown time
 var has_mana: bool = true
@@ -358,6 +361,13 @@ func _restore_from_hero_save() -> void:
 	var sb: Variant = hs.get("sphere_books", {})
 	if sb is Dictionary:
 		sphere_books = (sb as Dictionary).duplicate(true)
+	known_recipes = []
+	var kr: Variant = hs.get("known_recipes", [])
+	if kr is Array:
+		for raw in kr:
+			var rid := str(raw)
+			if rid != "" and not known_recipes.has(rid):
+				known_recipes.append(rid)
 	experience = {}
 	var exp: Variant = hs.get("experience", {})
 	if exp is Dictionary:
@@ -640,20 +650,16 @@ func use_potion(item_key: String) -> bool:
 		return false
 	var effects: Array = item.get("effects", [])
 	var permanent := apply_permanent_effects(effects)
-	# The one-off part keeps the previous values from inventory_panel:
-	# they were tuned for balance and need not match the effects in the database.
-	var key_l := item_key.to_lower()
-	var heal := 0
-	var mana := 0
-	if "healing" in key_l:
-		heal = 60 if "big" in key_l else (30 if "medium" in key_l else 20)
-	elif "mana" in key_l:
-		mana = 50 if "big" in key_l else (25 if "medium" in key_l else 15)
-	elif "regen" in key_l:
-		heal = 15
-		mana = 10
+	# The numbers live in the item's effects ("health=+30", "mana=+30"), not in
+	# the key name: a new or modded potion works without touching this code.
+	var vals := potion_values(item)
+	var heal := int(vals.get("heal", 0))
+	var mana := int(vals.get("mana", 0))
+	var regen := _potion_regen(item)
+	var armor := _potion_absorption(item)
 	# Neither permanent nor one-off effect — nothing to drink, the item is not spent.
-	if permanent.is_empty() and heal <= 0 and mana <= 0:
+	if permanent.is_empty() and heal <= 0 and mana <= 0 \
+			and regen.is_empty() and armor.is_empty():
 		return false
 	if not remove_item(item_key):
 		return false
@@ -662,6 +668,12 @@ func use_potion(item_key: String) -> bool:
 	current_hp = mini(max_hp, current_hp + heal)
 	if max_mana > 0:
 		current_mana = mini(max_mana, current_mana + mana)
+	if not regen.is_empty():
+		StatusEffects.add_regen(self, float(regen.get("hp", 0.0)),
+			float(regen.get("mana", 0.0)), float(regen.get("duration", 1.0)))
+	if not armor.is_empty():
+		StatusEffects.add_armor(self, int(armor.get("absorption", 0)),
+			float(armor.get("duration", 1.0)))
 	# The bottle is a deliberate action, so it deserves the same feedback as a heal spell:
 	# a real restored amount (not the nominal one — a full HP hero would see a lie).
 	var hp_gain := current_hp - hp_before
@@ -674,6 +686,76 @@ func use_potion(item_key: String) -> bool:
 		health_bar.update_bars(current_hp, current_mana)
 	SoundDB.play("magic.heal")
 	return true
+
+
+## Instant heal/mana of a potion. Explicit fields win over the legacy effect
+## strings, so a modded potion can use either form.
+static func potion_values(item: Dictionary) -> Dictionary:
+	var heal := int(item.get("heal", 0))
+	var mana := int(item.get("mana", 0))
+	for raw in item.get("effects", []):
+		var line := str(raw)
+		var low := line.to_lower()
+		if low.begins_with("health="):
+			heal = maxi(heal, _effect_value(line))
+		elif low.begins_with("mana="):
+			mana = maxi(mana, _effect_value(line))
+	return {"heal": maxi(heal, 0), "mana": maxi(mana, 0)}
+
+
+## "health=+30" / "absorbtion=+50: duration 30" -> 30 / 50.
+static func _effect_value(line: String) -> int:
+	var eq := line.find("=")
+	if eq < 0:
+		return 0
+	var rest := line.substr(eq + 1)
+	var colon := rest.find(":")
+	if colon >= 0:
+		rest = rest.substr(0, colon)
+	return maxi(0, int(rest.replace("+", "").strip_edges()))
+
+
+static func _effect_duration(line: String, fallback: float) -> float:
+	var at := line.find("duration")
+	if at < 0:
+		return fallback
+	var tail := line.substr(at + "duration".length()).strip_edges()
+	return maxf(0.1, float(tail)) if tail != "" else fallback
+
+
+## "healthRegeneration=100: duration 60" restores 100% of the current maximum
+## over that time. Totals are taken now, so a permanent potion drunk first
+## raises the pool it will regenerate into.
+func _potion_regen(item: Dictionary) -> Dictionary:
+	var hp_total := 0.0
+	var mana_total := 0.0
+	var duration := 0.0
+	for raw in item.get("effects", []):
+		var line := str(raw)
+		var low := line.to_lower()
+		if low.begins_with("healthregeneration="):
+			hp_total = maxf(hp_total,
+				float(max_hp) * float(_effect_value(line)) / 100.0)
+			duration = maxf(duration, _effect_duration(line, 60.0))
+		elif low.begins_with("manaregeneration="):
+			mana_total = maxf(mana_total,
+				float(max_mana) * float(_effect_value(line)) / 100.0)
+			duration = maxf(duration, _effect_duration(line, 60.0))
+	if hp_total <= 0.0 and mana_total <= 0.0:
+		return {}
+	return {"hp": hp_total, "mana": mana_total, "duration": maxf(duration, 1.0)}
+
+
+## "absorbtion=+50: duration 30" (original DB spelling) uses the same
+## shield_armor channel as the Protection spells.
+static func _potion_absorption(item: Dictionary) -> Dictionary:
+	for raw in item.get("effects", []):
+		var line := str(raw)
+		if line.to_lower().begins_with("absorbtion="):
+			return {"absorption": _effect_value(line),
+				"duration": _effect_duration(line, 30.0)}
+	return {}
+
 
 # --- Derived stats (relations from the original main.txt) ---
 # ONE source of the formulas for the live player AND the creation preview:

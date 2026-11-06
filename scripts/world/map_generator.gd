@@ -138,9 +138,9 @@ static func map_basename(seed_value: int, zone: String, race: String = "",
 ## hero art, so there was something to test combat on). The bump is mandatory: a sidecar of the old
 ## version lies on disk and `ensure_map` would return it as fresh.
 ##
-## v25 (14.10) — TEMPORARILY filled the Grey pools with the `monsters/hero_dummy` set
-## (hero art, palette=5). The player needed to check the hero strike and
-## death animation in game, and the project has no monsters: all Allods art was removed.
+## v25 (14.10) — history: the Grey pools temporarily held `monsters/hero_dummy`
+## (hero art, palette=5) so combat could be tested before real monster art.
+## Removed in v26; kept here because old sidecars still name that version.
 ##
 ## v24 (11.10) — EMPTY GREY POOLS. All Allods II art was removed, and with it
 ## 41 `monsters/*` sets were deleted. Without this bump already generated maps

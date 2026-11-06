@@ -275,8 +275,8 @@ static func weapon_percent(weapon_kind: String, creature_type: String) -> int:
 static func tier(name: String) -> int:
 	return int(get_set(name).get("tier", 0))
 
-## Boss or dragon? Only they drop an INTACT item instead of a broken one.
-## ([craft] boss_intact_chance).
+## Boss or dragon? Since 06.11 they drop the senior forging catalyst
+## (Boss Core), never a finished item.
 ##
 ## The `boss: 1` field was added on 07.10. Before it, the boss sign did not exist
 ## AT ALL, and a tempting candidate was tile_size (dragon 3, troll 2) — but that is

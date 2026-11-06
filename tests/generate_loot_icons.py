@@ -3,6 +3,7 @@
 
 from PIL import Image, ImageDraw
 import os
+from pathlib import Path
 
 MATERIALS = {
     # Base
@@ -31,7 +32,7 @@ MATERIALS = {
     "neodymium": ((200, 190, 220), (150, 140, 170), (240, 230, 255)),
 }
 
-DST = "/media/alexey/EEF4D0F9F4D0C4CD/Work/Allodshome/assets/loot_icons"
+DST = str(Path(__file__).resolve().parents[1] / "assets" / "loot_icons")
 os.makedirs(DST, exist_ok=True)
 
 

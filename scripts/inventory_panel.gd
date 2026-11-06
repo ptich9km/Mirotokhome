@@ -1284,6 +1284,21 @@ func _on_item_clicked(item: Dictionary, is_double: bool = false) -> void:
 			host._begin_scroll_targeting(item_key)
 		SoundDB.play("ui.book_open")
 		return
+	if quality == "Recipe":
+		# Common recipes are knowledge: a double click learns one forever.
+		# Faction scrolls are single-run permits and are spent at the anvil.
+		if not (is_double or _magic_double_click(item_key)):
+			return
+		var recipe_id := str(item.get("recipe_id", ""))
+		if CraftDB.learn_recipe(player, recipe_id):
+			SoundDB.play("ui.book_open")
+			_refresh_inventory_grid()
+			inventory_changed.emit()
+		elif CraftDB.is_rare_recipe_id(recipe_id):
+			_flash_equip_error("Редкий рецепт расходуется при ковке")
+		else:
+			_flash_equip_error("Этот рецепт уже изучен")
+		return
 	if quality == "Potion":
 		if player.use_potion(item_key):
 			_refresh_inventory_grid()
@@ -1341,38 +1356,8 @@ func _hover_at(cell: Control) -> Vector2:
 
 
 func _item_card_lines(item: Dictionary) -> Array:
-	var lines: Array = [str(item.get("name_ru", item.get("key", "Предмет")))]
-	var sub: Array[String] = []
-	for f in ["quality", "material", "type"]:
-		var v := str(item.get(f, ""))
-		if v != "" and v != "None":
-			sub.append(v)
-	if not sub.is_empty():
-		lines.append(" · ".join(sub))
-	var stats: Array[String] = []
-	var dmin := int(item.get("damage_min", 0))
-	var dmax := int(item.get("damage_max", 0))
-	if dmin > 0 or dmax > 0:
-		stats.append("Урон %d–%d" % [dmin, dmax])
-	var th := int(item.get("to_hit", 0))
-	if th != 0:
-		stats.append("Атака +%d" % th)
-	var df := int(item.get("defence", 0))
-	if df > 0:
-		stats.append("Защита %d" % df)
-	var ab := int(item.get("absorption", 0))
-	if ab > 0:
-		stats.append("Поглощение %d" % ab)
-	var mc := int(item.get("magcap", 0))
-	if mc > 0:
-		stats.append("Магия %d" % mc)
-	if not stats.is_empty():
-		lines.append(" · ".join(stats))
-	lines.append("Вес %.1f · Цена %d" % [float(item.get("weight", 0.0)), int(item.get("price", 0))])
-	var block := ItemDB.class_block_text(item, Game.hero_class)
-	if block != "":
-		lines.append("✖ " + block)
-	return lines
+	return UiKit.item_card_lines(item,
+		ItemDB.class_block_text(item, Game.hero_class))
 
 
 func _attach_item_card(cell: Control, item: Dictionary) -> void:

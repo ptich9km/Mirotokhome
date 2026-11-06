@@ -10,7 +10,6 @@ extends RefCounted
 ##
 ## ИСКЛЮЧЕНИЯ (читают [craft] напрямую, не через CraftDB):
 ## - workshop_panel.gd — master_enabled (флаг вкладки «Мастер»);
-## - enemy.gd — boss_intact_chance (шанс целой вещи с босса);
 ## - tier_improved_mult / tier_master_mult — только генератор
 ##   tests/gen_crafted_items.py, в рантайме не читаются.
 ##
@@ -211,11 +210,48 @@ static func has_recipe_scroll(player: Player, recipe_id: String) -> bool:
 	return false
 
 
+## Faction recipes are single-run: one scroll = one craft. Everything else is
+## learned forever from its scroll (04.11).
+static func is_rare_recipe(recipe: Dictionary) -> bool:
+	# Faction recipes have no "bp" field in their JSON; the id prefix is the
+	# stable marker (faction_<race>_<slot>).
+	return str(recipe.get("bp", "")) == "faction" \
+		or str(recipe.get("id", "")).begins_with("faction_")
+
+
+static func is_rare_recipe_id(recipe_id: String) -> bool:
+	return is_rare_recipe(recipe_by_id(recipe_id))
+
+
+static func has_recipe(player: Player, recipe_id: String) -> bool:
+	if not is_instance_valid(player) or recipe_id == "":
+		return false
+	if player.known_recipes.has(recipe_id):
+		return true
+	return has_recipe_scroll(player, recipe_id)
+
+
+## Learn a common recipe permanently. Rare recipes are not learned: their
+## scroll is spent by the craft itself.
+static func learn_recipe(player: Player, recipe_id: String) -> bool:
+	if not is_instance_valid(player) or recipe_id == "":
+		return false
+	if is_rare_recipe_id(recipe_id):
+		return false
+	if not has_recipe_scroll(player, recipe_id):
+		return false
+	if not player.remove_item(recipe_scroll_key(recipe_id)):
+		return false
+	if not player.known_recipes.has(recipe_id):
+		player.known_recipes.append(recipe_id)
+	return true
+
+
 ## Рецепты, доступные игроку (по свиткам в инвентаре).
 static func known_recipes(kind: String, player: Player) -> Array:
 	var out: Array = []
 	for r in recipes(kind):
-		if has_recipe_scroll(player, str(r.get("id", ""))):
+		if has_recipe(player, str(r.get("id", ""))):
 			out.append(r)
 	return out
 

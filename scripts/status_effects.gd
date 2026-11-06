@@ -20,7 +20,7 @@ const MAX_DOT_STACKS := 3
 ## Типы эффектов, полезных противнику (их накладывают на врага).
 const HOSTILE := ["slow", "curse", "vision", "dot", "root"]
 ## Типы эффектов, полезных союзнику (накладывают на героя/наёмника/НПЦ).
-const FRIENDLY := ["shield", "shield_armor", "resist", "bless", "haste", "invisibility", "vampirism"]
+const FRIENDLY := ["shield", "shield_armor", "resist", "bless", "haste", "invisibility", "vampirism", "regen"]
 
 
 static func _all(unit: Node2D) -> Array:
@@ -311,6 +311,33 @@ static func clear(unit: Node2D) -> void:
 # --- Тик ------------------------------------------------------------------
 
 ## Уменьшить таймеры, нанести тики яда, снять истёкшие эффекты.
+## Potion regeneration (04.11): the totals are spread over the duration and
+## accumulated fractionally because HP/mana are integers.
+static func add_regen(unit: Node2D, hp_total: float, mana_total: float,
+		duration: float) -> void:
+	if unit == null or not is_instance_valid(unit) or duration <= 0.0:
+		return
+	var list := _all(unit)
+	list.append({
+		"type": "regen", "time_left": duration, "duration": duration,
+		"hp_total": maxf(hp_total, 0.0), "mana_total": maxf(mana_total, 0.0),
+		"hp_acc": 0.0, "mana_acc": 0.0,
+	})
+	_store(unit, list)
+
+
+## Antipoison: a timed armour bonus on the same channel as Protection spells.
+static func add_armor(unit: Node2D, absorption: int, duration: float) -> void:
+	if unit == null or not is_instance_valid(unit) or duration <= 0.0:
+		return
+	var list := _all(unit)
+	list.append({
+		"type": "shield_armor", "defense": 0,
+		"absorption": maxi(absorption, 0), "time_left": duration,
+	})
+	_store(unit, list)
+
+
 static func tick(delta: float) -> void:
 	for unit in _all_units():
 		if not is_instance_valid(unit):
@@ -320,6 +347,8 @@ static func tick(delta: float) -> void:
 			continue
 		for i in range(list.size() - 1, -1, -1):
 			var e: Dictionary = list[i]
+			if str(e.get("type", "")) == "regen":
+				_tick_regen(unit, e, delta)
 			e["time_left"] = float(e.get("time_left", 0.0)) - delta
 			if str(e.get("type", "")) == "dot":
 				_tick_dot(e, delta)
@@ -329,6 +358,29 @@ static func tick(delta: float) -> void:
 
 
 ## Яд тикает раз в секунду целым уроном, чтобы не сыпать дробные числа на экран.
+## Spread hp_total/mana_total over the effect duration. HP is an int, so the
+## fractional remainder is kept in the effect and paid out one point at a time.
+static func _tick_regen(unit: Node2D, e: Dictionary, delta: float) -> void:
+	var duration := maxf(0.001, float(e.get("duration", 1.0)))
+	e["hp_acc"] = float(e.get("hp_acc", 0.0)) \
+		+ float(e.get("hp_total", 0.0)) / duration * delta
+	e["mana_acc"] = float(e.get("mana_acc", 0.0)) \
+		+ float(e.get("mana_total", 0.0)) / duration * delta
+	var hp := int(float(e["hp_acc"]))
+	if hp > 0:
+		e["hp_acc"] = float(e["hp_acc"]) - float(hp)
+		if unit is Player:
+			unit.heal_amount(hp, false)
+		elif unit.has_method("heal_amount"):
+			unit.call("heal_amount", hp)
+	var mana := int(float(e["mana_acc"]))
+	if mana > 0 and "current_mana" in unit:
+		e["mana_acc"] = float(e["mana_acc"]) - float(mana)
+		var cap := int(unit.get("max_mana"))
+		if cap > 0:
+			unit.set("current_mana", mini(cap, int(unit.get("current_mana")) + mana))
+
+
 static func _tick_dot(e: Dictionary, delta: float) -> void:
 	var dps := float(e.get("dps", 0.0))
 	if dps <= 0.0:

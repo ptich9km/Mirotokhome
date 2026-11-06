@@ -521,15 +521,10 @@ func _make_loot() -> Array:
 		pool.append({"key": "Potion Medium Healing" if randi() % 2 == 0 else "Potion Mana Regeneration"})
 	if randi() % 100 < int(table.get("broken_gear_chance", 20)):
 		pool.append_array(_broken_gear(int(table.get("garment_share", 0))))
-	# An INTACT item is a rare bonus: bosses and dragons have their own chance
-	# ([craft] boss_intact_chance), regular Greys use intact_gear_chance from
-	# the table (0 for monstrous).
-	var intact_chance := GameConfig.geti("craft", "boss_intact_chance") \
-		if UnitDB.is_boss(anim_set) else int(table.get("intact_gear_chance", 0))
-	if randi() % 100 < intact_chance:
-		var intact := _random_intact_gear()
-		if not intact.is_empty():
-			pool.append(intact)
+	# No intact gear from NPCs (04.11): every finished item comes from the forge.
+	# Bosses give the senior catalyst that +6/+7 need instead.
+	if UnitDB.is_boss(anim_set) and not ItemDB.find("Boss Core").is_empty():
+		pool.append({"key": "Boss Core"})
 	# Faction tag (forge rework package B): an outpost guard carries its own
 	# tag always — the player's decision on 28.10 "they drop in any case". This is not
 	# luxury, but the only source of the faction ingredient for armor.

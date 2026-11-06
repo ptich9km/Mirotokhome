@@ -63,9 +63,99 @@ static func all() -> Array:
 	ensure_loaded()
 	return _items
 
+## A forged item keeps its plus level in the KEY: "Crafted iron Long Sword +3#a7".
+## The base record is cloned and its stats are grown deterministically from the
+## seed, so an inventory of plain strings still distinguishes two copies.
+static func split_plus_key(key: String) -> Dictionary:
+	var body := key
+	var seed := ""
+	var hash_at := body.rfind("#")
+	if hash_at >= 0:
+		seed = body.substr(hash_at + 1)
+		body = body.substr(0, hash_at)
+	var at := body.rfind(" +")
+	if at < 0:
+		return {"base": key, "plus": 0, "seed": ""}
+	var tail := body.substr(at + 2).strip_edges()
+	if not tail.is_valid_int():
+		return {"base": key, "plus": 0, "seed": ""}
+	return {"base": body.substr(0, at), "plus": int(tail), "seed": seed}
+
+
+static func base_key(key: String) -> String:
+	return str(split_plus_key(key).get("base", key))
+
+
+static func plus_of(key: String) -> int:
+	return int(split_plus_key(key).get("plus", 0))
+
+
+static func plus_key(base: String, plus: int, seed: String) -> String:
+	if plus <= 0:
+		return base
+	return "%s +%d#%s" % [base, plus, seed]
+
+
+## Deterministic per-plus roll from the class pool. The seed is part of the key,
+## so save/load and a second look at the item show the same numbers.
+static func _plus_mods(base: Dictionary, plus: int, seed: String) -> Dictionary:
+	var pool: Array = []
+	var slot := slot_of(base)
+	if slot == "weapon":
+		pool = [{"damage_min": 1, "damage_max": 1}, {"to_hit": 1}]
+	elif slot == "shield":
+		pool = [{"defence": 1}, {"absorption": 1}]
+	elif slot in ["body", "head", "hands", "feet"]:
+		pool = [{"defence": 1}, {"absorption": 1}, {"magcap": 2}]
+	elif slot == "cloak":
+		pool = [{"defence": 1}, {"magcap": 2}]
+	if pool.is_empty():
+		pool = [{"defence": 1}]
+	var mods := {}
+	var base_key_text := str(base.get("key", ""))
+	for level in range(1, plus + 1):
+		var rng := RandomNumberGenerator.new()
+		rng.seed = _stable_hash(base_key_text) + _stable_hash(seed) * 31 \
+			+ level * 2654435761
+		var picked: Dictionary = pool[rng.randi_range(0, pool.size() - 1)]
+		for field in picked:
+			mods[field] = int(mods.get(field, 0)) + int(picked[field])
+	return mods
+
+
+static func _stable_hash(text: String) -> int:
+	var h := 2166136261
+	for byte in text.to_utf8_buffer():
+		h = (h ^ int(byte)) * 16777619
+	return h & 0x7FFFFFFF
+
+
+static func _synthesize_plus(base: Dictionary, plus: int, seed: String) -> Dictionary:
+	var out: Dictionary = base.duplicate(true)
+	var mods := _plus_mods(base, plus, seed)
+	for field in mods:
+		out[field] = int(out.get(field, 0)) + int(mods[field])
+	out["key"] = plus_key(str(base.get("key", "")), plus, seed)
+	out["base_key"] = str(base.get("key", ""))
+	out["plus"] = plus
+	out["plus_seed"] = seed
+	out["mods"] = mods
+	out["price"] = int(round(float(base.get("price", 0)) * (1.0 + 0.12 * plus)))
+	var suffix := " +%d" % plus
+	out["name_ru"] = str(base.get("name_ru", base.get("key", ""))) + suffix
+	out["name_en"] = str(base.get("name_en", base.get("key", ""))) + suffix
+	return out
+
+
 static func find(key: String) -> Dictionary:
 	ensure_loaded()
 	var found: Dictionary = _by_key.get(key, {})
+	if found.is_empty():
+		var parts := split_plus_key(key)
+		if int(parts.get("plus", 0)) > 0:
+			var base: Dictionary = _by_key.get(str(parts.get("base", "")), {})
+			if not base.is_empty():
+				return _synthesize_plus(base, int(parts["plus"]), str(parts.get("seed", "")))
 	if found.is_empty() and key.begins_with("Book "):
 		# Spell book: the base only stores books of the five vanilla spheres,
 		# while shops build books from SpellDB (SpellDB.make_book_item) — so a
