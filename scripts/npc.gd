@@ -496,26 +496,6 @@ func _potion_size() -> String:
 	return "small"
 
 
-## Старый выбор ЦЕЛОГО снаряжения по бюджету. С 07.10 не используется:
-## NPC роняют сломанные вещи (_random_gear без аргументов), а целое
-## снаряжение осталось только у боссов в enemy.gd. Удаление функции - отдельная
-## задача: сначала убедиться, что на неё не ссылается ни один тест.
-func _random_intact_gear(mat: String) -> Dictionary:
-	var budget := maxi(15, max_hp * 6)
-	var pool: Array = []
-	for it in ItemDB.all():
-		var d: Dictionary = it
-		if not ItemDB.is_equippable(d):
-			continue
-		if str(d.get("material", "")) != mat:
-			continue
-		var p := int(d.get("price", 0))
-		if p > 0 and p <= budget:
-			pool.append(d)
-	if pool.is_empty():
-		return {}
-	return {"key": str((pool[randi() % pool.size()] as Dictionary).get("key", ""))}
-
 ## Лечение мага-НПЦ: себя и раненых рядом (стража, жители, герой).
 ##
 ## У НПЦ нет маны, поэтому ограничение — кулдаун из `game.cfg [magic]`; сила

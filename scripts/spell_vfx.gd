@@ -923,20 +923,44 @@ static func invisible_tint(unit: Node2D, alpha: float) -> void:
 		unit.modulate.a = clampf(alpha, 0.15, 1.0)
 
 
+## Resting colours of the units that are flashing right now, keyed by the
+## animation node. Without it a second flash (a hit during a hit, or a hit
+## during a shield flash) captured the red tint as the "original" and painted
+## the hero permanently red after combat.
+static var _flash_base: Dictionary = {}
+## Sequence per animation node: only the newest flash may restore the colour.
+static var _flash_seq: Dictionary = {}
+
+
 static func _flash_unit(unit: Node2D, color: Color, seconds: float) -> void:
 	if not is_instance_valid(unit):
 		return
 	var anim := unit.get_node_or_null("UnitAnim")
 	if anim == null:
 		return
-	var original: Color = anim.modulate
+	var id := anim.get_instance_id()
+	if not _flash_base.has(id):
+		_flash_base[id] = anim.modulate
+	var seq := int(_flash_seq.get(id, 0)) + 1
+	_flash_seq[id] = seq
 	anim.modulate = color
 	var tree := unit.get_tree()
 	if tree == null:
+		_restore_flash(anim, id)
 		return
 	await tree.create_timer(seconds, true, false, true).timeout
+	# A newer flash is still running: it owns the colour and will restore it.
+	if int(_flash_seq.get(id, 0)) != seq:
+		return
+	_restore_flash(anim, id)
+
+
+static func _restore_flash(anim: Node, id: int) -> void:
+	var base: Color = _flash_base.get(id, Color.WHITE)
+	_flash_base.erase(id)
+	_flash_seq.erase(id)
 	if is_instance_valid(anim):
-		anim.modulate = original
+		anim.modulate = base
 
 
 # === Shaders ===

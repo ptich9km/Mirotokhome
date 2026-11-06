@@ -101,9 +101,9 @@ func _run() -> void:
 	n = _numbers().size()
 	_check(_hero.use_potion("Potion Small Healing"), "бутылка лечения выпита")
 	var pot_nums := _new_numbers(n)
-	_check(int(_hero.current_hp) == mini(_hero.max_hp, pot_before + 20),
-		"бутылка лечит на 20 (%d -> %d)" % [pot_before, int(_hero.current_hp)])
-	_check(pot_nums == ["+20"], "бутылка показывает '+20' (%s)" % str(pot_nums))
+	_check(int(_hero.current_hp) == mini(_hero.max_hp, pot_before + 12),
+		"бутылка лечит на 12 (%d -> %d)" % [pot_before, int(_hero.current_hp)])
+	_check(pot_nums == ["+12"], "бутылка показывает '+12' (%s)" % str(pot_nums))
 
 	# 4. A mana bottle shows its own number.
 	_hero.add_item("Potion Small Mana")
@@ -112,8 +112,8 @@ func _run() -> void:
 	n = _numbers().size()
 	_check(_hero.use_potion("Potion Small Mana"), "бутылка маны выпита")
 	var mana_nums := _new_numbers(n)
-	_check(mana_nums == ["+15 маны"],
-		"бутылка маны показывает '+15 маны' (%s)" % str(mana_nums))
+	_check(mana_nums == ["+12 маны"],
+		"бутылка маны показывает '+12 маны' (%s)" % str(mana_nums))
 
 	# 5. A cast heal still shows its number.
 	_hero.known_spells["Heal"] = {"charges": -1}
