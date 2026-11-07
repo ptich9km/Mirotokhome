@@ -60,22 +60,18 @@ func setup(obs_folder: String, n_frames: int, w: int, h: int, a_cx: int, a_cy: i
 	cx = float(a_cx)
 	cy = float(a_cy)
 	_frames_dir = "res://assets/map-objects/%s" % folder
-	# Реально существующие кадры: папка может иметь меньше кадров, чем phases
-	var dir := DirAccess.open(_frames_dir)
+	# Real frames on disk: a folder may hold fewer frames than the DB "phases".
+	var frame_numbers: Array = AssetFrames.numbers(_frames_dir, "sprites-")
+	# A pack may hide the listing entirely — probe the first frame instead.
+	if frame_numbers.is_empty() and ResourceLoader.exists("%s/sprites-001.png" % _frames_dir):
+		frame_numbers = [1]
 	var max_frames := 0
-	if dir != null:
-		dir.list_dir_begin()
-		var fn := dir.get_next()
-		while fn != "":
-			if fn.begins_with("sprites-") and fn.ends_with(".png"):
-				var num := int(fn.trim_prefix("sprites-").trim_suffix(".png"))
-				max_frames = maxi(max_frames, num)
-			fn = dir.get_next()
-		dir.list_dir_end()
+	for num in frame_numbers:
+		max_frames = maxi(max_frames, int(num))
 	if max_frames > 0:
 		frame_count = mini(frame_count, max_frames)
 	else:
-		# Папки нет совсем (например fire-варианты не извлечены) — не рисовать
+		# Folder is absent (e.g. fire variants were never extracted): draw nothing.
 		frame_count = 0
 	_apply_frame()
 	_setup_shadow()

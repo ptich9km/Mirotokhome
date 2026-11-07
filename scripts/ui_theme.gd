@@ -34,6 +34,8 @@ const SUCCESS := Color(0.498, 0.651, 0.314)          ## «Да», подтвер
 
 ## Затемнение под модальным окном. Не раньше 0.45 — иначе панель «плавает».
 const SCRIM := Color(0.0, 0.0, 0.0, 0.45)
+## Fully opaque black: the game-over backdrop, where the world is already gone.
+const VOID := Color(0.0, 0.0, 0.0, 1.0)
 ## Прозрачный stylebox (рамка фокуса без заливки).
 const TRANSPARENT := Color(0.0, 0.0, 0.0, 0.0)
 

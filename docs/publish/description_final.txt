@@ -1,0 +1,70 @@
+Mirotokhome — песочница с процедурными мирами и тактическим боем. Вдохновлено Аллодами II: не копия, а попытка сделать ту же «живую карту» заново, уже с процедурной генерацией.
+
+СЕЙЧАС В ИГРЕ
+
+• Мир генерируется по сиду: биом, города, дороги, горы, вода, форпосты фракций. Один сид = одна карта, её можно сохранить и вернуться.
+• Астральная карта из 12 секторов: переход между островами через порталы на краю карты.
+• Герой-воин или маг: 4 боевых направления + вспомогательное, своя книга заклинаний.
+• Тактическая пауза: мир останавливается целиком, приказы отдаются на паузе.
+• Отряд: наёмники с приказами (следовать, охранять, атаковать, стоять).
+• Бой: единая математика урона, стихии, щиты, сопротивления и «оружие против типов» — булава бьёт нежить на 125 %, людей на 75 %.
+• 10 видов Серых в 5 тирах: «Свирепый волк» … «Владыка волков».
+• Кузня и мастерская: вещь поднимается +1…+7, провал откатывает на шаг, но вещь цела.
+• Фракции: 4 расы, репутация, форпосты (3 на карту), захват лагеря, бирки соперника.
+• Туман войны, миникарта, стычки NPC мимо игрока.
+• Моды: папка mods/, манифест mod.json, школа магии, предмет, зверь в спавне — всё добавляется данными, без правки движка.
+
+ЧЕГО ПОКА НЕТ (честно)
+
+• Сюжетной кампании — только песочница и процедурные задания.
+• Мультиплеера.
+• Отполированного баланса: числа правятся после каждой игровой сессии.
+• Английского перевода интерфейса целиком — он в работе.
+
+Игра в разработке. Я публикую её, чтобы найти ошибки и понять, во что людям интересно играть. Если что-то сломалось — напиши в комментариях, что делал и что произошло: этого достаточно.
+
+УПРАВЛЕНИЕ
+
+ЛКМ — идти / атаковать, 1–3 — заклинания, Space — тактическая пауза, M — астральная карта, Esc — меню. Клавиши переназначаются в настройках.
+
+СОХРАНЕНИЯ
+
+6 слотов + автосейв. Файлы лежат в user:// (папка игры в AppData), карта пересобирается из сида при загрузке.
+
+МОДЫ
+
+Папка модов: %APPDATA%\Godot\app_userdata\Mirotokhome\mods — положить туда папку с mod.json и перезапустить игру.
+
+СДЕЛАНО НА GODOT 4.7
+
+----------------------------------------
+
+ENGLISH
+
+Mirotokhome is a procedurally generated sandbox RPG with tactical combat, inspired by the classic Allods II.
+
+• Every world is generated from a seed: biome, cities, roads, mountains, water, faction outposts. Keep the seed, keep the map.
+• 12-sector astral map, travel between islands through edge portals.
+• Warrior or mage, four combat directions plus a secondary one, own spellbook.
+• Tactical pause: the whole world stops, orders are given while paused.
+• Mercenary party with orders, or leave them guarding a spot.
+• 10 grey monster species in 5 tiers, forge upgrades +1…+7 with a soft fail, faction reputation, capturable outposts, fog of war.
+• Mod support: drop a folder with mod.json into mods/, add a spell school, an item or a monster — data only, no engine changes.
+
+NOT IN YET: story campaign, multiplayer, final balance, full English UI. The game interface is currently in Russian.
+
+This is an alpha published for bug reports. Tell me what you did and what broke.
+
+CONTROLS
+
+LMB — move / attack, 1-3 — spells, Space — tactical pause, M — astral map, Esc — menu. Keys can be rebound in the settings.
+
+SAVES
+
+6 slots plus autosave, stored in user:// (the game folder in AppData). The map is regenerated from its seed on load.
+
+MODS
+
+Mod folder: %APPDATA%\Godot\app_userdata\Mirotokhome\mods — drop a folder with mod.json there and restart the game.
+
+MADE WITH GODOT 4.7

@@ -1,0 +1,144 @@
+MIROTOKHOME — значения для формы на itch.io
+Открывай этот файл блокнотом, выделяй нужный блок и копируй.
+================================================================
+
+ПОЛЕ: Project title
+----------------------------------------------------------------
+Mirotokhome
+
+
+ПОЛЕ: Project URL
+----------------------------------------------------------------
+mirotokhome
+(адрес получится <твой-логин>.itch.io/mirotokhome)
+
+
+ПОЛЕ: Classification / Kind of project
+----------------------------------------------------------------
+Downloadable
+
+
+ПОЛЕ: Release status
+----------------------------------------------------------------
+In development
+
+
+ПОЛЕ: Pricing
+----------------------------------------------------------------
+$0 or donate
+minimum price: 0.00
+
+
+ПОЛЕ: Short description / tagline
+----------------------------------------------------------------
+Песочница с процедурными мирами и тактическим боем — духовный наследник
+Аллодов II. Альфа: ищу баг-репорты, а не «готовый продукт».
+
+
+ПОЛЕ: Description
+----------------------------------------------------------------
+НЕ КОПИРУЙ ОТСЮДА. Открой файл description_ru.txt рядом с этим,
+Ctrl+A, Ctrl+C. Английская версия — description_en.txt.
+
+
+ПОЛЕ: Genre
+----------------------------------------------------------------
+Role Playing
+
+
+ПОЛЕ: Tags — по одной штуке, каждую подтверждать Enter
+----------------------------------------------------------------
+rpg
+sandbox
+procedural-generation
+pixel-art
+open-world
+tactical-rpg
+indie
+singleplayer
+moddable
+russian
+
+
+ПОЛЕ: AI generation disclosure
+----------------------------------------------------------------
+Yes. Character and monster sprites, faction item art, ground loot art and some
+voice lines were generated with AI image/voice models, then cropped, recoloured
+and normalized by project scripts and hand-tuned. Tier recolours are programmatic.
+Code, design, balance, writing and game data are made by the author with AI
+assistance as a tool. Sound effects and music are CC0 library assets, not AI.
+
+
+ПОЛЕ: App store links
+----------------------------------------------------------------
+оставить пустым
+
+
+ПОЛЕ: Custom noun
+----------------------------------------------------------------
+не трогать
+
+
+ПОЛЕ: Community
+----------------------------------------------------------------
+Comments: вкл
+Discussion board: по желанию
+
+
+ПОЛЕ: Visibility & access
+----------------------------------------------------------------
+Draft
+(пароль не нужен)
+
+
+ПОЛЕ: Made with (если есть)
+----------------------------------------------------------------
+Godot
+
+
+ПОЛЕ: Platforms
+----------------------------------------------------------------
+Windows
+
+
+ПОЛЕ: Languages (если есть)
+----------------------------------------------------------------
+Russian
+English
+
+
+ПРО ЗАГРУЗКУ ФАЙЛА (Uploads)
+----------------------------------------------------------------
+Файл: C:\Work\Allodshome\build\windows\Mirotokhome.exe
+
+У загруженного файла обязательно:
+  [x] Windows
+  [ ] This file will be played in the browser   <-- СНЯТЬ
+
+
+КАРТИНКИ
+----------------------------------------------------------------
+Cover image (630x500):
+  C:\Work\Allodshome\docs\publish\cover.png
+
+Screenshots (1280x800), порядок:
+  docs\publish\screenshots\01_world.png
+  docs\publish\screenshots\05_combat.png
+  docs\publish\screenshots\02_workshop.png
+  docs\publish\screenshots\03_pause.png
+  docs\publish\screenshots\04_hero.png
+
+GIF (грузятся в тот же блок Screenshots), порядок:
+  docs\publish\gifs\01_world.gif    2.75 MB
+  docs\publish\gifs\02_combat.gif   2.63 MB
+  docs\publish\gifs\05_forge.gif    2.71 MB
+  docs\publish\gifs\04_pause.gif    2.53 MB
+
+Все четыре гифки меньше 3 МБ — это предел itch.
+
+
+ЧЕГО ЗДЕСЬ НЕТ
+----------------------------------------------------------------
+Postcode и прочие личные данные — это страница Payouts в настройках
+аккаунта, а не форма проекта. Заполнять её сейчас не нужно:
+страница публикуется и без выплат.

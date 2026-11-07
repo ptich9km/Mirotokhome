@@ -52,7 +52,9 @@ func _test_factions(ui) -> void:
 		"monsters/goblin": "Орды Огня",
 		"monsters/skeleton": "Пожинатели",
 		"monsters/zombie": "Пожинатели",
-		"humans/swordsman": "Альянс Света",
+		# The old "humans/swordsman" case pointed at art removed on 11.10; city
+		# guards are the real Alliance sets, so the guard checks one of those.
+		"city_human_warrior/t0": "Альянс Света",
 		"ork_mage_a52/t1": "Орды Огня",
 		"ork_mage_a52/t3": "Орды Огня",
 		"ork_mage/t1": "Орды Огня",

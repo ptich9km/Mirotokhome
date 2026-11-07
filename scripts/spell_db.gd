@@ -190,17 +190,8 @@ static func projectile_icon(name: String) -> String:
 	var folder := projectile_folder(name)
 	var res := ""
 	if folder != "":
-		var dir := DirAccess.open("res://assets/projectiles/%s" % folder)
-		if dir != null:
-			var files: Array = []
-			dir.list_dir_begin()
-			var fn := dir.get_next()
-			while fn != "":
-				if fn.begins_with("sprites-") and fn.ends_with(".png"):
-					files.append(fn)
-				fn = dir.get_next()
-			dir.list_dir_end()
-			files.sort()
+		var files: Array = AssetFrames.file_names("res://assets/projectiles/%s" % folder, "sprites-")
+		if not files.is_empty():
 			var best := ""
 			var best_area := -1
 			for f in files:
@@ -227,16 +218,11 @@ static func projectile_frames(name: String) -> int:
 	if folder == "":
 		return 0
 	var dir := DirAccess.open("res://assets/projectiles/%s" % folder)
-	var n := 0
-	if dir != null:
-		dir.list_dir_begin()
-		var fn := dir.get_next()
-		while fn != "":
-			if fn.begins_with("sprites-") and fn.ends_with(".png"):
-				n += 1
-			fn = dir.get_next()
-		dir.list_dir_end()
-	return n
+	# Pack listings name imported textures "<name>.png.import" (see AssetFrames),
+	# so the shared counter is used instead of a raw ".png" check.
+	if dir == null:
+		return 0
+	return AssetFrames.count("res://assets/projectiles/%s" % folder, "sprites-")
 
 ## Spell from a scroll name ("Scroll Fire Ball"/"SuperScroll Fire Ball") or "".
 ## Position (0..23) in the Book of Magic: panel slot 1..24 = magic projectile icon.

@@ -108,3 +108,7 @@ import/audio_src/
 # Ключ KodikRouter для аудио-моделей (в git не идёт)
 .kodik_audio_key
 
+
+# Export builds (butler pushes these to itch.io)
+/build/
+

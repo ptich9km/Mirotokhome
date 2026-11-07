@@ -108,12 +108,12 @@ func _build() -> void:
 	if _mode == "load_only":
 		_backdrop = ColorRect.new()
 		_backdrop.name = "Backdrop"
-		_backdrop.color = Color(0, 0, 0, 1)
+		_backdrop.color = UiTheme.VOID
 		_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
 		_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 		_root.add_child(_backdrop)
 
-	# Затемнения нет: панель непрозрачная, мир виден вокруг.
+	# No dimming: the panel is opaque, the world stays visible around it.
 	var inset := MarginContainer.new()
 	inset.name = "Inset"
 	inset.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -158,7 +158,7 @@ func _build() -> void:
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		content.add_child(hint)
 
-	# Сетка 2 колонки: слот | слот — высота ~4 ряда вместо 7.
+	# Two-column grid: slot | slot — about 4 rows instead of 7.
 	_slot_box = GridContainer.new()
 	_slot_box.name = "Slots"
 	_slot_box.columns = 2
