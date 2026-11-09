@@ -1,140 +1,216 @@
 {
-  "version": 1,
-  "comment": "Реплики озвучиваются KodikRouter (ElevenLabs v3). Текст с тегами — только для модели; в игре показывается subtitle. Ключи совпадают с sound_db.json.",
-  "model": "elevenlabs/eleven-v3",
-  "gain_db": -2.0,
+  "version": 2,
+  "comment": "Реплики озвучиваются локально Silero v5_ru (tests/gen_voice_silero.py). Поля cast/rate/pitch — режиссура вместо тегов ElevenLabs: модель их не понимает, а теги в тексте она читает вслух. В игре показывается subtitle (панели держат свои строки, здесь — для сверки). Ключи совпадают с sound_db.json.",
+  "engine": "silero",
+  "model": "v5_ru",
+  "cast": {
+    "merchant.human": {"speaker": "eugene", "preset": "human", "rate": "medium", "pitch": "medium"},
+    "inn.human": {"speaker": "aidar", "preset": "human", "rate": "slow", "pitch": "medium"},
+    "merchant.ork": {"speaker": "eugene", "preset": "ork", "rate": "slow", "pitch": "x-low"},
+    "inn.ork": {"speaker": "eugene", "preset": "ork", "rate": "slow", "pitch": "x-low"},
+    "merchant.necro": {"speaker": "aidar", "preset": "necro", "rate": "slow", "pitch": "low"},
+    "inn.necro": {"speaker": "aidar", "preset": "necro", "rate": "slow", "pitch": "low"},
+    "merchant.druid": {"speaker": "kseniya", "preset": "druid", "rate": "medium", "pitch": "medium"},
+    "inn.druid": {"speaker": "xenia", "preset": "druid", "rate": "slow", "pitch": "medium"},
+    "hero.male": {"speaker": "aidar", "preset": "bark", "rate": "fast", "pitch": "high"},
+    "hero.female": {"speaker": "baya", "preset": "bark", "rate": "fast", "pitch": "high"}
+  },
   "lines": [
     {
       "key": "voice.npc.merchant.1",
-      "voice": "george",
-      "text": "[gruff, matter-of-fact] Снаряжение дорожает с каждой новой стражей у ворот.",
+      "role": "merchant",
+      "races": ["human", "ork", "necro", "druid"],
+      "text": "Снаряжение дорожает с каждой новой стражей у ворот.",
       "subtitle": "Снаряжение дорожает с каждой новой стражей у ворот."
     },
     {
       "key": "voice.npc.merchant.2",
-      "voice": "george",
-      "text": "[dry, amused] Зелья всегда пригодятся: герои тоже умеют получать раны.",
+      "role": "merchant",
+      "races": ["human", "ork", "necro", "druid"],
+      "text": "Зелья всегда пригодятся: герои тоже умеют получать раны.",
       "subtitle": "Зелья всегда пригодятся: герои тоже умеют получать раны."
     },
     {
       "key": "voice.npc.merchant.3",
-      "voice": "george",
-      "text": "[skeptical, slow] Магические книги есть только у тех, кто действительно читает магию.",
+      "role": "merchant",
+      "races": ["human", "ork", "necro", "druid"],
+      "text": "Магические книги есть только у тех, кто действительно читает магию.",
       "subtitle": "Магические книги есть только у тех, кто действительно читает магию."
     },
     {
       "key": "voice.npc.merchant.4",
-      "voice": "george",
-      "text": "[calm, confiding] Не торопись: хорошая броня окупается после второй вылазки.",
+      "role": "merchant",
+      "races": ["human", "ork", "necro", "druid"],
+      "text": "Не торопись: хорошая броня окупается после второй вылазки.",
       "subtitle": "Не торопись: хорошая броня окупается после второй вылазки."
     },
     {
       "key": "voice.npc.inn.1",
-      "voice": "george",
-      "text": "[tired, low] Говорят, на севере всё больше диких зверей... Охрана у ворот не справляется.",
+      "role": "inn",
+      "races": ["human", "ork", "necro", "druid"],
+      "text": "Говорят, на севере всё больше диких зверей... Охрана у ворот не справляется.",
       "subtitle": "Говорят, на севере всё больше диких зверей... Охрана у ворот не справляется."
     },
     {
       "key": "voice.npc.inn.2",
-      "voice": "george",
-      "text": "[matter-of-fact] В школе тренировок берут золотом за каждую ступень. Дорого, но быстро.",
+      "role": "inn",
+      "races": ["human", "ork", "necro", "druid"],
+      "text": "В школе тренировок берут золотом за каждую ступень. Дорого, но быстро.",
       "subtitle": "В школе тренировок берут золотом за каждую ступень. Дорого, но быстро."
     },
     {
       "key": "voice.npc.inn.3",
-      "voice": "george",
-      "text": "[quiet, warning] Торговец в лавке скупает всё, что принесёшь из-за стен. Вещи — по полцены.",
+      "role": "inn",
+      "races": ["human", "ork", "necro", "druid"],
+      "text": "Торговец в лавке скупает всё, что принесёшь из-за стен. Вещи — по полцены.",
       "subtitle": "Торговец в лавке скупает всё, что принесёшь из-за стен. Вещи — по полцены."
     },
     {
       "key": "voice.npc.inn.4",
-      "voice": "george",
-      "text": "[thoughtful] Маги говорят, что настоящая сила — в книгах стихий. Остальным остаются свитки.",
+      "role": "inn",
+      "races": ["human", "ork", "necro", "druid"],
+      "text": "Маги говорят, что настоящая сила — в книгах стихий. Остальным остаются свитки.",
       "subtitle": "Маги говорят, что настоящая сила — в книгах стихий. Остальным остаются свитки."
     },
     {
       "key": "voice.npc.inn.5",
-      "voice": "george",
-      "text": "[lower, uneasy] Слышал, за воротами люди пропадают. Особенно те, кто идёт без отряда.",
+      "role": "inn",
+      "races": ["human", "ork", "necro", "druid"],
+      "text": "Слышал, за воротами люди пропадают. Особенно те, кто идёт без отряда.",
       "subtitle": "Слышал, за воротами люди пропадают. Особенно те, кто идёт без отряда."
     },
     {
       "key": "voice.npc.inn.6",
-      "voice": "george",
-      "text": "[dry] Хороший наёмник стоит своих денег: сам себе и убийца, и щит.",
+      "role": "inn",
+      "races": ["human", "ork", "necro", "druid"],
+      "text": "Хороший наёмник стоит своих денег: сам себе и убийца, и щит.",
       "subtitle": "Хороший наёмник стоит своих денег: сам себе и убийца, и щит."
     },
     {
       "key": "voice.hero.male.attack.1",
-      "voice": "george",
-      "text": "[short, sharp shout] Есть!",
-      "subtitle": "Есть!"
+      "role": "hero.male",
+      "text": "Есть!",
+      "subtitle": "Есть!",
+      "variants": [
+        {"rate": "fast", "pitch": "high"},
+        {"rate": "medium", "pitch": "x-high"},
+        {"rate": "x-fast", "pitch": "medium"}
+      ]
     },
     {
       "key": "voice.hero.male.attack.2",
-      "voice": "george",
-      "text": "[grunt of effort] Держись!",
-      "subtitle": "Держись!"
+      "role": "hero.male",
+      "text": "Держись!",
+      "subtitle": "Держись!",
+      "variants": [
+        {"rate": "fast", "pitch": "high"},
+        {"rate": "medium", "pitch": "x-high"},
+        {"rate": "x-fast", "pitch": "medium"}
+      ]
     },
     {
       "key": "voice.hero.male.attack.3",
-      "voice": "george",
-      "text": "[breathless, through teeth] Не сейчас.",
-      "subtitle": "Не сейчас."
+      "role": "hero.male",
+      "text": "Не сейчас.",
+      "subtitle": "Не сейчас.",
+      "variants": [
+        {"rate": "fast", "pitch": "medium"},
+        {"rate": "medium", "pitch": "high"},
+        {"rate": "x-fast", "pitch": "low"}
+      ]
     },
     {
       "key": "voice.hero.male.pain.1",
-      "voice": "george",
-      "text": "[pained grunt] Ах ты...",
-      "subtitle": "Ах ты..."
+      "role": "hero.male",
+      "text": "Ах ты...",
+      "subtitle": "Ах ты...",
+      "variants": [
+        {"rate": "medium", "pitch": "high"},
+        {"rate": "fast", "pitch": "x-high"}
+      ]
     },
     {
       "key": "voice.hero.male.pain.2",
-      "voice": "george",
-      "text": "[short hiss] Больновато.",
-      "subtitle": "Больновато."
+      "role": "hero.male",
+      "text": "Больновато.",
+      "subtitle": "Больновато.",
+      "variants": [
+        {"rate": "medium", "pitch": "high"},
+        {"rate": "fast", "pitch": "medium"}
+      ]
     },
     {
       "key": "voice.hero.male.death.1",
-      "voice": "george",
-      "text": "[fading, rasping] ...не так я это представлял.",
-      "subtitle": "...не так я это представлял."
+      "role": "hero.male",
+      "preset": "death",
+      "text": "...не так я это представлял.",
+      "subtitle": "...не так я это представлял.",
+      "variants": [
+        {"rate": "slow", "pitch": "low"}
+      ]
     },
     {
       "key": "voice.hero.female.attack.1",
-      "voice": "bella",
-      "text": "[short, sharp shout] Есть!",
-      "subtitle": "Есть!"
+      "role": "hero.female",
+      "text": "Есть!",
+      "subtitle": "Есть!",
+      "variants": [
+        {"rate": "fast", "pitch": "high"},
+        {"rate": "medium", "pitch": "x-high"},
+        {"rate": "x-fast", "pitch": "medium"}
+      ]
     },
     {
       "key": "voice.hero.female.attack.2",
-      "voice": "bella",
-      "text": "[fierce] Держись!",
-      "subtitle": "Держись!"
+      "role": "hero.female",
+      "text": "Держись!",
+      "subtitle": "Держись!",
+      "variants": [
+        {"rate": "fast", "pitch": "high"},
+        {"rate": "medium", "pitch": "x-high"},
+        {"rate": "x-fast", "pitch": "medium"}
+      ]
     },
     {
       "key": "voice.hero.female.attack.3",
-      "voice": "bella",
-      "text": "[breathless, through teeth] Не сейчас.",
-      "subtitle": "Не сейчас."
+      "role": "hero.female",
+      "text": "Не сейчас.",
+      "subtitle": "Не сейчас.",
+      "variants": [
+        {"rate": "fast", "pitch": "medium"},
+        {"rate": "medium", "pitch": "high"},
+        {"rate": "x-fast", "pitch": "low"}
+      ]
     },
     {
       "key": "voice.hero.female.pain.1",
-      "voice": "bella",
-      "text": "[pained grunt] Ах ты...",
-      "subtitle": "Ах ты..."
+      "role": "hero.female",
+      "text": "Ах ты...",
+      "subtitle": "Ах ты...",
+      "variants": [
+        {"rate": "medium", "pitch": "high"},
+        {"rate": "fast", "pitch": "x-high"}
+      ]
     },
     {
       "key": "voice.hero.female.pain.2",
-      "voice": "bella",
-      "text": "[short hiss] Больновато.",
-      "subtitle": "Больновато."
+      "role": "hero.female",
+      "text": "Больновато.",
+      "subtitle": "Больновато.",
+      "variants": [
+        {"rate": "medium", "pitch": "high"},
+        {"rate": "fast", "pitch": "medium"}
+      ]
     },
     {
       "key": "voice.hero.female.death.1",
-      "voice": "bella",
-      "text": "[fading, rasping] ...не так я это представлял.",
-      "subtitle": "...не так я это представляла."
+      "role": "hero.female",
+      "preset": "death",
+      "text": "...не так я это представляла.",
+      "subtitle": "...не так я это представляла.",
+      "variants": [
+        {"rate": "slow", "pitch": "low"}
+      ]
     }
   ]
 }

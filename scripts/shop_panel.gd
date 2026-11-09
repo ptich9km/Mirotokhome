@@ -799,7 +799,7 @@ func _talk() -> void:
 	var lines: Array = MERCHANT_LINES.duplicate()
 	var idx := randi() % lines.size()
 	_merchant_label.text = tr("Торговец: «%s»") % str(lines[idx])
-	SoundDB.play("voice.npc.merchant.%d" % (idx + 1))
+	SoundDB.play_raced("voice.npc.merchant", _race, idx + 1)
 
 func _input(event: InputEvent) -> void:
 	if UiKit.esc_pressed(event):

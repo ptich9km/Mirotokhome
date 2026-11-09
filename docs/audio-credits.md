@@ -2,7 +2,9 @@
 
 Дата первой сборки: 23.10.2026. Собирается `tests/gen_audio_db.py` в
 `assets/audio/sfx/{ui,combat,magic}/` + индекс `assets/audio/sound_db.json`.
-Реплики — `tests/gen_voice_kodik.py` по `assets/audio/voice_lines.json`.
+Реплики — `tests/gen_voice_silero.py` (Silero v5_ru, локально) по
+`assets/audio/voice_lines.json`; старый путь `tests/gen_voice_kodik.py`
+(KodikRouter) оставлен для рабочего ПК.
 
 Правило: в репозиторий попадают только файлы из этого списка. Скачанные
 архивы лежат в `import/audio_src/` (в `.gitignore`) и в git не идут.
@@ -59,10 +61,21 @@ WAV-мастера — `import/audio_src/music/` (gitignore).
 
 ## Реплики
 
-22 файла в `assets/audio/sfx/voice/` синтезированы через KodikRouter
-(модель `elevenlabs/eleven-v3`, голоса `george` и `bella`). Это не сэмплы из
-чужих библиотек: файлы созданы для проекта 23.10.2026. Тексты и режиссёрские
-теги — `assets/audio/voice_lines.json`.
+68 файлов в `assets/audio/sfx/voice/` (52 ключа `voice.*`) синтезированы локально
+на **Silero v5_ru** (`tests/gen_voice_silero.py`, 10.11.2026): пять голосов —
+`aidar`, `baya`, `kseniya`, `xenia`, `eugene`. Режиссура (голос, темп, тон,
+пресет фактуры) — в `assets/audio/voice_lines.json`, пресеты — в
+`tests/voice_fx.py`. Голоса распределены по расам города: люди, орки, нежить,
+друиды; у героини `baya`, у героя `aidar`.
+
+Раньше (23.10–10.11) те же реплики шли через KodikRouter (ElevenLabs v3, голоса
+`george` и `bella`); записи сохранены вне репозитория в
+`C:\Work\ComfyUI\_music_album\voice_kodik_backup\`. Причина замены — американский
+акцент у неродных русскому языку голосов.
+
+**Лицензия модели:** Silero v5_ru — CC BY-NC 4.0 (некоммерческое использование).
+Файлы озвучки созданы для проекта; для коммерческого запуска голоса нужно
+перегенерировать (см. `THIRD-PARTY.md`, раздел «Звук»).
 
 ## Что удалено
 

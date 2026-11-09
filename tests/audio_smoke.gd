@@ -72,6 +72,8 @@ func _run() -> void:
 
 	_check_music()
 
+	_check_voice_cast()
+
 	# Живая проверка очереди: старт с первого, повторный старт не сбрасывает,
 	# next_track() двигает индекс.
 	_check(MusicDB.start_playlist(), "MusicDB: плейлист запущен")
@@ -182,6 +184,36 @@ func _numeric_plays() -> Array[String]:
 		for m in re.search_all(text):
 			out.append(path + ": " + m.get_string(0))
 	return out
+
+
+## Voice cast: every race has its own takes and unknown races fall back to the
+## base key, so a new race can never silence an inn or a shop.
+func _check_voice_cast() -> void:
+	var keys := _load_db()
+	var npc := 0
+	for key in keys:
+		if str(key).begins_with("voice.npc."):
+			npc += 1
+	_check(npc == 40, "голосов НПЦ по расам: %d" % npc)
+	for race in ["ork", "necro", "druid"]:
+		_check(SoundDB.raced_key("voice.npc.merchant", race, 1)
+			== "voice.npc.merchant.%s.1" % race, "торговец %s: свой ключ" % race)
+		_check(SoundDB.raced_key("voice.npc.inn", race, 2)
+			== "voice.npc.inn.%s.2" % race, "трактирщик %s: свой ключ" % race)
+	_check(SoundDB.raced_key("voice.npc.inn", "human", 1) == "voice.npc.inn.1",
+		"люди: базовый ключ")
+	_check(SoundDB.raced_key("voice.npc.inn", "", 1) == "voice.npc.inn.1",
+		"без расы: базовый ключ")
+	_check(SoundDB.raced_key("voice.npc.inn", "dwarf", 1) == "voice.npc.inn.1",
+		"неизвестная раса: базовый ключ")
+	var attack: Dictionary = keys.get("voice.hero.male.attack.1", {})
+	var takes: Array = attack.get("files", [])
+	_check(takes.size() == 3, "у удара героя дублей: %d" % takes.size())
+	var jitter := float(attack.get("pitch_jitter", 0.0))
+	_check(jitter > 0.0, "у героя есть pitch_jitter: %.2f" % jitter)
+	var npc_jitter := float((keys.get("voice.npc.inn.ork.1", {}) as Dictionary)
+		.get("pitch_jitter", 0.0))
+	_check(npc_jitter == 0.0, "у НПЦ без дрожания тона: %.2f" % npc_jitter)
 
 
 ## Музыка: непрерывный плейлист. Файлы существуют, грузятся, длинные,

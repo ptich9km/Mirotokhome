@@ -77,6 +77,19 @@ static func play(id_or_key: Variant, volume_db: float = 0.0, pitch: float = 1.0)
 	player.play()
 	return true
 
+## Dialogue line with an optional race-specific take: "voice.npc.inn.ork.3"
+## when it exists, otherwise the shared "voice.npc.inn.3" (human is the base).
+static func raced_key(base: String, race: String, index: int) -> String:
+	var key := "%s.%d" % [base, index]
+	if race != "" and race != "human":
+		var raced := "%s.%s.%d" % [base, race, index]
+		if has(raced):
+			key = raced
+	return key
+
+static func play_raced(base: String, race: String, index: int) -> bool:
+	return play(raced_key(base, race, index))
+
 ## Случайная боль юнита (позиции [2]/[3] массива звуков).
 static func play_pain(sounds: Array) -> void:
 	var a: Variant = sound_at(sounds, 2)
