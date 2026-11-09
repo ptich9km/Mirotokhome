@@ -657,9 +657,10 @@ func use_potion(item_key: String) -> bool:
 	var mana := int(vals.get("mana", 0))
 	var regen := _potion_regen(item)
 	var armor := _potion_absorption(item)
+	var buffs := _potion_buffs(item)
 	# Neither permanent nor one-off effect — nothing to drink, the item is not spent.
 	if permanent.is_empty() and heal <= 0 and mana <= 0 \
-			and regen.is_empty() and armor.is_empty():
+			and regen.is_empty() and armor.is_empty() and buffs.is_empty():
 		return false
 	if not remove_item(item_key):
 		return false
@@ -674,6 +675,8 @@ func use_potion(item_key: String) -> bool:
 	if not armor.is_empty():
 		StatusEffects.add_armor(self, int(armor.get("absorption", 0)),
 			float(armor.get("duration", 1.0)))
+	for buff in buffs:
+		_apply_potion_buff(self, buff)
 	# The bottle is a deliberate action, so it deserves the same feedback as a heal spell:
 	# a real restored amount (not the nominal one — a full HP hero would see a lie).
 	var hp_gain := current_hp - hp_before
@@ -755,6 +758,61 @@ static func _potion_absorption(item: Dictionary) -> Dictionary:
 			return {"absorption": _effect_value(line),
 				"duration": _effect_duration(line, 30.0)}
 	return {}
+
+
+## Tactical elixirs (09.11). The effect channels already exist and are read by
+## combat (stat_flat, resist_bonus, speed_mult) - the potion only has to create
+## the status:
+##   attack=+12: duration 30      -> bless +12 attack
+##   defense=+15: duration 45     -> bless +15 defense
+##   fireResistance=+25: duration 60 -> resist Fire 25
+##   speed=30: duration 20        -> haste x1.3 (the number is percent)
+const RESIST_CHANNELS := {
+	"fireresistance": "Fire",
+	"waterresistance": "Water",
+	"airresistance": "Air",
+	"earthresistance": "Earth",
+	"astralresistance": "Astral",
+}
+
+## Parsed buff effects in the order they must be applied.
+static func _potion_buffs(item: Dictionary) -> Array:
+	var out: Array = []
+	for raw in item.get("effects", []):
+		var line := str(raw)
+		var low := line.to_lower()
+		var duration := _effect_duration(line, 30.0)
+		if low.begins_with("attack="):
+			out.append({"kind": "bless", "stats": {"attack": _effect_value(line)},
+				"duration": duration})
+		elif low.begins_with("defense="):
+			out.append({"kind": "bless", "stats": {"defense": _effect_value(line)},
+				"duration": duration})
+		elif low.begins_with("speed="):
+			var percent := _effect_value(line)
+			if percent > 0:
+				out.append({"kind": "haste", "mult": 1.0 + percent / 100.0,
+					"duration": duration})
+		else:
+			for channel in RESIST_CHANNELS.keys():
+				if low.begins_with(str(channel) + "="):
+					out.append({"kind": "resist",
+						"sphere": str(RESIST_CHANNELS[channel]),
+						"amount": _effect_value(line), "duration": duration})
+					break
+	return out
+
+
+static func _apply_potion_buff(unit: Node2D, buff: Dictionary) -> void:
+	match str(buff.get("kind", "")):
+		"bless":
+			StatusEffects.add_bless(unit, buff.get("stats", {}), float(buff.get("duration", 0.0)))
+		"resist":
+			StatusEffects.add_resist(unit, str(buff.get("sphere", "")),
+				int(buff.get("amount", 0)), float(buff.get("duration", 0.0)))
+		"haste":
+			StatusEffects.add_haste(unit, float(buff.get("mult", 1.0)),
+				float(buff.get("duration", 0.0)))
 
 
 # --- Derived stats (relations from the original main.txt) ---

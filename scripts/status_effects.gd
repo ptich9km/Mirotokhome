@@ -338,6 +338,43 @@ static func add_armor(unit: Node2D, absorption: int, duration: float) -> void:
 	_store(unit, list)
 
 
+## Elixir of rage / fury: a flat attack bonus (read by stat_flat("attack")).
+static func add_bless(unit: Node2D, stats: Dictionary, duration: float) -> void:
+	if unit == null or not is_instance_valid(unit) or duration <= 0.0:
+		return
+	var effect := {"type": "bless", "time_left": duration}
+	for key in stats.keys():
+		effect[str(key)] = float(stats[key])
+	if effect.size() <= 2:
+		return
+	var list := _all(unit)
+	list.append(effect)
+	_store(unit, list)
+
+
+## Elixir of fire/frost ward: a timed resistance to one sphere.
+static func add_resist(unit: Node2D, sphere: String, amount: int, duration: float) -> void:
+	if unit == null or not is_instance_valid(unit) or duration <= 0.0 or amount <= 0:
+		return
+	var list := _all(unit)
+	list.append({
+		"type": "resist", "sphere": sphere, "amount": amount,
+		"time_left": duration,
+	})
+	_store(unit, list)
+
+
+## Elixir of wind: a speed multiplier over time (read by speed_mult()).
+static func add_haste(unit: Node2D, mult: float, duration: float) -> void:
+	if unit == null or not is_instance_valid(unit) or duration <= 0.0:
+		return
+	var list := _all(unit)
+	list.append({
+		"type": "haste", "mult": maxf(mult, 1.0), "time_left": duration,
+	})
+	_store(unit, list)
+
+
 static func tick(delta: float) -> void:
 	for unit in _all_units():
 		if not is_instance_valid(unit):

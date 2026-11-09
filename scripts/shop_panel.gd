@@ -25,6 +25,12 @@ const MERCHANT_LINES := [
 const _CELL_BUY := Vector2(100, 104)
 const _CELL_SELL := Vector2(94, 96)
 
+## Potions the shop still sells (player's decision 09.11): only the temporary
+## regeneration bottles, and only a couple per city per day. The list and the
+## per-day limit live in Game.SHOP_STOCK_LIMITS: the stock logic is there, so a
+## second copy here would drift. Everything else - healing, mana, antidote,
+## big potions and elixirs - is brewed at the alchemy bench or dropped.
+
 var player: Player
 var _root: MarginContainer
 var _panel: PanelContainer
@@ -38,6 +44,7 @@ var _rep_label: Label
 var _npc_notice: Label
 var _race := ""            # раса города: ось репутации ("" — карта без города)
 var _rep := 0              # репутация героя у этой расы на момент открытия
+var _shop_id := ""         # "<seed>|<x>|<y>" — ключ запаса лавки в сейве
 var _hint_label: Label
 var _merchant_label: Label
 var _merchant_button: Button
@@ -53,10 +60,14 @@ const _PANEL_MIN := Vector2(980, 580)
 
 static var _all_cache: Array = []
 
-func setup(p: Player, city_race: String = "") -> void:
+func setup(p: Player, city_race: String = "", shop_record: Dictionary = {}) -> void:
 	player = p
 	_race = city_race
 	_rep = Game.hero_reputation(_race)
+	# The stock belongs to one building: the seed keeps two worlds apart, and the
+	# building's top-left cell separates two shops in the same city.
+	_shop_id = "%d|%d|%d" % [int(Game.map_seed),
+		int(shop_record.get("x", -1)), int(shop_record.get("y", -1))]
 	layer = 10
 	if _all_cache.is_empty():
 		_all_cache = ItemDB.all()
@@ -326,6 +337,8 @@ func _hover_lines(item: Dictionary, buying: bool, count: int) -> Array:
 	lines.append(tr("Вес: %.1f") % float(item.get("weight", 0.0)))
 	if not buying and count > 1:
 		lines.append(tr("В складе: %d шт.") % count)
+	if buying and Game.SHOP_STOCK_LIMITS.has(key):
+		lines.append(tr("Осталось сегодня: %d шт.") % _stock_left(key))
 	var price := int(item.get("price", 0))
 	if buying:
 		lines.append(tr("Цена: %d з") % _buy_price(price))
@@ -476,7 +489,8 @@ func _build_buy_shelf(category_index: int) -> Array[Button]:
 		_npc_grid.add_child(slot)
 		var button := slot.find_child("Trade", true, false) as Button
 		if button != null:
-			button.disabled = player.gold < _buy_price(int(item.get("price", 0)))
+			var left := _stock_left(str(item.get("key", "")))
+			button.disabled = player.gold < _buy_price(int(item.get("price", 0))) or left == 0
 			if not button.disabled:
 				buttons.append(button)
 	return buttons
@@ -544,6 +558,7 @@ func _make_shop_slot(item: Dictionary, buying: bool, count: int) -> PanelContain
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 1)
 	content.add_child(actions)
+	var stock := _stock_left(key) if buying else -1
 	if not buying and count > 1:
 		var count_label := Label.new()
 		count_label.theme_type_variation = &"ShopCountLabel"
@@ -554,7 +569,12 @@ func _make_shop_slot(item: Dictionary, buying: bool, count: int) -> PanelContain
 		actions.add_child(count_label)
 	var button := Button.new()
 	button.name = "Trade"
-	button.text = tr("Купить %d") % price if buying else tr("%d з") % _sell_price(price)
+	if buying and stock == 0:
+		button.text = tr("Нет в наличии")
+	elif buying and stock > 0:
+		button.text = tr("Купить %d (%d)") % [price, stock]
+	else:
+		button.text = tr("Купить %d") % price if buying else tr("%d з") % _sell_price(price)
 	button.tooltip_text = "%s — %s" % [name, tr("продать за %d з") % _sell_price(price) if not buying else tr("купить за %d з") % price]
 	button.custom_minimum_size = Vector2(0, 22)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -607,8 +627,8 @@ func _category_items(category_index: int) -> Array[Dictionary]:
 		var matches := false
 		match category:
 			"potions":
-				# Все зелья, включая эликсиры атрибутов за 1M.
-				matches = quality == "Potion" and price > 0
+				# Only the temporary regeneration bottles, in limited stock.
+				matches = quality == "Potion" and price > 0 and Game.SHOP_STOCK_LIMITS.has(str(item.get("key", "")))
 			"materials":
 				# The common forge catalyst. Boss Core is drop-only.
 				matches = str(item.get("key", "")) == CraftDB.ESSENCE_KEY
@@ -740,12 +760,29 @@ func _clear_grid(grid: GridContainer) -> void:
 func _buy_item(key: String, price: int) -> void:
 	if not is_instance_valid(player) or player.gold < price:
 		return
+	if Game.SHOP_STOCK_LIMITS.has(key) \
+			and not Game.shop_stock_take(_shop_id, key, int(Game.SHOP_STOCK_LIMITS[key]), _world_day()):
+		return
 	player.gold -= price
 	player.add_item(key)
 	SoundDB.play("ui.craft")
 	inventory_changed.emit()
 	_refresh()
 	print("Куплено: " + key)
+
+
+## Stock of a limited item: how many are left today. -1 means "no limit".
+func _stock_left(key: String) -> int:
+	if not Game.SHOP_STOCK_LIMITS.has(key):
+		return -1
+	return Game.shop_stock_left(_shop_id, key, int(Game.SHOP_STOCK_LIMITS[key]), _world_day())
+
+
+func _world_day() -> int:
+	var bus := get_node_or_null("/root/WorldBus")
+	if bus != null and "state" in bus and bus.state != null:
+		return int(bus.state.day)
+	return Game.shop_stock_day
 
 func _sell_item(key: String, price: int) -> void:
 	if not is_instance_valid(player) or not player.remove_item(key):

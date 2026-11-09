@@ -643,6 +643,10 @@ static func build_payload(player, world_dict: Dictionary, world_meta: Dictionary
 			# Captured outposts (package B): the key includes zone/sector/seed,
 			# so the dictionary is shared by all world maps, like Game.hotbar.
 			"outposts": Game.outposts_captured.duplicate(),
+			# Shop stock (09.11): limited regeneration bottles. The keys carry
+			# the map seed, so the whole dictionary travels like the hotbar.
+			"shop_stock": Game.shop_stock.duplicate(),
+			"shop_stock_day": int(Game.shop_stock_day),
 		},
 		"hero": hero,
 		"world": world_dict,
@@ -949,6 +953,14 @@ static func apply_payload(d: Dictionary, player, slot: String = "") -> void:
 		for key in cap:
 			if bool((cap as Dictionary)[key]):
 				Game.pending_outposts_captured[str(key)] = true
+	# Shop stock (09.11): without restoring it, loading a save would refill every
+	# shelf. An older save simply has none - the stock is created on first use.
+	Game.shop_stock.clear()
+	var stock: Variant = map_d.get("shop_stock", {})
+	if stock is Dictionary:
+		for key in stock:
+			Game.shop_stock[str(key)] = int((stock as Dictionary)[key])
+	Game.shop_stock_day = int(map_d.get("shop_stock_day", -1))
 	Game.pending_events = (d.get("events", []) as Array).duplicate(true)
 	_check_mods(d.get("mods", []))
 	# Older saves (before 22.10) kept an empty ARRAY here, meaning "no quests".

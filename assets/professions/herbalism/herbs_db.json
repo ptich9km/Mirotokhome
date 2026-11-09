@@ -1,0 +1,91 @@
+{
+  "_comment": [
+    "Herb table: the single source of truth for herbalism.",
+    "map_generator reads `zones` to fill .herbs.json, alchemy_panel reads",
+    "`herbs` for tier and 'where does it grow' hints, herb_node reads the icon",
+    "path. item_db keeps the item itself (price, quality, name).",
+    "frames/fps: 4/6 = a swaying loop. Until the AI strip of a herb exists,",
+    "the loader finds no frames and draws the still icon (see HerbNode).",
+    "wild_tier_min: herbs of this tier and above grow only away from cities;",
+    "wild_min_city_distance is measured in cells from the city centre and spawn."
+  ],
+  "herbs": {
+    "Herb Green Leaf": {
+      "tier": 1, "frame_count": 4, "fps": 6,
+      "icon": "res://assets/professions/herbalism/green_leaf.png"
+    },
+    "Herb White Flower": {
+      "tier": 1, "frame_count": 4, "fps": 6,
+      "icon": "res://assets/professions/herbalism/white_flower.png"
+    },
+    "Herb Dandelion": {
+      "tier": 1, "frame_count": 4, "fps": 6,
+      "icon": "res://assets/professions/herbalism/dandelion.png"
+    },
+    "Herb Red Berry": {
+      "tier": 2, "frame_count": 4, "fps": 6,
+      "icon": "res://assets/professions/herbalism/red_berry.png"
+    },
+    "Herb Tall Grass": {
+      "tier": 2, "frame_count": 4, "fps": 6,
+      "icon": "res://assets/professions/herbalism/tall_grass.png"
+    },
+    "Herb Mint": {
+      "tier": 2, "frame_count": 4, "fps": 6,
+      "icon": "res://assets/professions/herbalism/mint.png"
+    },
+    "Herb Lavender": {
+      "tier": 3, "frame_count": 4, "fps": 6,
+      "icon": "res://assets/professions/herbalism/lavender.png"
+    },
+    "Herb Broad Leaf": {
+      "tier": 3, "frame_count": 4, "fps": 6,
+      "icon": "res://assets/professions/herbalism/broad_leaf.png"
+    },
+    "Herb Glowmoss": {
+      "tier": 3, "frame_count": 4, "fps": 6,
+      "icon": "res://assets/professions/herbalism/glowmoss.png"
+    },
+    "Herb Shadow Fern": {
+      "tier": 4, "frame_count": 4, "fps": 6,
+      "icon": "res://assets/professions/herbalism/shadow_fern.png"
+    },
+    "Herb Astral Lotus": {
+      "tier": 4, "frame_count": 4, "fps": 6,
+      "icon": "res://assets/professions/herbalism/astral_lotus.png"
+    },
+    "Herb Ember Root": {
+      "tier": 4, "frame_count": 4, "fps": 6,
+      "icon": "res://assets/professions/herbalism/ember_root.png"
+    }
+  },
+  "zones": {
+    "start": [
+      {"item": "Herb Green Leaf", "weight": 40},
+      {"item": "Herb White Flower", "weight": 35},
+      {"item": "Herb Dandelion", "weight": 25}
+    ],
+    "mid": [
+      {"item": "Herb Red Berry", "weight": 38},
+      {"item": "Herb Tall Grass", "weight": 32},
+      {"item": "Herb Mint", "weight": 22},
+      {"item": "Herb Green Leaf", "weight": 8}
+    ],
+    "hard": [
+      {"item": "Herb Lavender", "weight": 30},
+      {"item": "Herb Broad Leaf", "weight": 30},
+      {"item": "Herb Glowmoss", "weight": 24},
+      {"item": "Herb Red Berry", "weight": 12},
+      {"item": "Herb Mint", "weight": 4}
+    ],
+    "faction": [
+      {"item": "Herb Shadow Fern", "weight": 34},
+      {"item": "Herb Astral Lotus", "weight": 24},
+      {"item": "Herb Ember Root", "weight": 20},
+      {"item": "Herb Lavender", "weight": 16},
+      {"item": "Herb Broad Leaf", "weight": 6}
+    ]
+  },
+  "wild_tier_min": 3,
+  "wild_min_city_distance": 12
+}

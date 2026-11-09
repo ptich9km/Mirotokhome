@@ -1830,13 +1830,13 @@ func _control_contains(c: Control, p: Vector2) -> bool:
 	return hit
 
 ## Shop: buying/selling (click on a Shop building).
-func open_shop(city_race: String = "") -> void:
+func open_shop(city_race: String = "", shop_record: Dictionary = {}) -> void:
 	if _shop != null and is_instance_valid(_shop):
 		return
 	_enter_interior()
 	Game.cursor_context = "buy"   # a coin cursor with a purse
 	_shop = ShopPanel.new()
-	_shop.setup(player, city_race)
+	_shop.setup(player, city_race, shop_record)
 	_shop.closed.connect(_on_panel_closed)
 	# Buying a scroll must reach the warrior's book immediately: the panel emits
 	# inventory_changed, and before 2026-10-30 nobody listened to it here (the

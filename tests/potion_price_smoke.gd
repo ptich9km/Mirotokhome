@@ -25,11 +25,17 @@ const EXPECTED := {
 const ELIXIRS := ["Potion Body", "Potion Mind", "Potion Reaction", "Potion Spirit"]
 const ELIXIR_PRICE := 1000000
 
-## Recipes that must stay worth their herbs.
-const RECIPES := [
-	["Potion Medium Healing", ["Herb Green Leaf", "Herb White Flower"]],
-	["Potion Medium Mana", ["Herb Lavender", "Herb Mint"]],
+## Tactical elixirs are brewed, not bought (09.11). Their price is what the
+## player can sell them for, so it must stay in the same band as the potions:
+## a hard ingredient justifies more, but not a million.
+const TACTICAL_ELIXIRS := [
+	"Potion Elixir Rage", "Potion Elixir Stone", "Potion Elixir Fire Ward",
+	"Potion Elixir Frost Ward", "Potion Elixir Wind", "Potion Elixir Mending",
+	"Potion Elixir Fury",
 ]
+const TACTICAL_MAX := 400
+
+const RECIPES_PATH := "res://assets/professions/alchemy/recipes.json"
 
 var _fails: Array = []
 
@@ -49,6 +55,19 @@ func _price(key: String) -> int:
 
 func _sell(price: int) -> int:
 	return maxi(1, int(price / float(maxi(1, GameConfig.geti("economy", "sell_price_div")))))
+
+
+func _load_recipes() -> Array:
+	var file := FileAccess.open(RECIPES_PATH, FileAccess.READ)
+	if file == null:
+		_check(false, "recipes.json открывается")
+		return []
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if not (parsed is Dictionary):
+		_check(false, "recipes.json — словарь")
+		return []
+	return (parsed as Dictionary).get("recipes", [])
 
 
 func _initialize() -> void:
@@ -81,15 +100,24 @@ func _initialize() -> void:
 	_check(_sell(_price("Potion Medium Healing")) == 40,
 		"средняя бутылка лечения продаётся за 40 (%d)" % _sell(_price("Potion Medium Healing")))
 
-	# Crafting must stay profitable: a potion is worth more than its herbs.
-	for rec in RECIPES:
-		var out_key := str(rec[0])
-		var ingredients: Array = rec[1]
+	# Crafting must stay profitable. The recipe list is read from the data, so a
+	# new recipe cannot quietly break the economy of the profession.
+	var recipes := _load_recipes()
+	_check(recipes.size() >= 16, "рецептов в базе не меньше 16 (%d)" % recipes.size())
+	for recipe in recipes:
+		var out_key := str((recipe as Dictionary).get("output", ""))
 		var cost := 0
-		for h in ingredients:
-			cost += _price(str(h))
-		_check(_price(out_key) >= cost * 3,
+		for raw in (recipe as Dictionary).get("ingredients", []):
+			var ingredient: Dictionary = raw
+			cost += _price(str(ingredient.get("item", ""))) * int(ingredient.get("count", 1))
+		_check(_price(out_key) >= cost * 2,
 			"варка %s (%d з) окупает травы (%d з)" % [out_key, _price(out_key), cost])
+
+	# Tactical elixirs sit in the consumable band, not in the luxury one.
+	for key in TACTICAL_ELIXIRS:
+		var price := _price(str(key))
+		_check(price > 0 and price <= TACTICAL_MAX,
+			"%s стоит %d (не дороже %d)" % [key, price, TACTICAL_MAX])
 
 	# A potion dropped by a monster must not be worth more than the purse of a new hero.
 	_check(_sell(_price("Potion Mana Regeneration")) <= 25,

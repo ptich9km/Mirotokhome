@@ -61,6 +61,48 @@ static var pending_quests_applied: bool = false
 static var outposts: Array = []
 static var outposts_captured: Dictionary = {}
 static var pending_outposts_captured: Dictionary = {}
+## Shop stock (09.11): "<seed>|<x>|<y>|<item>" -> bottles left today. The shop
+## sells only the temporary regeneration potions and only a couple per city per
+## day; a new world day refills the shelves. Saved with the map payload so that
+## closing and reopening the panel is not a free refill.
+static var shop_stock: Dictionary = {}
+static var shop_stock_day: int = -1
+## The shop shelf limit per item per city per day (player's decision 09.11).
+const SHOP_STOCK_LIMITS := {
+	"Potion Health Regeneration": 2,
+	"Potion Mana Regeneration": 2,
+}
+
+
+## A new world day refills every shelf. Called from the stock helpers, so the
+## panel does not need to listen for day_changed and survives a long sleep.
+static func shop_stock_roll(day: int) -> void:
+	if shop_stock_day == day:
+		return
+	shop_stock.clear()
+	shop_stock_day = day
+
+
+## Bottles left today. A key that does not exist yet starts at its limit.
+static func shop_stock_left(shop_id: String, item_key: String, limit: int, day: int) -> int:
+	shop_stock_roll(day)
+	var stock_key := shop_stock_key(shop_id, item_key)
+	if not shop_stock.has(stock_key):
+		shop_stock[stock_key] = limit
+	return int(shop_stock[stock_key])
+
+
+## Take one from the shelf. False = nothing left, the caller must not charge.
+static func shop_stock_take(shop_id: String, item_key: String, limit: int, day: int) -> bool:
+	var left := shop_stock_left(shop_id, item_key, limit, day)
+	if left <= 0:
+		return false
+	shop_stock[shop_stock_key(shop_id, item_key)] = left - 1
+	return true
+
+
+static func shop_stock_key(shop_id: String, item_key: String) -> String:
+	return "%s|%s" % [shop_id, item_key]
 static var _hit_sfx_ms: int = 0          # throttling of the hit sound (single damage point)
 ## Slot the running game came from ("" — new game). The slot folder holds the
 ## map files, so a zone change reuses its maps instead of regenerating them.
@@ -683,6 +725,8 @@ static func clear_hero_save() -> void:
 	outposts.clear()
 	outposts_captured.clear()
 	pending_outposts_captured.clear()
+	shop_stock.clear()
+	shop_stock_day = -1
 
 ## Portrait path: an explicit hero_portrait or built from character_id (with legacy mapping).
 static func hero_portrait_path() -> String:
@@ -1584,7 +1628,7 @@ func _open_building_kind(kind: String, s: Dictionary = {}) -> void:
 	# and the building looks for the nearest head — a building has no separate city_id.
 	var race := _city_race_at_world(_door_point(s)) if not s.is_empty() else ""
 	match kind:
-		"shop": ui.open_shop(race)
+		"shop": ui.open_shop(race, s)
 		"alchemy": ui.open_alchemy()
 		"inn": ui.open_inn(race)
 		"school": ui.open_school()
