@@ -1,23 +1,204 @@
 {
+  "version": 2,
+  "_comment": [
+    "Alchemy recipes. order: tier -> skill_min.",
+    "skill_min - hero alchemy level required to brew (0/3/9/15 for tiers 1..4).",
+    "xp - alchemy experience granted by one successful brew.",
+    "Permanent stat potions (body/mind/reaction/spirit) are NOT craftable on",
+    "purpose: they are quest rewards. alchemy_smoke fails if one appears here."
+  ],
   "recipes": [
     {
-      "id": "medium_healing",
-      "name_ru": "Среднее зелье лечения",
-      "output": "Potion Medium Healing",
+      "id": "small_healing",
+      "output": "Potion Small Healing",
       "output_count": 1,
+      "tier": 1,
+      "skill_min": 0,
+      "xp": 60,
       "ingredients": [
-        {"item": "Herb Green Leaf", "count": 1},
+        {"item": "Herb Green Leaf", "count": 2},
         {"item": "Herb White Flower", "count": 1}
       ]
     },
     {
+      "id": "small_mana",
+      "output": "Potion Small Mana",
+      "output_count": 1,
+      "tier": 1,
+      "skill_min": 0,
+      "xp": 60,
+      "ingredients": [
+        {"item": "Herb Dandelion", "count": 2},
+        {"item": "Herb Green Leaf", "count": 1}
+      ]
+    },
+    {
+      "id": "medium_healing",
+      "output": "Potion Medium Healing",
+      "output_count": 1,
+      "tier": 2,
+      "skill_min": 3,
+      "xp": 120,
+      "ingredients": [
+        {"item": "Herb Green Leaf", "count": 1},
+        {"item": "Herb Red Berry", "count": 2}
+      ]
+    },
+    {
       "id": "medium_mana",
-      "name_ru": "Среднее зелье маны",
       "output": "Potion Medium Mana",
       "output_count": 1,
+      "tier": 2,
+      "skill_min": 3,
+      "xp": 120,
       "ingredients": [
-        {"item": "Herb Lavender", "count": 1},
+        {"item": "Herb Mint", "count": 2},
+        {"item": "Herb Tall Grass", "count": 1}
+      ]
+    },
+    {
+      "id": "health_regeneration",
+      "output": "Potion Health Regeneration",
+      "output_count": 1,
+      "tier": 2,
+      "skill_min": 5,
+      "xp": 120,
+      "ingredients": [
+        {"item": "Herb White Flower", "count": 2},
+        {"item": "Herb Tall Grass", "count": 1}
+      ]
+    },
+    {
+      "id": "mana_regeneration",
+      "output": "Potion Mana Regeneration",
+      "output_count": 1,
+      "tier": 2,
+      "skill_min": 5,
+      "xp": 120,
+      "ingredients": [
+        {"item": "Herb Dandelion", "count": 1},
+        {"item": "Herb Mint", "count": 2}
+      ]
+    },
+    {
+      "id": "antipoison",
+      "output": "Potion Antipoison",
+      "output_count": 1,
+      "tier": 2,
+      "skill_min": 5,
+      "xp": 120,
+      "ingredients": [
+        {"item": "Herb Red Berry", "count": 1},
+        {"item": "Herb Tall Grass", "count": 2}
+      ]
+    },
+    {
+      "id": "big_healing",
+      "output": "Potion Big Healing",
+      "output_count": 1,
+      "tier": 3,
+      "skill_min": 9,
+      "xp": 240,
+      "ingredients": [
+        {"item": "Herb Lavender", "count": 2},
+        {"item": "Herb Red Berry", "count": 1}
+      ]
+    },
+    {
+      "id": "big_mana",
+      "output": "Potion Big Mana",
+      "output_count": 1,
+      "tier": 3,
+      "skill_min": 9,
+      "xp": 240,
+      "ingredients": [
+        {"item": "Herb Broad Leaf", "count": 2},
         {"item": "Herb Mint", "count": 1}
+      ]
+    },
+    {
+      "id": "elixir_rage",
+      "output": "Potion Elixir Rage",
+      "output_count": 1,
+      "tier": 3,
+      "skill_min": 9,
+      "xp": 240,
+      "ingredients": [
+        {"item": "Herb Glowmoss", "count": 2},
+        {"item": "Herb Red Berry", "count": 1}
+      ]
+    },
+    {
+      "id": "elixir_stone",
+      "output": "Potion Elixir Stone",
+      "output_count": 1,
+      "tier": 3,
+      "skill_min": 12,
+      "xp": 240,
+      "ingredients": [
+        {"item": "Herb Broad Leaf", "count": 1},
+        {"item": "Herb Glowmoss", "count": 2}
+      ]
+    },
+    {
+      "id": "elixir_fire_ward",
+      "output": "Potion Elixir Fire Ward",
+      "output_count": 1,
+      "tier": 4,
+      "skill_min": 15,
+      "xp": 480,
+      "ingredients": [
+        {"item": "Herb Shadow Fern", "count": 1},
+        {"item": "Herb Lavender", "count": 2}
+      ]
+    },
+    {
+      "id": "elixir_frost_ward",
+      "output": "Potion Elixir Frost Ward",
+      "output_count": 1,
+      "tier": 4,
+      "skill_min": 15,
+      "xp": 480,
+      "ingredients": [
+        {"item": "Herb Shadow Fern", "count": 1},
+        {"item": "Herb Broad Leaf", "count": 2}
+      ]
+    },
+    {
+      "id": "elixir_wind",
+      "output": "Potion Elixir Wind",
+      "output_count": 1,
+      "tier": 4,
+      "skill_min": 15,
+      "xp": 480,
+      "ingredients": [
+        {"item": "Herb Astral Lotus", "count": 1},
+        {"item": "Herb Tall Grass", "count": 2}
+      ]
+    },
+    {
+      "id": "elixir_mending",
+      "output": "Potion Elixir Mending",
+      "output_count": 1,
+      "tier": 4,
+      "skill_min": 18,
+      "xp": 480,
+      "ingredients": [
+        {"item": "Herb Astral Lotus", "count": 1},
+        {"item": "Herb Ember Root", "count": 1},
+        {"item": "Herb Lavender", "count": 1}
+      ]
+    },
+    {
+      "id": "elixir_fury",
+      "output": "Potion Elixir Fury",
+      "output_count": 1,
+      "tier": 4,
+      "skill_min": 18,
+      "xp": 480,
+      "ingredients": [
+        {"item": "Herb Ember Root", "count": 2},
+        {"item": "Herb Shadow Fern", "count": 1}
       ]
     }
   ]

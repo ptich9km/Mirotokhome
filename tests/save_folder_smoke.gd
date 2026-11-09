@@ -162,7 +162,13 @@ func _start_game() -> void:
 	var game = load("res://scenes/main.tscn").instantiate()
 	root.add_child(game)
 	current_scene = game
-	await create_timer(0.6).timeout
+	# Wait for the hero instead of a fixed 0.6 s: on a cold cache (the first run
+	# after a GEN_VERSION bump) the map is generated from the seed first, and
+	# the fixed wait made this test fail on a fresh cache while passing later.
+	var deadline := Time.get_ticks_msec() + 30000
+	while get_first_node_in_group("player") == null and Time.get_ticks_msec() < deadline:
+		await process_frame
+	await create_timer(0.3).timeout
 
 
 func _check(cond: bool, label: String) -> void:

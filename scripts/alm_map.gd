@@ -263,7 +263,8 @@ func _build_herbs() -> void:
 		if grid_cell.x < 0 or grid_cell.y < 0 or grid_cell.x >= map_width or grid_cell.y >= map_height:
 			continue
 		var herb := HerbNode.new()
-		herb.setup(item_key, icon_path, grid_cell, relief_at_tile(grid_cell.x, grid_cell.y))
+		herb.setup(item_key, icon_path, grid_cell, relief_at_tile(grid_cell.x, grid_cell.y),
+			HerbDB.frames_of(item_key), HerbDB.fps_of(item_key))
 		herbs_root.add_child(herb)
 		placed += 1
 	print("AlmMap: трав создано %d/%d" % [placed, _herbs.size()])
