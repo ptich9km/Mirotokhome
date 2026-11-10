@@ -94,7 +94,13 @@ func _run() -> void:
 	var total: float = player.global_position.distance_to(from)
 	_check(total > 30.0, "герой прошёл >30px за %d кадров (=%.0f px)" % [FRAMES, total])
 	_check(max_step > 0.5, "были кадры с движением (max step %.2f)" % max_step)
-	# Рывки: не должно быть чередования «прошёл 20px -> застыл на 20 кадров»
+	# Рывки: не должно быть чередования «прошёл 20px -> застыл на 20 кадров».
+	#
+	# Мерим ТОЛЬКО пока герой идёт: прежняя версия крутила 120 кадров после
+	# прибытия, и каждый кадр стояния на месте засчитывался как «застой».
+	# На быстром герое это был гарантированный провал на исправном движении
+	# (max still = все кадры после прихода). Останавливаем замер по прибытии
+	# или по завершении приказа — сама проверка не ослаблена.
 	var still_frames := 0
 	var max_still := 0
 	last_pos = from
@@ -108,6 +114,8 @@ func _run() -> void:
 		else:
 			still_frames = 0
 		last_pos = player.global_position
+		if player.global_position.distance_to(far_goal) < 12.0 or player.state == "idle":
+			break
 	_check(max_still < 25,
 		"нет длинных застоев во время ходьбы (max still=%d кадров)" % max_still)
 

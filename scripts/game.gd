@@ -493,7 +493,15 @@ static func tick_shields(delta: float) -> void:
 			u.set_meta("shield_time", 0.0)
 			u.set_meta("shield_strength", 0)
 
-static func configure_unit_body(unit: Node2D, radius: float = 12.0) -> void:
+## Physical core of a unit. Diablo 2 blocks only the CENTRE cell of a unit — the
+## sprites may overlap a neighbour's "wings". A 24 px body (radius 12) turned every
+## 32 px corridor into a wall and let two figures wedge; the hero even carried a
+## 30 px body from the scene. 20 px matches the figure width and lets a unit slip
+## past another one while both still block each other.
+const UNIT_CORE_RADIUS := 10.0
+
+
+static func configure_unit_body(unit: Node2D, radius: float = UNIT_CORE_RADIUS) -> void:
 	if not (unit is CharacterBody2D):
 		return
 	var body := unit as CharacterBody2D
@@ -522,6 +530,10 @@ static func configure_unit_body(unit: Node2D, radius: float = 12.0) -> void:
 		var shape := CircleShape2D.new()
 		shape.radius = radius
 		shape_node.shape = shape
+	elif shape_node.shape is CircleShape2D:
+		# The scene may still carry an older radius (the hero had 15 px): one core
+		# size for every unit, otherwise the hero is the widest body on the map.
+		(shape_node.shape as CircleShape2D).radius = radius
 
 ## Unit separation so they do not stick together. Before, every frame this
 ## allocated an Array of ALL units and measured the distance to each one —
@@ -587,6 +599,13 @@ static func _sep_neighbors(pos: Vector2) -> Array:
 	return out
 
 
+## Forward progress we refuse to trade away: a neighbour may bend a step sideways
+## but never turn the unit around. Diablo 2 walks AROUND a body; our old
+## `desired + separation * 1.5` could flip the vector backwards with two close
+## neighbours, which read in game as "I cannot walk in the direction he is stuck to".
+const SEP_MIN_FORWARD := 0.5
+
+
 static func movement_direction(unit: Node2D, desired: Vector2) -> Vector2:
 	if desired.length_squared() <= 0.0001:
 		return Vector2.ZERO
@@ -604,8 +623,40 @@ static func movement_direction(unit: Node2D, desired: Vector2) -> Vector2:
 			continue
 		found += _sep_push(my_pos, my_layer, other)
 	var separation := _sep_acc
-	var result := desired.normalized() + separation * 1.5
-	return result.normalized() if result.length_squared() > 0.0001 else desired.normalized()
+	var forward := desired.normalized()
+	if separation.length_squared() <= 0.0001:
+		return forward
+	var result := forward + separation * 1.5
+	# Keep at least SEP_MIN_FORWARD of the wish; the rest of the push (sideways
+	# and braking) stays. If the push is purely opposite, the unit simply walks on.
+	var ahead := result.dot(forward)
+	if ahead < SEP_MIN_FORWARD:
+		result += forward * (SEP_MIN_FORWARD - ahead)
+	if result.length_squared() <= 0.0001:
+		return forward
+	return result.normalized()
+
+
+## Cells occupied by living units — for pathing AROUND bodies (Diablo 2 `PathTargetFree`).
+## Peaceful NPCs (layer 2) and corpses are skipped: the hero walks through both.
+## `exclude` drops the pathing unit itself and, for a chase, the clicked target.
+static func occupied_cells(exclude: Array = []) -> Dictionary:
+	var out := {}
+	for list in [Game.enemies, Game.party, Game.npcs]:
+		for u in list:
+			if u == null or not is_instance_valid(u) or not (u is Node2D):
+				continue
+			if exclude.has(u):
+				continue
+			if u is CollisionObject2D \
+					and (u as CollisionObject2D).collision_layer == 2:
+				continue
+			var st: Variant = u.get("state")
+			if st is String and (st == "dying" or st == "decay" or st == "corpse"):
+				continue
+			var p: Vector2 = (u as Node2D).global_position
+			out[Vector2i(int(floor(p.x / 32.0)), int(floor(p.y / 32.0)))] = true
+	return out
 
 
 ## One unit: if it is nearby — add its contribution to _sep_acc. Returns 0/1.
@@ -1585,12 +1636,22 @@ func handle_click(world_position: Vector2):
 		player.state = "chase"
 	else:
 		print("Движение к: ", world_position)
-		player_target = world_position
+		var blocked := Game.occupied_cells([player])
+		var goal := world_position
+		# A click on a BODY (a mercenary, a guard, a Gray that is not a click target)
+		# leads to the nearest free cell instead of into the body: Diablo 2's
+		# PathTargetFree. This is the "cannot walk in the direction he is stuck to" fix.
+		var goal_cell := Vector2i(int(int(goal.x) / 32.0), int(int(goal.y) / 32.0))
+		if blocked.has(goal_cell) and alm_map != null and alm_map.has_method("free_cell_near"):
+			var free_cell: Vector2i = alm_map.call("free_cell_near", goal_cell, blocked, 2)
+			if free_cell.x >= 0:
+				goal = Vector2(free_cell.x * 32.0 + 16.0, free_cell.y * 32.0 + 16.0)
+		player_target = goal
 		player.state = "move"
 		player.attack_target = null
 		# A route avoiding obstacles (cell pathfinding), not "straight line"
 		if alm_map != null and alm_map.has_method("find_path"):
-			player.begin_path(alm_map.find_path(player.global_position, world_position))
+			player.begin_path(alm_map.find_path(player.global_position, goal, blocked))
 
 ## The functional role of a building (StructureDB).
 ## The logic moved to StructureDB.kind_of — it was duplicated by a copy in
@@ -1941,11 +2002,22 @@ const REACH_BY_WEAPON := {
 const REACH_DEFAULT := 10.0
 
 
-## The strike length of a specific unit: the hero's weapon or a monster's standard paw.
+## How far a fighter must step back before it breaks contact and closes in again.
+## 8 px meant "the hero backs off half a pace and the monster is already chasing" —
+## in game that reads as the monster being glued to the hero's back.
+const REACH_EXIT_PAD := 24.0
+
+
+## Strike length of a specific unit: the hero's weapon or a monster's standard paw.
 static func attack_reach(u: Node2D) -> float:
 	if is_instance_valid(u) and u is Player:
 		return float(REACH_BY_WEAPON.get(str(u.get("weapon")), REACH_DEFAULT))
 	return REACH_DEFAULT
+
+
+## The gap at which melee contact is considered broken (attack -> chase).
+static func attack_exit_reach(u: Node2D) -> float:
+	return attack_reach(u) + REACH_EXIT_PAD
 
 ## Unit sprite size (w, h). static: computed only from anim_set, it does not read
 ## its own state — called both from Game and from SpellAura.

@@ -294,7 +294,10 @@ const DEFAULTS := {
 		# with a lifetime in REAL seconds (the world day is too coarse for
 		# a two-minute skirmish — [world] day_seconds); the event marker is always
 		# visible on the minimap.
-		"enabled": 1,           # enabled after the 19.10 check; 0 = off
+		# 0 = off. Grey-vs-grey skirmishes read as a bug (two packs of the same
+		# beasts fighting each other); the encounter is being redone as
+		# "save the traveller" and is switched on together with that rework.
+		"enabled": 0,           # 0 = off
 		"spawn_period": 45.0,   # seconds between spawn attempts
 		"spawn_chance": 35,     # % chance of an event per attempt
 		"max_active": 2,        # maximum simultaneous events on the map
