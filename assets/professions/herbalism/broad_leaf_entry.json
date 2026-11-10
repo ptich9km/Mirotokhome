@@ -1,0 +1,11 @@
+{
+  "slug": "broad_leaf",
+  "frames": 4,
+  "size": [
+    32,
+    32
+  ],
+  "scale": 0.06,
+  "ground_y": 29,
+  "source": "import/herb_strips/broad_leaf.png"
+}

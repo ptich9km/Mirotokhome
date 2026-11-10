@@ -575,8 +575,14 @@ def components(alpha, keep_ratio=0.18):
 
 
 def preflight(path, expect=8, min_gap=60, feet_tol=14, min_ratio=0.36,
-              edge_min_min=EDGE_MIN, torso=False):
-    """Проверка СЫРОГО png. Возвращает (ok, строки отчёта)."""
+              edge_min_min=EDGE_MIN, torso=False, min_figure_h=0):
+    """Проверка СЫРОГО png. Возвращает (ok, строки отчёта).
+
+    min_figure_h: прогоны ниже этой высоты не считаются фигурами. Мелкие
+    полосы (трава, мелкие предметы) приходят с пылью в 1-8 px, и раньше
+    каждая пылинка ломала счёт «фигур: 6 вместо 4» (травы 11.11). У героя
+    порог 0 — поведение прежнее.
+    """
     a = np.array(Image.open(path).convert("RGB")).astype(np.int32)
     bgm = magenta_mask(a)
     fg = ~bgm
@@ -608,8 +614,18 @@ def preflight(path, expect=8, min_gap=60, feet_tol=14, min_ratio=0.36,
             start = -1
     if start >= 0:
         runs.append((start, w - 1))
+    dropped = 0
+    if min_figure_h > 0:
+        kept = []
+        for x0, x1 in runs:
+            ys, _ = np.where(fg[:, x0:x1 + 1])
+            if ys.size and int(ys.max() - ys.min() + 1) >= min_figure_h:
+                kept.append((x0, x1))
+        dropped = len(runs) - len(kept)
+        runs = kept
     gaps = [runs[i + 1][0] - runs[i][1] - 1 for i in range(len(runs) - 1)]
-    rep.append(f"фигур: {len(runs)}, зазоры: {gaps if gaps else '-'}")
+    rep.append(f"фигур: {len(runs)}, зазоры: {gaps if gaps else '-'}"
+               + (f", пятен-мусора отброшено {dropped}" if min_figure_h else ""))
     ok_figs = len(runs) == expect
     ok_gaps = (not gaps) or min(gaps) >= min_gap
 

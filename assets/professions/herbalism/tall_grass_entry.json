@@ -1,0 +1,11 @@
+{
+  "slug": "tall_grass",
+  "frames": 4,
+  "size": [
+    32,
+    32
+  ],
+  "scale": 0.081,
+  "ground_y": 29,
+  "source": "import/herb_strips/tall_grass.png"
+}

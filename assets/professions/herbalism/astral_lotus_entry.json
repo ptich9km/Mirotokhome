@@ -1,0 +1,11 @@
+{
+  "slug": "astral_lotus",
+  "frames": 4,
+  "size": [
+    32,
+    32
+  ],
+  "scale": 0.072,
+  "ground_y": 29,
+  "source": "import/herb_strips/astral_lotus.png"
+}

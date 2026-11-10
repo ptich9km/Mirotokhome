@@ -34,11 +34,16 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gen_hero_strip import LAYOUT4, preflight  # noqa: E402
+from gen_hero_strip import LAYOUT4, normalize_bg, preflight  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 OUT_DIR = REPO / "import" / "herb_strips"
 MANIFEST = OUT_DIR / "manifest.json"
+
+## A real plant in the 1536x1024 sheet is ~350 px tall; specks of paint dust
+## that the model leaves between the panels are 1-8 px. Below this height a
+## run is not a figure (else "4 plants" reads as "6 figures").
+MIN_FIGURE_H = 40
 
 ## Free model: the shape check costs nothing. A paid model is only worth it for
 ## the final sheets - pass --model to switch.
@@ -194,7 +199,8 @@ def main() -> int:
         return 0
 
     if args.check:
-        ok, report = preflight(args.check, expect=4, min_gap=40, min_ratio=0.0)
+        ok, report = preflight(args.check, expect=4, min_gap=40, min_ratio=0.0,
+                               min_figure_h=MIN_FIGURE_H)
         print(report)
         print("RESULT: " + ("OK" if ok else "FAIL"))
         return 0 if ok else 2
@@ -233,7 +239,13 @@ def main() -> int:
         print(f"--- {slug} ({args.model})")
         result = gen_once(key, args.model, build_prompt(slug), out, SIZE,
                           args.seed, 1, None)
-        ok, report = preflight(str(out), expect=4, min_gap=40, min_ratio=0.0)
+        ## The model sometimes returns a muted magenta (188,37,132 instead of
+        ## 255,0,255): preflight and the cutter both key on true magenta, so the
+        ## background is snapped to it first (same step as the hero pipeline).
+        replaced = normalize_bg(str(out))
+        print(f"normalize_bg: {replaced} bg pixels -> pure magenta")
+        ok, report = preflight(str(out), expect=4, min_gap=40, min_ratio=0.0,
+                               min_figure_h=MIN_FIGURE_H)
         print(report)
         entry = manifest.setdefault(slug, {})
         entry.update({"model": args.model, "cost": result.get("cost"),
