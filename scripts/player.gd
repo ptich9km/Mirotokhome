@@ -53,6 +53,20 @@ var _pending_cast: Dictionary = {}   # current spell preparation (cast_time)
 var _cast_swing_left := 0.0
 var _stuck_frames := 0
 var _repath_timer := 0.0
+## Frames without progress while a move/chase order is alive. 0 = the order must
+## NOT be dropped: first we try to route around the body in the way (Diablo 2
+## `PathReplan`), and only a second, much longer threshold cancels the order.
+var _blocked_frames := 0
+## Position at the previous watchdog tick. A stall is measured by ACTUAL
+## displacement, not by `velocity`: move_and_slide leaves the velocity of a
+## body that is scraping a wall or the map border nearly intact while the body
+## creeps at a fraction of a pixel per frame.
+var _blocked_pos := Vector2.ZERO
+const BLOCKED_REPATH := 18
+const BLOCKED_GIVE_UP := 90
+## Below this many pixels per physics frame the step counts as "no progress"
+## (normal walking is ~2 px/frame).
+const BLOCKED_STEP_PX := 0.4
 
 # --- Economy (P0): gold and the inventory ---
 var gold: int = 20  # overridden from GameConfig [economy] start_gold in _ready
@@ -1507,23 +1521,62 @@ func cast_origin() -> Vector2:
 func move_to_target(delta):
 	if _path.size() > 0:
 		_follow_path(delta)
-	if _path.size() > 0:
+		_tick_blocked(delta, false)
 		return
 	# An empty path (BFS limit / a partial route to the "nearest to the target" cell):
 	# we go STRAIGHT to player_target instead of stopping (otherwise on 192×192 — jerks).
 	var dist := Game.player_target.distance_to(global_position)
-	if dist > 8.0:
-		var dir := Game.safe_dir(global_position, Game.player_target)
-		var speed_factor := _height_speed_factor(Game.player_target)
-		_move_checked(dir, move_speed * speed_factor, delta)
-		if velocity.length_squared() < 1.0:
-			# Blocked / target unreachable — we stop instead of twitching.
-			state = "idle"
-			velocity = Vector2.ZERO
-			Game.player_target = global_position
-	else:
+	if dist <= 8.0:
 		state = "idle"
 		velocity = Vector2.ZERO
+		_blocked_frames = 0
+		_blocked_pos = global_position
+		return
+	var dir := Game.safe_dir(global_position, Game.player_target)
+	var speed_factor := _height_speed_factor(Game.player_target)
+	_move_checked(dir, move_speed * speed_factor, delta)
+	_tick_blocked(delta, false)
+
+## Watchdog for a live order. A body in the way must NOT cancel the order on the
+## first frame — that single line (state = "idle" + target wiped) is what made the
+## hero stuck against a mercenary "forever" and it also pre-empted the old
+## _escape_blocking_units (which needs state == "move"). Order of rescue:
+## slide along the body (move_and_slide) -> plan a route around the units ->
+## only after a long stall cancel the order.
+func _tick_blocked(delta: float, chasing: bool) -> void:
+	var moved := global_position.distance_to(_blocked_pos)
+	_blocked_pos = global_position
+	if moved >= BLOCKED_STEP_PX:
+		_blocked_frames = 0
+		return
+	_blocked_frames += 1
+	if _blocked_frames == BLOCKED_REPATH:
+		_replan_around_units(chasing)
+		return
+	if _blocked_frames >= BLOCKED_GIVE_UP:
+		_blocked_frames = 0
+		_path.clear()
+		velocity = Vector2.ZERO
+		if not chasing:
+			state = "idle"
+			Game.player_target = global_position
+
+## Route around the units standing in the way (Diablo 2 replanning). The clicked
+## target stays as it is; only the route changes. Falls back to the unit-blind
+## route when every neighbour cell is taken.
+func _replan_around_units(chasing: bool) -> void:
+	_blocked_frames = 0
+	_stuck_frames = 0
+	if alm_map == null or not alm_map.has_method("find_path"):
+		return
+	var target := Game.player_target
+	if chasing and is_instance_valid(attack_target):
+		target = attack_target.global_position
+	var blocked := Game.occupied_cells([self, attack_target])
+	var path: Array = alm_map.find_path(global_position, target, blocked)
+	if path.is_empty():
+		path = alm_map.find_path(global_position, target)
+	begin_path(path)
 
 ## Start moving along a route (cell centres from alm_map.find_path).
 func begin_path(path: Array) -> void:
@@ -1531,6 +1584,8 @@ func begin_path(path: Array) -> void:
 		return
 	_path = path
 	_stuck_frames = 0
+	_blocked_frames = 0
+	_blocked_pos = global_position
 
 ## A full stop (used when entering a building/during pauses).
 func stop_movement() -> void:
@@ -1540,6 +1595,9 @@ func stop_movement() -> void:
 	state = "idle"
 	velocity = Vector2.ZERO
 	_path.clear()
+	_stuck_frames = 0
+	_blocked_frames = 0
+	_blocked_pos = global_position
 	Game.player_target = global_position
 
 ## Follow the route: to the next point; when blocked for 12 frames — stop.
@@ -1558,8 +1616,10 @@ func _follow_path(delta: float) -> void:
 	if velocity.length_squared() < 1.0:
 		_stuck_frames += 1
 		if _stuck_frames > 20:
+			# Drop the ROUTE, not the order: move_to_target/chase_target ask for a
+			# detour around the units (see _tick_blocked) instead of freezing.
+			_stuck_frames = 0
 			_path.clear()
-			state = "idle"
 	else:
 		_stuck_frames = 0
 
@@ -1584,13 +1644,17 @@ func chase_target(delta):
 			if _repath_timer <= 0.0:
 				_repath_timer = 1.2 + randf() * 0.5
 				if alm_map != null and alm_map.has_method("find_path"):
-					begin_path(alm_map.find_path(global_position, attack_target.global_position))
+					var blocked := Game.occupied_cells([self, attack_target])
+					begin_path(alm_map.find_path(global_position,
+						attack_target.global_position, blocked))
 		if _path.size() > 0:
 			_follow_path(delta)
+			_tick_blocked(delta, true)
 		else:
 			var direction = Game.safe_dir(global_position, attack_target.global_position)
 			var speed_factor = _height_speed_factor(attack_target.global_position)
 			_move_checked(direction, move_speed * speed_factor, delta)
+			_tick_blocked(delta, true)
 	else:
 		state = "idle"
 		velocity = Vector2.ZERO
@@ -1598,7 +1662,7 @@ func chase_target(delta):
 func attack_enemy(delta):
 	if attack_target and is_instance_valid(attack_target):
 		# The enemy ran out of radius — we catch up instead of swinging at nothing
-		if Game.units_range(self, attack_target) > Game.attack_reach(self) + 8.0:
+		if Game.units_range(self, attack_target) > Game.attack_exit_reach(self):
 			state = "chase"
 			_impact_timer = -1.0
 			_swing_target = null

@@ -38,9 +38,34 @@ var _order: String = ""         # current mode ("" — not read yet)
 var _anchor := Vector2.ZERO     # guard post
 
 
+## Both directions: the mercenary ignores the hero and the hero ignores the mercenary.
+func _bind_owner() -> void:
+	var owner_body := Game.hero
+	if owner_body == null or not is_instance_valid(owner_body) \
+			or not (owner_body is CollisionObject2D):
+		return
+	add_collision_exception_with(owner_body)
+	(owner_body as CollisionObject2D).add_collision_exception_with(self)
+
+
+## The pair must be released BEFORE the body leaves the tree: a freed body left in
+## the hero's exception list makes get_collision_exceptions() throw
+## "Parameter \"body\" is null" on the next _escape_blocking_units call.
+func _exit_tree() -> void:
+	var owner_body := Game.hero
+	if owner_body == null or not is_instance_valid(owner_body) \
+			or not (owner_body is CollisionObject2D):
+		return
+	(owner_body as CollisionObject2D).remove_collision_exception_with(self)
+
+
 func _ready() -> void:
 	add_to_group("mercenary")
 	Game.configure_unit_body(self)
+	# A hireling is never a wall for its owner (Diablo 2: pets and hirelings do not
+	# block the player). Without this the hero physically cannot walk towards a
+	# follower standing next to him — the reported "he sticks to me" bug.
+	_bind_owner.call_deferred()
 	current_hp = max_hp
 	_anim = UnitAnim.new()
 	_anim.name = "UnitAnim"

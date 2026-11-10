@@ -68,18 +68,32 @@ func _run() -> void:
 			patrol += 1
 	print("SMOKE: всего НПЦ=%d (стражи=%d патруль=%d жители=%d) Серые=%d" % [
 		Game.npcs.size(), guards.size(), patrol, citizens, greys])
+	# Separation must NUDGE, not cancel: a neighbour standing exactly in the path
+	# used to flip the wish vector backwards ("I cannot walk in the direction he
+	# is stuck to"). Now the unit always keeps forward progress and is steered
+	# sideways around the neighbour (Diablo 2 behaviour).
 	var separation_ok := true
+	var steer_ok := true
 	if Game.npcs.size() >= 2:
 		var first: Node2D = Game.npcs[0]
 		var second: Node2D = Game.npcs[1]
 		var first_pos := first.global_position
 		var second_pos := second.global_position
 		first.global_position = Vector2(1000.0, 1000.0)
+		# 1) neighbour straight ahead, nearly on top of us: must not reverse the wish
 		second.global_position = first.global_position + Vector2(2.0, 0.0)
-		separation_ok = Game.movement_direction(first, Vector2.RIGHT).x < 0.0
+		Game._sep_grid_frame = -1
+		var d_ahead: Vector2 = Game.movement_direction(first, Vector2.RIGHT)
+		separation_ok = d_ahead.dot(Vector2.RIGHT) >= 0.5
+		# 2) neighbour slightly to the side: must steer AROUND (a sideways component)
+		second.global_position = first.global_position + Vector2(2.0, 2.0)
+		Game._sep_grid_frame = -1
+		var d_side: Vector2 = Game.movement_direction(first, Vector2.RIGHT)
+		steer_ok = d_side.x > 0.0 and d_side.y < -0.05
 		first.global_position = first_pos
 		second.global_position = second_pos
-	print("SMOKE: separation=%s" % separation_ok)
+		Game._sep_grid_frame = -1
+	print("SMOKE: separation forward=%s steer=%s" % [separation_ok, steer_ok])
 
 	# Ранний выход по отсутствию Серых УДАЛЁН: после чистки Аллодов их нет
 	# штатно, и такой выход проглатывал весь отчёт, печатая строку без
@@ -112,9 +126,10 @@ func _run() -> void:
 		if npc == null or npc.state == "dead" or str(npc.anim_set).is_empty():
 			npcs_ok = false
 	print("SMOKE: городских юнитов %d, все живы и с набором=%s" % [alive, npcs_ok])
-	if grays == 0 and npcs_ok and not guards.is_empty():
+	if grays == 0 and npcs_ok and separation_ok and steer_ok and not guards.is_empty():
 		print("SMOKE: RESULT: OK (пул Серых пуст, городские НПЦ на месте)")
 	else:
 		print("SMOKE: RESULT: FAIL (grays=", grays, " npcs_ok=", npcs_ok,
+			" separation=", separation_ok, " steer=", steer_ok,
 			" guards=", guards.size(), ")")
 	quit()

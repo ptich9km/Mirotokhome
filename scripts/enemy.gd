@@ -161,7 +161,7 @@ func _physics_process_impl(delta):
 			else:
 				_chase_move(delta, target)
 		"attack":
-			if distance_to_target > Game.attack_reach(self) + 8.0:
+			if distance_to_target > Game.attack_exit_reach(self):
 				state = "chase"
 				_impact_timer = -1.0
 			else:

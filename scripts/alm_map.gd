@@ -1196,17 +1196,46 @@ func is_within_bounds(pos: Vector2, margin: float = 12.0) -> bool:
 ## Path from from_world to to_world in world points (cell centres), without the first
 ## cell. If the goal is impassable — look for a path to the nearest walkable cell next to it
 ## (a click on a tree/water leads the hero right to the edge). Empty — no path.
-func find_path(from_world: Vector2, to_world: Vector2) -> Array:
+##
+## `blocked` — cells held by other units (Diablo 2 pathing): the search goes AROUND
+## them instead of driving into a body. The caller builds it with Game.occupied_cells()
+## and must leave the watched/target unit out. A fully enclosed goal still returns a
+## partial path to the closest reachable cell.
+func find_path(from_world: Vector2, to_world: Vector2, blocked: Dictionary = {}) -> Array:
 	if not Game.perf_enabled:
-		return _find_path_impl(from_world, to_world)
+		return _find_path_impl(from_world, to_world, blocked)
 	var t0 := Time.get_ticks_usec()
-	var out := _find_path_impl(from_world, to_world)
+	var out := _find_path_impl(from_world, to_world, blocked)
 	Game.perf_end("find_path", t0)
 	Game.perf_count("find_path_calls")
 	return out
 
 
-func _find_path_impl(from_world: Vector2, to_world: Vector2) -> Array:
+## Nearest free cell around `cell` (up to `max_radius` rings): where a click on an
+## occupied cell should lead. (-1,-1) — nothing free nearby.
+func free_cell_near(cell: Vector2i, blocked: Dictionary, max_radius: int = 2) -> Vector2i:
+	if not blocked.has(cell) and _cell_walkable(cell):
+		return cell
+	var best := Vector2i(-1, -1)
+	var best_d := 1.0e18
+	for r in range(1, max_radius + 1):
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if absi(dx) != r and absi(dy) != r:
+					continue   # ring, not the filled square
+				var c := cell + Vector2i(dx, dy)
+				if blocked.has(c) or not _cell_walkable(c):
+					continue
+				var d := float(dx * dx + dy * dy)
+				if d < best_d:
+					best_d = d
+					best = c
+		if best.x >= 0:
+			return best
+	return best
+
+
+func _find_path_impl(from_world: Vector2, to_world: Vector2, blocked: Dictionary = {}) -> Array:
 	var start := _cell_of(from_world)
 	var goal := _cell_of(to_world)
 	# The hero may stand in a cell that is impassable by marking (stuck/slope):
@@ -1236,6 +1265,13 @@ func _find_path_impl(from_world: Vector2, to_world: Vector2) -> Array:
 			goal = shore
 		else:
 			goal = best
+
+	# The goal is held by another unit (a chase target that died and was replaced,
+	# a follower): aim at the nearest free cell, like Diablo 2's PathTargetFree.
+	if not blocked.is_empty() and blocked.has(goal):
+		var free_goal := free_cell_near(goal, blocked, 2)
+		if free_goal.x >= 0:
+			goal = free_goal
 
 	# Greedy best-first by the Chebyshev heuristic (integer "buckets" — O(1) extraction).
 	# BFS was measured at 360+ ms; a linear minimum over open — another ~50 ms. Buckets cut
@@ -1279,6 +1315,8 @@ func _find_path_impl(from_world: Vector2, to_world: Vector2) -> Array:
 			var n := cur + d
 			if closed.has(n) or not _cell_walkable(n):
 				continue
+			if not blocked.is_empty() and blocked.has(n):
+				continue   # another unit stands here — route around it
 			if _structure_blocks_cell(n):
 				continue
 			if d.x != 0 and d.y != 0:
@@ -1336,6 +1374,12 @@ func _heuristic(a: Vector2i, b: Vector2i) -> float:
 	return float(maxi(absi(a.x - b.x), absi(a.y - b.y)))
 
 func _cell_walkable(cell: Vector2i) -> bool:
+	# Bounds FIRST: int() truncates toward zero, so a point at y = -16 maps to
+	# cell 0 inside is_walkable_world and a negative cell looked walkable. The
+	# path then carried a waypoint OUTSIDE the map, the hero could never reach it
+	# and crept along the border (the "long stalls while walking" report).
+	if cell.x < 0 or cell.y < 0 or cell.x >= map_width or cell.y >= map_height:
+		return false
 	return is_walkable_world(Vector2(cell.x * TILE + TILE / 2.0, cell.y * TILE + TILE / 2.0))
 
 ## The nearest walkable cell (a spiral of radius r) or (-1,-1).
