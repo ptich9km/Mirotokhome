@@ -1,0 +1,11 @@
+{
+  "slug": "shadow_fern",
+  "frames": 4,
+  "size": [
+    32,
+    32
+  ],
+  "scale": 0.069,
+  "ground_y": 29,
+  "source": "import/herb_strips/shadow_fern.png"
+}

@@ -38,6 +38,11 @@ func setup(key: String, path: String, grid_cell: Vector2i, relief: float,
 	add_child(_sprite)
 	_fps = maxi(0, fps)
 	_frames = _load_frames(path, frame_count)
+	## Start on frame 0, not on the still icon: the frames are drawn by a
+	## different tool than the icon and occupy a slightly different box, so
+	## showing the icon for the first 1/fps s reads as a flicker.
+	if not _frames.is_empty():
+		_sprite.texture = _frames[0]
 	var shape := CircleShape2D.new()
 	shape.radius = 18.0
 	var collision := CollisionShape2D.new()

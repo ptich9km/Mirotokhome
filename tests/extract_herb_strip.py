@@ -40,6 +40,10 @@ SRC = REPO / "import" / "herb_strips"
 DST = REPO / "assets" / "professions" / "herbalism"
 PREVIEW = REPO / "import" / "herb_strips" / "_preview.png"
 
+## Paint dust between the panels is 1-8 px tall, a real plant is ~350 px: a
+## short run is not a figure (kept in sync with gen_herb_strip.py).
+MIN_FIGURE_H = 40
+
 OUT = 32            # the icon size the map and the inventory use
 CONTENT_W = 27      # max plant width inside 32 px
 CONTENT_H = 26      # max plant height inside 32 px
@@ -50,12 +54,70 @@ FRAMES = 4
 
 
 def _magenta_alpha(a: np.ndarray) -> np.ndarray:
-    """1.0 for the plant, 0.0 for the flat magenta background."""
+    """1.0 for the plant, 0.0 for the flat magenta background.
+
+    The old rule was two colour tests, and its second one - "dark and redder
+    than green" - was a violet detector: it deleted lavender spikes, the
+    shadow fern and the ember leaves, leaving grey stems (measured on the QC
+    sheet 11.11). Now the sheet is normalized to pure magenta by the
+    generator, so the background is found geometrically: magenta-ish pixels
+    CONNECTED TO THE EDGE, plus enclosed holes of near-pure magenta between
+    leaves. A plant colour may be any hue and still survive.
+    """
+    from collections import deque
+
+    h, w = a.shape[:2]
+    corners = np.concatenate([a[:24, :24].reshape(-1, 3), a[:24, -24:].reshape(-1, 3),
+                              a[-24:, :24].reshape(-1, 3), a[-24:, -24:].reshape(-1, 3)])
+    bg = np.median(corners.astype(np.float32), axis=0)
+    close = np.abs(a - bg).max(axis=2) <= 110
+    seen = np.zeros((h, w), bool)
+    queue: deque = deque()
+    for x in range(w):
+        for y in (0, h - 1):
+            if close[y, x] and not seen[y, x]:
+                seen[y, x] = True
+                queue.append((y, x))
+    for y in range(h):
+        for x in (0, w - 1):
+            if close[y, x] and not seen[y, x]:
+                seen[y, x] = True
+                queue.append((y, x))
+    while queue:
+        y, x = queue.popleft()
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            ny, nx = y + dy, x + dx
+            if 0 <= ny < h and 0 <= nx < w and close[ny, nx] and not seen[ny, nx]:
+                seen[ny, nx] = True
+                queue.append((ny, nx))
+    ## Enclosed gaps keep the exact background colour and no plant is that
+    ## colour, so they are safe to drop even when the flood fill cannot reach.
+    hole = np.abs(a - bg).max(axis=2) <= 45
+    ## Bright magenta survives around the soil as a painted halo; it is not
+    ## always reachable from the edge (the root ball can enclose it), and at
+    ## 32 px it reads as a pink stain. "Magenta-ness" is min(R,B) - G: on the
+    ## real sheets the halo scores 117, a lavender spike 60, a shadow-fern
+    ## frond 40, a red berry 0 - so the threshold cleans the halo and keeps
+    ## every plant colour.
     r, g, b = a[..., 0], a[..., 1], a[..., 2]
-    flat = (r > 170) & (b > 170) & (g < 110)
-    dark = (g < b - 25) & ((r - g) > 60)
-    bg = flat | dark
-    return np.where(bg, 0.0, 1.0)
+    pink = np.minimum(r, b)
+    fringe = (g < 110) & (pink > 140) & ((pink - g) > 90)
+    bg_mask = seen | hole | fringe
+    alpha = np.where(bg_mask, 0.0, 1.0)
+    ## The dark magenta of the contact shadow has the same colour family as a
+    ## lavender spike, so colour alone cannot separate them - the POSITION can:
+    ## the shadow lives near the soil, the flowers sit on top. The violet rule
+    ## therefore applies only to the lower part of the figures.
+    rows = np.where(alpha.max(axis=1) > 0)[0]
+    if rows.size:
+        top = int(rows.min())
+        bottom = int(rows.max())
+        cut = top + int((bottom - top + 1) * 0.45)
+        band = np.zeros_like(alpha)
+        band[cut:] = 1.0
+        violet = (g < 120) & (g < b - 25) & ((r - g) > 55)
+        alpha = np.where((band > 0) & violet, 0.0, alpha)
+    return alpha
 
 
 def _boxes(alpha: np.ndarray) -> list[tuple[int, int, int, int]]:
@@ -131,12 +193,35 @@ def _root_x(img: Image.Image) -> float:
     return float(xs2.mean())
 
 
+def _resize_premultiplied(img: Image.Image, size: tuple[int, int]) -> Image.Image:
+    """Downscale in premultiplied alpha, then un-premultiply.
+
+    A straight RGBA resize mixes the RGB of fully transparent pixels into the
+    plant, and those pixels still carry MAGENTA from the sheet: the frames came
+    out muddy/olive with a pink bias (measured on tall_grass, 11.11 - 350 px
+    sheet pixels squeezed into 24 px). Premultiplying makes transparent pixels
+    contribute nothing.
+    """
+    arr = np.array(img).astype(np.float32)
+    alpha = arr[..., 3:4] / 255.0
+    premul = np.concatenate([arr[..., :3] * alpha, arr[..., 3:4]], axis=2)
+    small = np.array(
+        Image.fromarray(np.clip(premul, 0, 255).astype(np.uint8), "RGBA")
+        .resize(size, Image.Resampling.LANCZOS)
+    ).astype(np.float32)
+    a = small[..., 3:4] / 255.0
+    rgb = np.where(a > 0.002, small[..., :3] / np.maximum(a, 1e-3), 0.0)
+    out = np.concatenate([np.clip(rgb, 0, 255), small[..., 3:4]], axis=2)
+    return Image.fromarray(out.astype(np.uint8), "RGBA")
+
+
 def build(slug: str, dry_run: bool) -> bool:
     src = SRC / f"{slug}.png"
     if not src.exists():
         print(f"FAIL {slug}: no sheet {src}")
         return False
-    ok, report = preflight(str(src), expect=FRAMES, min_gap=40, min_ratio=0.0)
+    ok, report = preflight(str(src), expect=FRAMES, min_gap=40, min_ratio=0.0,
+                           min_figure_h=MIN_FIGURE_H)
     if not ok:
         print(report)
         print(f"FAIL {slug}: preflight rejected the sheet")
@@ -163,7 +248,7 @@ def build(slug: str, dry_run: bool) -> bool:
     for index, fig in enumerate(figures):
         new_w = max(1, int(round(fig.width * scale)))
         new_h = max(1, int(round(fig.height * scale)))
-        resized = fig.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        resized = _resize_premultiplied(fig, (new_w, new_h))
         root = _root_x(fig) * scale
         canvas = Image.new("RGBA", (OUT, OUT), (0, 0, 0, 0))
         x = int(round(OUT / 2.0 - root))
