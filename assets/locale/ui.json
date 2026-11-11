@@ -934,5 +934,20 @@
   "ui.feed.speaker.archmage": {"ru": "Великий маг", "en": "Great mage"},
   "ui.feed.arrival": {"ru": "Ты прибыл: %s. Осмотрись.", "en": "You have arrived: %s. Look around."},
   "ui.feed.travel": {"ru": "Переход: %s → %s.", "en": "Travel: %s → %s."},
-  "ui.feed.owner_changed": {"ru": "%s теперь принадлежит %s.", "en": "%s now belongs to %s."}
+  "ui.feed.owner_changed": {"ru": "%s теперь принадлежит %s.", "en": "%s now belongs to %s."},
+  "ui.talk.merchant.line": {"ru": "Торговец: «%s»", "en": "Merchant: \"%s\""},
+  "ui.talk.merchant.1": {"ru": "Снаряжение дорожает с каждой новой стражей у ворот.", "en": "Gear gets dearer with every new guard at the gate."},
+  "ui.talk.merchant.2": {"ru": "Зелья всегда пригодятся: герои тоже умеют получать раны.", "en": "Potions always come in handy - heroes get hurt too."},
+  "ui.talk.merchant.3": {"ru": "Магические книги есть только у тех, кто действительно читает магию.", "en": "Spell books are for those who actually read magic."},
+  "ui.talk.merchant.4": {"ru": "Не торопись: хорошая броня окупается после второй вылазки.", "en": "No hurry. Good armour pays for itself after the second trip."},
+  "ui.talk.inn.line": {"ru": "Рекрутер: «%s»", "en": "Recruiter: \"%s\""},
+  "ui.talk.inn.1": {"ru": "Говорят, на севере всё больше диких зверей... Охрана у ворот не справляется.", "en": "They say there are more wild beasts up north... The gate watch cannot keep up."},
+  "ui.talk.inn.2": {"ru": "В школе тренировок берут золотом за каждую ступень. Дорого, но быстро.", "en": "The training school charges gold for every rank. Expensive, but quick."},
+  "ui.talk.inn.3": {"ru": "Торговец в лавке скупает всё, что принесёшь из-за стен. Вещи — по полцены.", "en": "The shopkeeper buys everything you drag back through the gate. Half price for goods."},
+  "ui.talk.inn.4": {"ru": "Маги говорят, что настоящая сила — в книгах стихий. Остальным остаются свитки.", "en": "The mages say real power is in the sphere books. The rest of us get scrolls."},
+  "ui.talk.inn.5": {"ru": "Слышал, за воротами люди пропадают. Особенно те, кто идёт без отряда.", "en": "I hear people go missing outside the walls. Especially those who travel alone."},
+  "ui.talk.inn.6": {"ru": "Хороший наёмник стоит своих денег: сам себе и убийца, и щит.", "en": "A good hireling is worth the coin: he is both killer and shield."},
+  "ui.talk.inn.party_full": {"ru": "Отряд уже заполнен: максимум %d бойца.", "en": "The party is full: at most %d fighters."},
+  "ui.talk.inn.no_gold": {"ru": "Не хватает золота на наём: нужно %d.", "en": "Not enough gold to hire: %d needed."},
+  "ui.talk.inn.hired": {"ru": "%s завербован. Удачной охоты!", "en": "%s hired. Good hunting!"}
 }

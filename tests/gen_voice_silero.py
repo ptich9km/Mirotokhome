@@ -10,6 +10,10 @@ speaker and a DSP preset, `lines` holds the text and the per-take direction.
 Files go to `assets/audio/sfx/voice/`, and only `voice.*` keys of
 `sound_db.json` are rewritten.
 
+English uses the same file: `--lang en` takes `text_en` and `speaker_en`
+(Silero v3_en, 119 speakers) and writes keys with a `voice.en.` prefix, so both
+languages coexist in `sound_db.json` and the game picks one by `Loc.locale()`.
+
 Requires the ComfyUI venv (torch/torchaudio/scipy/av) and the Silero model:
     set PYTHONPATH=C:\\Work\\ComfyUI\\_music_album\\libs
     C:\\Work\\ComfyUI\\.venv\\Scripts\\python.exe tests\\gen_voice_silero.py
@@ -20,6 +24,7 @@ Usage:
   ... gen_voice_silero.py --force           # re-render everything
   ... gen_voice_silero.py --force --only merchant.ork
   ... gen_voice_silero.py --check           # files, keys and levels only
+  ... gen_voice_silero.py --lang en         # English (v3_en, voice.en.* keys)
 """
 from __future__ import annotations
 
@@ -50,27 +55,34 @@ def silero_libs() -> Path:
     return path
 
 
-def load_model():
-    """Load v5_ru. Silero's downloader drops `latest_silero_models.yml` into the
-    current directory, so the call runs from the model folder and the game repo
-    stays clean."""
+def load_model(lang: str = "ru"):
+    """Load the language model. Silero's downloader drops `latest_silero_models.yml`
+    into the current directory, so the call runs from the model folder and the game
+    repo stays clean."""
     libs = silero_libs()
     sys.path.insert(0, str(libs))
     from silero import silero_tts
 
+    model_id = {"ru": "v5_ru", "en": "v3_en"}.get(lang)
+    if model_id is None:
+        sys.exit(f"unknown language {lang}")
     cwd = Path.cwd()
     os.chdir(libs.parent)
     try:
-        model, _example = silero_tts(language="ru", speaker="v5_ru")
+        model, _example = silero_tts(language=lang, speaker=model_id)
     finally:
         os.chdir(cwd)
     return model
 
 
-def synth(model, text: str, speaker: str, rate: str, pitch: str) -> np.ndarray:
+def synth(model, text: str, speaker: str, rate: str, pitch: str,
+          lang: str = "ru") -> np.ndarray:
     ssml = f'<speak><prosody rate="{rate}" pitch="{pitch}">{text}</prosody></speak>'
-    a = model.apply_tts(ssml_text=ssml, speaker=speaker, sample_rate=SR,
-                        put_accent=True, put_stress_homo=True, put_yo=True)
+    kwargs = {"ssml_text": ssml, "speaker": speaker, "sample_rate": SR}
+    if lang == "ru":
+        # Russian-only shaping; the English model has no such arguments.
+        kwargs.update(put_accent=True, put_stress_homo=True, put_yo=True)
+    a = model.apply_tts(**kwargs)
     return np.asarray(a.detach().cpu().numpy() if hasattr(a, "detach") else a,
                       dtype=np.float32).reshape(-1)
 
@@ -107,20 +119,39 @@ def file_of(key: str, take: int = 1) -> str:
     return f"voice/{name}.mp3"
 
 
-def expand(lines: list[dict]) -> list[dict]:
-    """One job per rendered file: key, file, text, direction, preset."""
+def expand(lines: list[dict], lang: str = "ru") -> list[dict]:
+    """One job per rendered file: key, file, text, direction, preset.
+
+    English takes live under `voice.en.*` with the same tail, so a race take is
+    still `voice.en.npc.merchant.ork.1`; the text comes from `text_en` and a
+    missing translation is an error, not a silent Russian take under an English
+    key."""
+    prefix = "voice." if lang == "ru" else "voice.en."
     jobs: list[dict] = []
     for line in lines:
+        raw_key = str(line["key"])
+        if not raw_key.startswith("voice."):
+            raise SystemExit(f"voice_lines: key must start with voice.: {raw_key}")
+        text = str(line["text"])
+        if lang == "en":
+            text = str(line.get("text_en", ""))
+            if not text:
+                raise SystemExit(f"voice_lines: no text_en for {raw_key}")
         races = line.get("races") or [""]
         variants = line.get("variants") or [{}]
         for race in races:
             role = str(line["role"]) + (f".{race}" if race else "")
             for take, variant in enumerate(variants, 1):
+                take_text = text
+                if lang == "en":
+                    take_text = str(variant.get("text_en", text))
+                else:
+                    take_text = str(variant.get("text", text))
                 jobs.append({
-                    "key": raced_key(str(line["key"]), race),
+                    "key": prefix + raced_key(raw_key[len("voice."):], race),
                     "role": role,
                     "take": take,
-                    "text": str(variant.get("text", line["text"])),
+                    "text": take_text,
                     "rate": variant.get("rate"),
                     "pitch": variant.get("pitch"),
                     "preset": line.get("preset"),
@@ -137,11 +168,14 @@ def main() -> int:
     ap.add_argument("--force", nargs="*", default=None,
                     help="keys/roles to re-render; bare --force means everything")
     ap.add_argument("--only", default="", help="substring filter over key and role")
+    ap.add_argument("--lang", default="ru", choices=["ru", "en"],
+                    help="ru = v5_ru under voice.*, en = v3_en under voice.en.*")
     args = ap.parse_args()
+    prefix = "voice." if args.lang == "ru" else "voice.en."
 
     cfg = json.loads(LINES.read_text(encoding="utf-8"))
     cast: dict = cfg["cast"]
-    jobs = expand(cfg["lines"])
+    jobs = expand(cfg["lines"], args.lang)
 
     if args.only:
         jobs = [j for j in jobs if args.only in j["key"] or args.only in j["role"]]
@@ -162,9 +196,11 @@ def main() -> int:
 
     if args.check:
         db = json.loads(DB.read_text(encoding="utf-8"))["keys"]
-        voice_keys = {k: v for k, v in db.items() if k.startswith("voice.")}
+        voice_keys = {k: v for k, v in db.items()
+                      if k.startswith(prefix) and not (
+                          args.lang == "ru" and k.startswith("voice.en."))}
         want = {j["key"] for j in jobs}
-        print(f"sound_db voice-ключей: {len(voice_keys)}, ожидается: {len(want)}")
+        print(f"sound_db {prefix}* ключей: {len(voice_keys)}, ожидается: {len(want)}")
         print("лишние ключи:", sorted(set(voice_keys) - want) or "нет")
         print("не хватает ключей:", sorted(want - set(voice_keys)) or "нет")
         return 0
@@ -174,18 +210,28 @@ def main() -> int:
     if not todo:
         print("всё озвучено")
     else:
-        print(f"к рендеру: {len(todo)} файл(ов)")
-        model = None if args.dry_run else load_model()
+        print(f"к рендеру: {len(todo)} файл(ов), язык {args.lang}")
+        model = None if args.dry_run else load_model(args.lang)
         for job in todo:
             conf = cast[job["role"]]
             rate = job["rate"] or conf.get("rate", "medium")
             pitch = job["pitch"] or conf.get("pitch", "medium")
-            preset = job["preset"] or conf.get("preset", "human")
+            # The line may pin its own preset (death); the cast may have a
+            # language-specific one — the player rejected the hoarse necro take in
+            # English while the Russian one stays as approved.
+            preset = job["preset"]
+            if not preset:
+                preset = conf.get("preset_en") if args.lang == "en" else None
+            if not preset:
+                preset = conf.get("preset", "human")
+            speaker = conf.get("speaker_en") if args.lang == "en" else conf.get("speaker")
+            if not speaker:
+                raise SystemExit(f"voice_lines: no speaker for {job['role']} ({args.lang})")
             rel = file_of(job["key"], job["take"])
             if args.dry_run:
-                print(f"  {rel:38s} {conf['speaker']:8s} {preset:6s} {rate:8s} {pitch:8s} {job['text'][:40]}")
+                print(f"  {rel:38s} {speaker:8s} {preset:6s} {rate:8s} {pitch:8s} {job['text'][:40]}")
                 continue
-            raw = synth(model, job["text"], conf["speaker"], rate, pitch)
+            raw = synth(model, job["text"], speaker, rate, pitch, args.lang)
             audio = apply_preset(raw, preset)
             write_mp3(OUT / Path(rel).name, audio)
             print(f"  OK {rel:38s} {len(audio) / SR:5.2f}s  {job['text'][:38]}")
@@ -209,8 +255,8 @@ def main() -> int:
             "subtitle": first["subtitle"],
         }
     DB.write_text(json.dumps(db, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"sound_db.json: voice-ключей {sum(1 for k in keys if k.startswith('voice.'))}, "
-          f"файлов {len(jobs)}")
+    print(f"sound_db.json: {prefix}* ключей "
+          f"{sum(1 for k in keys if k.startswith(prefix))}, файлов {len(jobs)}")
     return 0
 
 

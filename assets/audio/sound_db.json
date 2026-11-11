@@ -1110,6 +1110,490 @@
         "voice/npc_inn_druid_6.mp3"
       ],
       "subtitle": "Хороший наёмник стоит своих денег: сам себе и убийца, и щит."
+    },
+    "voice.en.npc.merchant.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_1.mp3"
+      ],
+      "subtitle": "Снаряжение дорожает с каждой новой стражей у ворот."
+    },
+    "voice.en.npc.merchant.ork.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_ork_1.mp3"
+      ],
+      "subtitle": "Снаряжение дорожает с каждой новой стражей у ворот."
+    },
+    "voice.en.npc.merchant.necro.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_necro_1.mp3"
+      ],
+      "subtitle": "Снаряжение дорожает с каждой новой стражей у ворот."
+    },
+    "voice.en.npc.merchant.druid.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_druid_1.mp3"
+      ],
+      "subtitle": "Снаряжение дорожает с каждой новой стражей у ворот."
+    },
+    "voice.en.npc.merchant.2": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_2.mp3"
+      ],
+      "subtitle": "Зелья всегда пригодятся: герои тоже умеют получать раны."
+    },
+    "voice.en.npc.merchant.ork.2": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_ork_2.mp3"
+      ],
+      "subtitle": "Зелья всегда пригодятся: герои тоже умеют получать раны."
+    },
+    "voice.en.npc.merchant.necro.2": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_necro_2.mp3"
+      ],
+      "subtitle": "Зелья всегда пригодятся: герои тоже умеют получать раны."
+    },
+    "voice.en.npc.merchant.druid.2": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_druid_2.mp3"
+      ],
+      "subtitle": "Зелья всегда пригодятся: герои тоже умеют получать раны."
+    },
+    "voice.en.npc.merchant.3": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_3.mp3"
+      ],
+      "subtitle": "Магические книги есть только у тех, кто действительно читает магию."
+    },
+    "voice.en.npc.merchant.ork.3": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_ork_3.mp3"
+      ],
+      "subtitle": "Магические книги есть только у тех, кто действительно читает магию."
+    },
+    "voice.en.npc.merchant.necro.3": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_necro_3.mp3"
+      ],
+      "subtitle": "Магические книги есть только у тех, кто действительно читает магию."
+    },
+    "voice.en.npc.merchant.druid.3": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_druid_3.mp3"
+      ],
+      "subtitle": "Магические книги есть только у тех, кто действительно читает магию."
+    },
+    "voice.en.npc.merchant.4": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_4.mp3"
+      ],
+      "subtitle": "Не торопись: хорошая броня окупается после второй вылазки."
+    },
+    "voice.en.npc.merchant.ork.4": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_ork_4.mp3"
+      ],
+      "subtitle": "Не торопись: хорошая броня окупается после второй вылазки."
+    },
+    "voice.en.npc.merchant.necro.4": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_necro_4.mp3"
+      ],
+      "subtitle": "Не торопись: хорошая броня окупается после второй вылазки."
+    },
+    "voice.en.npc.merchant.druid.4": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_merchant_druid_4.mp3"
+      ],
+      "subtitle": "Не торопись: хорошая броня окупается после второй вылазки."
+    },
+    "voice.en.npc.inn.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_1.mp3"
+      ],
+      "subtitle": "Говорят, на севере всё больше диких зверей... Охрана у ворот не справляется."
+    },
+    "voice.en.npc.inn.ork.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_ork_1.mp3"
+      ],
+      "subtitle": "Говорят, на севере всё больше диких зверей... Охрана у ворот не справляется."
+    },
+    "voice.en.npc.inn.necro.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_necro_1.mp3"
+      ],
+      "subtitle": "Говорят, на севере всё больше диких зверей... Охрана у ворот не справляется."
+    },
+    "voice.en.npc.inn.druid.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_druid_1.mp3"
+      ],
+      "subtitle": "Говорят, на севере всё больше диких зверей... Охрана у ворот не справляется."
+    },
+    "voice.en.npc.inn.2": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_2.mp3"
+      ],
+      "subtitle": "В школе тренировок берут золотом за каждую ступень. Дорого, но быстро."
+    },
+    "voice.en.npc.inn.ork.2": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_ork_2.mp3"
+      ],
+      "subtitle": "В школе тренировок берут золотом за каждую ступень. Дорого, но быстро."
+    },
+    "voice.en.npc.inn.necro.2": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_necro_2.mp3"
+      ],
+      "subtitle": "В школе тренировок берут золотом за каждую ступень. Дорого, но быстро."
+    },
+    "voice.en.npc.inn.druid.2": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_druid_2.mp3"
+      ],
+      "subtitle": "В школе тренировок берут золотом за каждую ступень. Дорого, но быстро."
+    },
+    "voice.en.npc.inn.3": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_3.mp3"
+      ],
+      "subtitle": "Торговец в лавке скупает всё, что принесёшь из-за стен. Вещи — по полцены."
+    },
+    "voice.en.npc.inn.ork.3": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_ork_3.mp3"
+      ],
+      "subtitle": "Торговец в лавке скупает всё, что принесёшь из-за стен. Вещи — по полцены."
+    },
+    "voice.en.npc.inn.necro.3": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_necro_3.mp3"
+      ],
+      "subtitle": "Торговец в лавке скупает всё, что принесёшь из-за стен. Вещи — по полцены."
+    },
+    "voice.en.npc.inn.druid.3": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_druid_3.mp3"
+      ],
+      "subtitle": "Торговец в лавке скупает всё, что принесёшь из-за стен. Вещи — по полцены."
+    },
+    "voice.en.npc.inn.4": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_4.mp3"
+      ],
+      "subtitle": "Маги говорят, что настоящая сила — в книгах стихий. Остальным остаются свитки."
+    },
+    "voice.en.npc.inn.ork.4": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_ork_4.mp3"
+      ],
+      "subtitle": "Маги говорят, что настоящая сила — в книгах стихий. Остальным остаются свитки."
+    },
+    "voice.en.npc.inn.necro.4": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_necro_4.mp3"
+      ],
+      "subtitle": "Маги говорят, что настоящая сила — в книгах стихий. Остальным остаются свитки."
+    },
+    "voice.en.npc.inn.druid.4": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_druid_4.mp3"
+      ],
+      "subtitle": "Маги говорят, что настоящая сила — в книгах стихий. Остальным остаются свитки."
+    },
+    "voice.en.npc.inn.5": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_5.mp3"
+      ],
+      "subtitle": "Слышал, за воротами люди пропадают. Особенно те, кто идёт без отряда."
+    },
+    "voice.en.npc.inn.ork.5": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_ork_5.mp3"
+      ],
+      "subtitle": "Слышал, за воротами люди пропадают. Особенно те, кто идёт без отряда."
+    },
+    "voice.en.npc.inn.necro.5": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_necro_5.mp3"
+      ],
+      "subtitle": "Слышал, за воротами люди пропадают. Особенно те, кто идёт без отряда."
+    },
+    "voice.en.npc.inn.druid.5": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_druid_5.mp3"
+      ],
+      "subtitle": "Слышал, за воротами люди пропадают. Особенно те, кто идёт без отряда."
+    },
+    "voice.en.npc.inn.6": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_6.mp3"
+      ],
+      "subtitle": "Хороший наёмник стоит своих денег: сам себе и убийца, и щит."
+    },
+    "voice.en.npc.inn.ork.6": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_ork_6.mp3"
+      ],
+      "subtitle": "Хороший наёмник стоит своих денег: сам себе и убийца, и щит."
+    },
+    "voice.en.npc.inn.necro.6": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_necro_6.mp3"
+      ],
+      "subtitle": "Хороший наёмник стоит своих денег: сам себе и убийца, и щит."
+    },
+    "voice.en.npc.inn.druid.6": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.0,
+      "files": [
+        "voice/en_npc_inn_druid_6.mp3"
+      ],
+      "subtitle": "Хороший наёмник стоит своих денег: сам себе и убийца, и щит."
+    },
+    "voice.en.hero.male.attack.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.03,
+      "files": [
+        "voice/en_hero_male_attack_1.mp3",
+        "voice/en_hero_male_attack_1_2.mp3",
+        "voice/en_hero_male_attack_1_3.mp3"
+      ],
+      "subtitle": "Есть!"
+    },
+    "voice.en.hero.male.attack.2": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.03,
+      "files": [
+        "voice/en_hero_male_attack_2.mp3",
+        "voice/en_hero_male_attack_2_2.mp3",
+        "voice/en_hero_male_attack_2_3.mp3"
+      ],
+      "subtitle": "Держись!"
+    },
+    "voice.en.hero.male.attack.3": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.03,
+      "files": [
+        "voice/en_hero_male_attack_3.mp3",
+        "voice/en_hero_male_attack_3_2.mp3",
+        "voice/en_hero_male_attack_3_3.mp3"
+      ],
+      "subtitle": "Не сейчас."
+    },
+    "voice.en.hero.male.pain.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.03,
+      "files": [
+        "voice/en_hero_male_pain_1.mp3",
+        "voice/en_hero_male_pain_1_2.mp3"
+      ],
+      "subtitle": "Ах ты..."
+    },
+    "voice.en.hero.male.pain.2": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.03,
+      "files": [
+        "voice/en_hero_male_pain_2.mp3",
+        "voice/en_hero_male_pain_2_2.mp3"
+      ],
+      "subtitle": "Больновато."
+    },
+    "voice.en.hero.male.death.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.03,
+      "files": [
+        "voice/en_hero_male_death_1.mp3"
+      ],
+      "subtitle": "...не так я это представлял."
+    },
+    "voice.en.hero.female.attack.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.03,
+      "files": [
+        "voice/en_hero_female_attack_1.mp3",
+        "voice/en_hero_female_attack_1_2.mp3",
+        "voice/en_hero_female_attack_1_3.mp3"
+      ],
+      "subtitle": "Есть!"
+    },
+    "voice.en.hero.female.attack.2": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.03,
+      "files": [
+        "voice/en_hero_female_attack_2.mp3",
+        "voice/en_hero_female_attack_2_2.mp3",
+        "voice/en_hero_female_attack_2_3.mp3"
+      ],
+      "subtitle": "Держись!"
+    },
+    "voice.en.hero.female.attack.3": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.03,
+      "files": [
+        "voice/en_hero_female_attack_3.mp3",
+        "voice/en_hero_female_attack_3_2.mp3",
+        "voice/en_hero_female_attack_3_3.mp3"
+      ],
+      "subtitle": "Не сейчас."
+    },
+    "voice.en.hero.female.pain.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.03,
+      "files": [
+        "voice/en_hero_female_pain_1.mp3",
+        "voice/en_hero_female_pain_1_2.mp3"
+      ],
+      "subtitle": "Ах ты..."
+    },
+    "voice.en.hero.female.pain.2": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.03,
+      "files": [
+        "voice/en_hero_female_pain_2.mp3",
+        "voice/en_hero_female_pain_2_2.mp3"
+      ],
+      "subtitle": "Больновато."
+    },
+    "voice.en.hero.female.death.1": {
+      "bus": "Voice",
+      "gain_db": 0.0,
+      "pitch_jitter": 0.03,
+      "files": [
+        "voice/en_hero_female_death_1.mp3"
+      ],
+      "subtitle": "...не так я это представляла."
     }
   }
 }
