@@ -502,7 +502,10 @@ func _potion_size() -> String:
 ## лечения — доля максимального HP цели. Врагов не лечит никогда.
 ## «Маг» определяется по набору: `city_*_mage`, `ork_mage_a52` и т. п.
 func _mage_heal_tick(delta: float) -> void:
-	if not anim_set.contains("mage"):
+	# Mages heal by the set name. The city head heals too: before the head used a
+	# "..._mage" set and healed by that accident; since 11.11 the heads have their
+	# own set (city_<race>_head), so the rule is spelled out instead of inherited.
+	if not anim_set.contains("mage") and not is_city_head:
 		return
 	_heal_cd = maxf(0.0, _heal_cd - delta)
 	if _heal_cd > 0.0:

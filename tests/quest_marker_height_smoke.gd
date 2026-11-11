@@ -13,7 +13,7 @@ var _fails: Array = []
 var _npc: Npc = null
 
 ## A real quest giver set from the generator (city head of the human city).
-const HEAD_SET := "city_human_mage/t2"
+const HEAD_SET := "city_human_head/t0"
 ## marks/*.png are 24x24 and the sprite is centred on the marker origin.
 const MARKER_HALF := 12.0
 
