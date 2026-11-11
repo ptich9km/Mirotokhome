@@ -53,12 +53,12 @@
 - **Сборка exe — всегда с версией в имени (правило игрока 11.11):**
   `build/windows/Mirotokhome0.2.0.exe`, никогда `Mirotokhome.exe`. Голое имя
   стирает историю сборок и ломает соответствие «файл ↔ канал itch ↔ userversion».
-  Делать через `tests/build_windows.ps1` (читает `VERSION` из корня, экспортирует,
-  при `-Push` выкладывает в канал `windows` с той же версией). Версию поднимать
-  в `VERSION` перед сборкой; `export_presets.cfg` трогать не нужно — путь
-  передаётся аргументом.
-- **Версия в свойствах exe пока 0.1.0.0:** `config/version` в `project.godot` не
-  заведён (это approval gate). Пока версия живёт в `VERSION` + `--userversion`.
+  Делать только через `tests/build_windows.ps1`: он берёт версию из `VERSION`
+  (источник правды), сам синхронизирует `config/version` в `project.godot` и
+  `application/file_version`/`product_version` в `export_presets.cfg` (без них в
+  свойствах exe остаётся 0.1.0.0), отказывается перезаписывать уже собранный файл
+  без `-Force` и при `-Push` выкладывает в канал `windows` с тем же
+  `--userversion`. Перед новой сборкой поднять версию в `VERSION`.
 - Путь `D:\Work\UnityProjects\...` (в т.ч. `Allodshome_Godot` в старых
   `scripts/*.py`) — это сентябрьский прототип и исторические заготовки, а не
   проект; на домашнем ноутбуке такого диска нет.
@@ -331,7 +331,7 @@ COLOR = mix(tex[tid], tex[nid], m) * COLOR.a
 | `gen_tile_placeholders.gd` | placeholder PNG/BMP для tile5/6/7 (не актуально) |
 | `gen_transition_tiles.py` | офлайн-блендинг переходов в `tile8-00.bmp … tile15-06.bmp`; `--check` сверяет SHA256 (обязателен перед коммитом) |
 | `render_alm_png.gd` | `.alm`→PNG для визуального контроля (`missing_tiles=0`) |
-| `build_windows.ps1` | **сборка релиза (11.11)**: экспорт Windows в `build/windows/Mirotokhome<версия>.exe` (версия из `VERSION` в корне, формат MAJOR.MINOR.PATCH, иначе стоп), предупреждение о старом голом `Mirotokhome.exe`; `-Push` — `butler push` в канал `windows` с `--userversion` из той же версии (ключ читается из `%APPDATA%\Mirotokhome\itch_key`) |
+| `build_windows.ps1` | **сборка релиза (11.11)**: экспорт Windows в `build/windows/Mirotokhome<версия>.exe` (версия из `VERSION` в корне, формат MAJOR.MINOR.PATCH, иначе стоп), синхронизация `config/version` в `project.godot` и `application/file_version`/`product_version` в `export_presets.cfg` (иначе в свойствах exe 0.1.0.0), печать `VersionInfo.FileVersion` для проверки, отказ перезаписывать существующий файл без `-Force`, предупреждение о старом голом `Mirotokhome.exe`; `-Push` — `butler push` в канал `windows` с `--userversion` из той же версии (ключ из `%APPDATA%\Mirotokhome\itch_key`). **Ловушка:** писать эти файлы только UTF-8 **без BOM** — `Set-Content -Encoding utf8` в PowerShell 5.1 добавляет BOM, и Godot отвечает «Invalid export preset name», теряя все пресеты |
 | `gen_hero_strip.py` | генерация ИИ-полосы героя (`stand/walk/attack/die`, 4 или 8 панелей) + **preflight** сырого PNG: фон, фигуры, зазоры, тень, линия ног, **толщина**. `--sex m\|f`, `--tag nb5\|nb6` — пол персонажа и имя файла. `--class traveler` (11.11) — мирный путник в гражданской одежде без оружия (событие «спасти путника»); просит «плащ открыт и широкий», иначе модель рисует узкий силуэт |
 | `extract_hero_nb.py` | нарезка полос в 12 кадров героя (`idle1+move4+attack3+dying4`) + `_contact_sheet.png` + `_entry.json`. `--tag nb5\|nb6` — мужской/женский набор, `--tag tv1 --dest npc` — путник в `assets/units/npc/traveler_m`. **`--pick "2:3,2:2,1:3,1:4"`** — брать кадры из атласа по строкам/столбцам (суффикс `m` — зеркалить): первое средство, когда модель положила фигуры в два ряда или слипила их, и оно дешевле любой перегенерации |
 | `render_3d_frames.py` | **3D-модель → спрайты героя (30.10)**: драйвер (Python+Pillow) находит Blender, зовёт `render_3d_frames_blender.py` (орто-камера, свет сверху-слева, 4×), рендерит **4 ракурса** (`--directions 4`, по умолчанию; `1` — один + зеркало), нормализует масштаб по `idle` (фигура 54 px), пивот по origin модели (32,62), опционально 1 px контур; `--static` — статический меш без рига (генерация ComfyUI) в той же позе на все слоты; `--poses poses.json` — набор из 12 статических поз (1/4/3/4) без скелета; источник — `.blend` или `--mesh` (`.glb/.gltf/.obj/.fbx`); задание моделлеру — `docs/3d-model-brief.md` |
