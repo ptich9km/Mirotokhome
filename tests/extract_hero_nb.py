@@ -41,6 +41,9 @@ SRC = REPO / "import" / "Player"
 SETS = {
     "nb5": ("war_men", "war men"),
     "nb6": ("war_women", "war women"),
+    # Путник (11.11): мирный НПЦ из события «спасти путника». Тот же контракт
+    # 12 кадров, но кладётся не в hero/, а в npc/ (--dest npc).
+    "tv1": ("traveler_m", "traveler men"),
     # Нежить (Пожинатели) и друиды (Круг Друидов), 20.10 — тот же контракт.
     "un1": ("undead_men", "undead men"),
     "dr1": ("druid_men", "druid men"),
@@ -518,10 +521,12 @@ def main():
                          "текущим нарезчиком (они нарезаны версией до MAX_W), "
                          "поэтому слепой пересборкой можно затереть принятый игроком "
                          "арт. Проверяй этим перед любым запуском без --strip.")
+    ap.add_argument("--dest", default="hero",
+                    help="папка внутри assets/units: hero (по умолчанию), npc (путник)")
     args = ap.parse_args()
 
     out_folder, out_label = SETS[args.tag]
-    out_dir = REPO / "assets" / "units" / "hero" / out_folder
+    out_dir = REPO / "assets" / "units" / args.dest / out_folder
     out_dir.mkdir(parents=True, exist_ok=True)
 
     blocks = []

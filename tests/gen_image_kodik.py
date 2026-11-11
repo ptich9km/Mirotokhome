@@ -16,6 +16,7 @@ import argparse
 import base64
 import json
 import os
+import socket
 import sys
 import time
 import urllib.error
@@ -45,6 +46,36 @@ def load_key() -> str:
     sys.exit(f"API key not found: set KODIK_API_KEY or create {USER_KEY_FILE}")
 
 
+## The router drops roughly every second TCP connection from this provider: the
+## same GET alternates between 0.5 s and a 21 s connect timeout (measured
+## 11.11.2026). A refused/timed-out CONNECT means the request never reached the
+## server, so replaying it cannot bill twice; a read timeout after the request
+## was sent is a different story, so only connect-phase errors are retried.
+CONNECT_RETRIES = 5
+## Socket level codes instead of message text: the OS translates the message, and
+## a Russian Windows build has no "10060" substring in it.
+_CONNECT_ERRNOS = (110, 111, 113)          # ETIMEDOUT, ECONNREFUSED, EHOSTUNREACH
+_CONNECT_WINERRORS = (10060, 10061, 10065)  # timed out, refused, no route
+
+
+def _is_connect_error(err: BaseException) -> bool:
+    seen = err
+    for _ in range(6):
+        if seen is None or not isinstance(seen, BaseException):
+            break
+        if isinstance(seen, socket.gaierror):
+            return True
+        if getattr(seen, "winerror", None) in _CONNECT_WINERRORS:
+            return True
+        if getattr(seen, "errno", None) in _CONNECT_ERRNOS + _CONNECT_WINERRORS:
+            return True
+        nxt = getattr(seen, "reason", None)
+        if nxt is None:
+            nxt = seen.__cause__ or seen.__context__
+        seen = nxt
+    return False
+
+
 def _req(method: str, path: str, body: dict | None, key: str, timeout: int = 300) -> dict:
     url = BASE + path
     data = json.dumps(body).encode("utf-8") if body is not None else None
@@ -52,12 +83,21 @@ def _req(method: str, path: str, body: dict | None, key: str, timeout: int = 300
     req.add_header("Authorization", f"Bearer {key}")
     if data is not None:
         req.add_header("Content-Type", "application/json")
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", errors="replace")
-        sys.exit(f"HTTP {e.code} {path}\n{detail}")
+    last: Exception | None = None
+    for attempt in range(1, CONNECT_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")
+            sys.exit(f"HTTP {e.code} {path}\n{detail}")
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            last = e
+            if not _is_connect_error(e) or attempt == CONNECT_RETRIES:
+                break
+            print(f"  connect retry {attempt}/{CONNECT_RETRIES - 1}: {str(e)[:70]}")
+            time.sleep(min(8, attempt * 2))
+    raise SystemExit(f"{method} {path}: no server after {CONNECT_RETRIES} tries\n{last}")
 
 
 def list_models(key: str) -> None:

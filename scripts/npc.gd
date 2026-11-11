@@ -20,6 +20,14 @@ class_name Npc
 @export var is_city_head: bool = false
 @export var city_id: String = ""
 
+## Event membership (11.11): the tag lets EventSystem find this NPC as a foe.
+## A role "victim" NPC is the traveller of the rescue encounter.
+var event_tag: String = ""
+## Leaving the map after a rescue: walk to _leave_target, then disappear.
+var leaving := false
+var _leave_target := Vector2.ZERO
+var _leave_time := 0.0
+
 var current_hp: int
 var state: String = "idle"                   # idle | move | dying | decay | corpse
 var _corpse_timer := 0.0
@@ -132,17 +140,25 @@ func _physics_process_impl(delta: float) -> void:
 	# P5: далеко от героя — спим (патруль/бой не тикаем). Стража просыпается
 	# позже жителей: город компактный, и 1600 px держало в работе всю стражу.
 	if Game.hero != null and is_instance_valid(Game.hero) \
+			and not leaving \
 			and state != "dying" and state != "decay" and state != "corpse":
 		var sleep_r := 1100.0 if role == "guard" else 1600.0
 		if global_position.distance_squared_to(Game.hero.global_position) > sleep_r * sleep_r:
 			velocity = Vector2.ZERO
 			return
 	# Туман войны (19.10): вне видимой клетки житель не тикает и не рисуется.
-	if Game.fog != null and Game.fog.blocks_process(global_position):
+	# A traveller who is leaving for the city keeps walking: the player may look
+	# away, and freezing him mid-road would leave a half-finished escort behind.
+	if not leaving and Game.fog != null and Game.fog.blocks_process(global_position):
 		visible = false
 		return
 	visible = true
 	_apply_relief_stand()
+
+	# Спасённый путник уходит к ближайшему городу и исчезает (11.11).
+	if leaving:
+		_leave_tick(delta)
+		return
 
 	# Житель умер (его ударили монстры/герой): падение, разложение, исчезновение
 	if state == "dying" or state == "decay" or state == "corpse":
@@ -216,6 +232,9 @@ func _physics_process_impl(delta: float) -> void:
 				_anim.advance(delta)
 			else:
 				_anim.play(UnitAnim.Anim.IDLE)
+			# Same defect as in _leave_tick: _move_checked only sets velocity and
+			# nothing integrated it, so patrolling guards walked on the spot.
+			move_and_slide()
 			return
 		velocity = velocity.move_toward(Vector2.ZERO, 1800.0 * delta)
 		_anim.play(UnitAnim.Anim.IDLE)
@@ -225,6 +244,46 @@ func _physics_process_impl(delta: float) -> void:
 		_waiting = true
 		_pause_timer = randf_range(pause_min, pause_max)
 		_anim.play(UnitAnim.Anim.IDLE)
+
+## После спасения путник уходит к городу и исчезает (решение игрока 11.11):
+## не растворяется на месте, а уходит по карте.
+func leave_to(pos: Vector2) -> void:
+	leaving = true
+	_leave_target = pos
+	_path.clear()
+	_repath = 0.0
+	_leave_time = 0.0
+
+func _leave_tick(delta: float) -> void:
+	_leave_time += delta
+	if global_position.distance_to(_leave_target) <= 40.0 or _leave_time > 90.0:
+		Game.npcs.erase(self)
+		queue_free()
+		return
+	if alm_map == null:
+		alm_map = get_tree().get_first_node_in_group("alm_map")
+	if _path.is_empty():
+		_repath -= delta
+		if _repath <= 0.0:
+			_repath = 1.0
+			if alm_map != null and alm_map.has_method("find_path"):
+				_path = alm_map.find_path(global_position, _leave_target)
+	var step: Vector2 = _leave_target
+	if not _path.is_empty():
+		if global_position.distance_to(_path[0]) <= 8.0:
+			_path.pop_front()
+		if not _path.is_empty():
+			step = _path[0]
+	_move_checked(Game.safe_dir(global_position, step), walk_speed, delta)
+	if velocity.length() > 10.0:
+		_anim.play(UnitAnim.Anim.MOVE)
+		_anim.set_direction_vec(velocity)
+		_anim.advance(delta)
+	else:
+		_anim.play(UnitAnim.Anim.IDLE)
+	# _move_checked only sets velocity; the body integrates here. Without this the
+	# traveller played the walk animation standing still (player report 11.11).
+	move_and_slide()
 
 ## Случайная проходимая точка у поста (патрульный — шире, остальные стоят).
 func _can_pathfind() -> bool:
@@ -376,10 +435,19 @@ func get_attack() -> int:
 		+ StatusEffects.stat_flat(self, "attack")
 
 func get_defense() -> int:
+	# The traveller of a rescue event is a civilian in a tunic: the pack lands
+	# almost every hit on him. Without this the defence derived from max_hp
+	# (200 hp -> 50 defence) made him practically untouchable and the encounter
+	# could never be lost.
+	if role == "victim":
+		return 20
 	var base := int(max_hp / float(GameConfig.geti("combat", "enemy_defense_div")))
 	return int(round((base + StatusEffects.stat_flat(self, "defense")) * StatusEffects.defense_mult(self)))
 
 func get_absorption() -> int:
+	# No armour, so nothing soaks the (already scaled) damage of the pack.
+	if role == "victim":
+		return 0
 	return int(max_hp / float(GameConfig.geti("combat", "enemy_absorption_div")))
 
 func _resist(sphere: String) -> int:
@@ -410,7 +478,10 @@ func take_damage(dmg: int, _attacker: Node2D) -> int:
 		return dmg
 	current_hp = 0
 	SoundDB.play("combat.death")
-	_drop_loot()
+	# Путник из события не роняет лут: он не добыча, а спасение, за которое
+	# награждают отдельно.
+	if role != "victim":
+		_drop_loot()
 	state = "dying"
 	velocity = Vector2.ZERO
 	Game.npcs.erase(self)
@@ -502,7 +573,10 @@ func _potion_size() -> String:
 ## лечения — доля максимального HP цели. Врагов не лечит никогда.
 ## «Маг» определяется по набору: `city_*_mage`, `ork_mage_a52` и т. п.
 func _mage_heal_tick(delta: float) -> void:
-	if not anim_set.contains("mage"):
+	# Mages heal by the set name. The city head heals too: before the head used a
+	# "..._mage" set and healed by that accident; since 11.11 the heads have their
+	# own set (city_<race>_head), so the rule is spelled out instead of inherited.
+	if not anim_set.contains("mage") and not is_city_head:
 		return
 	_heal_cd = maxf(0.0, _heal_cd - delta)
 	if _heal_cd > 0.0:

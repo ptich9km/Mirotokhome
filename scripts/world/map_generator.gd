@@ -618,25 +618,25 @@ const CITY_POPULATION := {
 		"guards": ["city_human_mage/t1", "city_human_warrior/t2"],
 		"citizens": ["city_human_mage/t0", "city_human_warrior/t1"],
 		"captain": "city_human_mage/t3",
-		"head": "city_human_mage/t2",
+		"head": "city_human_head/t0",
 	},
 	"ork": {
 		"guards": ["city_ork_mage/t1", "city_ork_warrior/t2"],
 		"citizens": ["city_ork_mage/t0", "city_ork_warrior/t1"],
 		"captain": "city_ork_mage/t3",
-		"head": "city_ork_mage/t2",
+		"head": "city_ork_head/t0",
 	},
 	"druid": {
 		"guards": ["city_druid_mage/t1", "city_druid_warrior/t2"],
 		"citizens": ["city_druid_mage/t0", "city_druid_warrior/t1"],
 		"captain": "city_druid_mage/t3",
-		"head": "city_druid_mage/t2",
+		"head": "city_druid_head/t0",
 	},
 	"necro": {
 		"guards": ["city_necro_mage/t1", "city_necro_warrior/t2"],
 		"citizens": ["city_necro_mage/t0", "city_necro_warrior/t1"],
 		"captain": "city_necro_mage/t3",
-		"head": "city_necro_mage/t2",
+		"head": "city_necro_head/t0",
 	},
 }
 ## Races that cities are dealt to in a circle. necro is excluded while there is no
@@ -1350,14 +1350,15 @@ static func city_id_of(city_index: int) -> String:
 	return "c%dt%d" % [city_index, city_index % maxi(1, CITY_RACES.size())]
 
 ## Race by set name: "city_human_mage/t1" -> "humans", "city_ork_warrior/t0"
-## -> "ork", "city_druid_mage/t2" -> "druid". The sets are named by the root without
-## the trailing "s" (human, not humans) and with a role suffix (_mage/_warrior), so
-## the comparison goes by the root rather than by concatenation. Empty if the set is not ours.
+## -> "ork", "city_druid_mage/t2" -> "druid", "city_human_head/t0" -> "humans".
+## The sets are named by the root without the trailing "s" (human, not humans) and
+## with a role suffix (_mage/_warrior/_head), so the comparison goes by the root
+## rather than by concatenation. Empty if the set is not ours.
 static func race_of_set(set_name: String) -> String:
 	if not set_name.begins_with("city_"):
 		return ""
 	var seg := set_name.trim_prefix("city_").get_slice("/", 0)
-	for suffix in ["_mage", "_warrior"]:
+	for suffix in ["_head", "_mage", "_warrior"]:
 		seg = seg.trim_suffix(suffix)
 	# Segment = race id from world.json. IMPORTANT: for orcs this is "ork", not
 	# "orc" — on 10.10 ["orc", "ork"] stood here, and because of that the city orc mage

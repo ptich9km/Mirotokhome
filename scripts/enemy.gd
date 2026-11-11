@@ -180,7 +180,15 @@ func _physics_process_impl(delta):
 						if Game.is_miss(self, target):
 							print("%s промахнулся по %s!" % [name, target.name])
 						else:
-							Game.deal_damage(target, damage, "physical", "", self)
+							# The traveller of a rescue event is a civilian: the pack
+							# beats him slowly enough for the hero to arrive
+							# ([events] rescue_victim_dmg_scale), otherwise three
+							# Greys finish him in under two seconds.
+							var hit: int = damage
+							if target is Npc and str((target as Npc).role) == "victim":
+								hit = maxi(1, int(round(float(damage) * GameConfig.getf(
+									"events", "rescue_victim_dmg_scale"))))
+							Game.deal_damage(target, hit, "physical", "", self)
 						SoundDB.play(_unit_sound_at(0))
 		"flee":
 			var flee_direction = Game.safe_dir(target.global_position, global_position)
@@ -279,6 +287,13 @@ func _combat_target_impl() -> Node2D:
 	# the opposite group; a hero's hit on it switches it to the hero
 	# (see take_damage). The opponent died or disappeared — the usual logic below.
 	if foe_group != "":
+		# Rescue encounter (11.11): the pack turns on the hero as soon as he is
+		# close, before any hit lands -- saving the traveller must not require
+		# hitting a Grey first (Diablo 2 style aggro).
+		var near_hero = get_tree().get_first_node_in_group("player")
+		if is_instance_valid(near_hero) and not Game.hero_dead:
+			if Game.units_range(self, near_hero) < aggro_radius * StatusEffects.vision_mult(self):
+				return near_hero
 		var foe: Node2D = EventSystem.foe_for(self)
 		if foe != null:
 			return foe
