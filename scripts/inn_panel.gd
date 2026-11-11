@@ -478,7 +478,9 @@ func _talk() -> void:
 	var idx := randi() % lines.size()
 	var line := str(lines[idx])
 	_talk_label.text = tr("Рекрутер: «%s»") % line
-	SoundDB.play_raced("voice.npc.inn", _race, idx + 1)
+	# One voice channel: a repeated click restarts the line instead of stacking
+	# two speakers on top of each other.
+	SoundDB.play_raced_voice("voice.npc.inn", _race, idx + 1)
 
 func _hostile_note(set_name: String) -> String:
 	return tr("мирный") if not UnitDB.is_hostile(set_name) else tr("дикий")
