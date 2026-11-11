@@ -16,11 +16,13 @@ const CATEGORIES := [
 	{"id": "books", "label": "Книги и свитки"},
 	{"id": "recipes_faction", "label": "Рец. Фракция"},
 ]
-const MERCHANT_LINES := [
-	"Снаряжение дорожает с каждой новой стражей у ворот.",
-	"Зелья всегда пригодятся: герои тоже умеют получать раны.",
-	"Магические книги есть только у тех, кто действительно читает магию.",
-	"Не торопись: хорошая броня окупается после второй вылазки.",
+## Dialogue lines live in `assets/locale/ui.json` so the subtitle follows the UI
+## language; the index also picks the voice take (`voice.npc.merchant.N`).
+const MERCHANT_LINE_KEYS := [
+	"ui.talk.merchant.1",
+	"ui.talk.merchant.2",
+	"ui.talk.merchant.3",
+	"ui.talk.merchant.4",
 ]
 const _CELL_BUY := Vector2(100, 104)
 const _CELL_SELL := Vector2(94, 96)
@@ -796,9 +798,9 @@ func _sell_item(key: String, price: int) -> void:
 func _talk() -> void:
 	if not is_instance_valid(_merchant_label):
 		return
-	var lines: Array = MERCHANT_LINES.duplicate()
-	var idx := randi() % lines.size()
-	_merchant_label.text = tr("Торговец: «%s»") % str(lines[idx])
+	var idx := randi() % MERCHANT_LINE_KEYS.size()
+	_merchant_label.text = Loc.f("ui.talk.merchant.line",
+		[Loc.t(str(MERCHANT_LINE_KEYS[idx]))])
 	# One voice channel: a repeated click restarts the line instead of stacking
 	# two speakers on top of each other.
 	SoundDB.play_raced_voice("voice.npc.merchant", _race, idx + 1)

@@ -10,13 +10,15 @@ const MAX_PARTY := 4
 func _candidate_sets() -> Array:
 	return ContentRules.list("inn.candidates")
 
-const TALK_LINES := [
-	"Говорят, на севере всё больше диких зверей... Охрана у ворот не справляется.",
-	"В школе тренировок берут золотом за каждую ступень. Дорого, но быстро.",
-	"Торговец в лавке скупает всё, что принесёшь из-за стен. Вещи — по полцены.",
-	"Маги говорят, что настоящая сила — в книгах стихий. Остальным остаются свитки.",
-	"Слышал, за воротами люди пропадают. Особенно те, кто идёт без отряда.",
-	"Хороший наёмник стоит своих денег: сам себе и убийца, и щит.",
+## Dialogue lines live in `assets/locale/ui.json` so the subtitle follows the UI
+## language; the index also picks the voice take (`voice.npc.inn.N`).
+const TALK_LINE_KEYS := [
+	"ui.talk.inn.1",
+	"ui.talk.inn.2",
+	"ui.talk.inn.3",
+	"ui.talk.inn.4",
+	"ui.talk.inn.5",
+	"ui.talk.inn.6",
 ]
 ## 05.10: JPEG taverna.jpeg убран. Сетка 4 колонки, ячейка по контенту.
 const _CELL_COLUMNS := 4
@@ -474,10 +476,9 @@ func _clear_grid(grid: GridContainer) -> void:
 func _talk() -> void:
 	if not is_instance_valid(_talk_label):
 		return
-	var lines: Array = TALK_LINES.duplicate()
-	var idx := randi() % lines.size()
-	var line := str(lines[idx])
-	_talk_label.text = tr("Рекрутер: «%s»") % line
+	var idx := randi() % TALK_LINE_KEYS.size()
+	var line := Loc.t(str(TALK_LINE_KEYS[idx]))
+	_talk_label.text = Loc.f("ui.talk.inn.line", [line])
 	# One voice channel: a repeated click restarts the line instead of stacking
 	# two speakers on top of each other.
 	SoundDB.play_raced_voice("voice.npc.inn", _race, idx + 1)
@@ -489,11 +490,11 @@ func _hire(candidate: Dictionary) -> void:
 	if not is_instance_valid(player):
 		return
 	if Game.party.size() >= MAX_PARTY:
-		_talk_label.text = tr("Отряд уже заполнен: максимум %d бойца.") % MAX_PARTY
+		_talk_label.text = Loc.f("ui.talk.inn.party_full", [MAX_PARTY])
 		return
 	var cost := int(candidate.get("cost", 0))
 	if player.gold < cost:
-		_talk_label.text = tr("Не хватает золота на наём: нужно %d.") % cost
+		_talk_label.text = Loc.f("ui.talk.inn.no_gold", [cost])
 		return
 	player.gold -= cost
 	var mercenary := Mercenary.new()
@@ -515,7 +516,8 @@ func _hire(candidate: Dictionary) -> void:
 		if str(_candidates[index].get("set", "")) == set_name:
 			_candidates.remove_at(index)
 			break
-	_talk_label.text = tr("%s завербован. Удачной охоты!") % str(UnitDB.get_set(set_name).get("desc", set_name))
+	_talk_label.text = Loc.f("ui.talk.inn.hired",
+		[str(UnitDB.get_set(set_name).get("desc", set_name))])
 	_refresh()
 	print("Нанят наёмник: %s" % set_name)
 

@@ -87,6 +87,17 @@ static func play(id_or_key: Variant, volume_db: float = 0.0, pitch: float = 1.0)
 	player.play()
 	return true
 
+## The same key in the UI language, when that take exists: "voice.npc.inn.3" ->
+## "voice.en.npc.inn.3". Russian stays the reference; a missing English take
+## falls back to it instead of going silent.
+static func localized_key(key: String) -> String:
+	if not key.begins_with("voice.") or key.begins_with("voice.en."):
+		return key
+	if Loc.locale() != "en":
+		return key
+	var en := "voice.en." + key.substr("voice.".length())
+	return en if has(en) else key
+
 ## Play a dialogue line on the SINGLE voice channel.
 ##
 ## Unlike `play()`, a new line STOPS the previous one: clicking "Поговорить" twice
@@ -95,6 +106,7 @@ static func play(id_or_key: Variant, volume_db: float = 0.0, pitch: float = 1.0)
 ## hero's battle shout does NOT go through here, otherwise every swing would pump
 ## the track.
 static func play_voice(key: String, volume_db: float = 0.0, pitch: float = 1.0) -> bool:
+	key = localized_key(key)
 	ensure_loaded()
 	var entry: Variant = _keys.get(key, null)
 	if not (entry is Dictionary):

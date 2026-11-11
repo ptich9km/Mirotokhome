@@ -1770,10 +1770,11 @@ func _sound_weapon_attack() -> void:
 	if randf() < 0.3:
 		_hero_voice("attack", randi_range(1, 3))
 
-## Hero voice line: the sex picks the voice set (george / bella).
+## Hero voice line: the sex picks the voice set, the UI language picks the take.
 func _hero_voice(kind: String, idx: int) -> void:
 	var set_name := "female" if str(Game.hero_gender) == "female" else "male"
-	SoundDB.play("voice.hero.%s.%s.%d" % [set_name, kind, idx])
+	var key := "voice.hero.%s.%s.%d" % [set_name, kind, idx]
+	SoundDB.play(SoundDB.localized_key(key))
 
 ## Mana for a staff strike (a magic sphere strike).
 
