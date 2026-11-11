@@ -799,7 +799,9 @@ func _talk() -> void:
 	var lines: Array = MERCHANT_LINES.duplicate()
 	var idx := randi() % lines.size()
 	_merchant_label.text = tr("Торговец: «%s»") % str(lines[idx])
-	SoundDB.play_raced("voice.npc.merchant", _race, idx + 1)
+	# One voice channel: a repeated click restarts the line instead of stacking
+	# two speakers on top of each other.
+	SoundDB.play_raced_voice("voice.npc.merchant", _race, idx + 1)
 
 func _input(event: InputEvent) -> void:
 	if UiKit.esc_pressed(event):
