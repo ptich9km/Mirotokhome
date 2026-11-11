@@ -101,6 +101,10 @@ import/3d_src/
 # API keys (never commit)
 .kodik_key
 *.kodik_key
+# itch.io API key for butler (lives in %APPDATA%\Mirotokhome\itch_key)
+.itch_key
+*.itch_key
+butler_creds
 
 # Скачанные исходники звуков (CC0-паки); в репо идут только выбранные файлы
 import/audio_src/
