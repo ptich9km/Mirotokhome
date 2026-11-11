@@ -249,6 +249,20 @@ CHARACTER_UM_F = CHARACTER_U_F.split("She wears")[0] + "She wears " + _mage_robe
 CHARACTER_DM = CHARACTER_D.split("He wears")[0] + "He wears " + _mage_robe("moss-green")
 CHARACTER_DM_F = CHARACTER_D_F.split("She wears")[0] + "She wears " + _mage_robe("moss-green")
 
+# Путник (11.11): мирный НПЦ, которого спасают. Тело по контракту воина (жердь
+# валит preflight), но снаряжение гражданское и руки пустые. Блок attack
+# генерируется только потому, что контракт геройских наборов — 12 кадров
+# (1+4+3+4) и ломать его ради одной фазы нельзя; путник не атакует никогда.
+CHARACTER_T = """ONE single character repeated in every panel: a sturdy adult human
+traveller, weathered tanned skin, short brown hair, short brown beard, no helmet,
+no cape over the head. He wears a coarse brown wool tunic reaching to the middle of
+his calves, a plain grey travelling cloak thrown back over his shoulders and
+hanging OPEN and WIDE from his shoulders (it is NOT wrapped around the body and
+does NOT hide the arms), a wide
+brown leather belt with a small pouch, a canvas satchel hanging on a strap across
+his chest, dark grey trousers and worn brown leather knee-high boots.
+He holds NO weapon, NO staff and NO shield: both hands are EMPTY."""
+
 # Пропорции магов: воинская база, но вычеркнуты строки про бёдра/сапоги —
 # они конфликтуют с «ноги скрыты под мантией»: модель переливает массу в
 # торс (жирный + грудь) и занижает рост (лилипут). Диагноз по om1, 21.10.
@@ -408,7 +422,9 @@ The 4 panels must show 4 clearly different leg positions, each about a quarter o
 a step apart.
 BANNED in panels 3 and 4: legs spread very wide apart, a deep side lunge, a horse
 stance, a wide straddle, a squat. Panels 3 and 4 are the NARROW panels; only panel
-1 and 2 show the legs wide apart.""",
+1 and 2 show the legs wide apart.
+SPACING: all four figures stay in their own equal quarters of the image width, so
+wide bands of empty background remain between every pair of neighbouring panels.""",
 }
 
 # 21.10: mage attack — the only weapon is a staff, so the attack is a simple
@@ -765,9 +781,11 @@ def main():
     ap.add_argument("--tag", default="",
                     help="суффикс имени файла, например nb6. По умолчанию — "
                          "тег выбранного пола")
-    ap.add_argument("--class", dest="hero_class", choices=("warrior", "mage"),
+    ap.add_argument("--class", dest="hero_class",
+                    choices=("warrior", "mage", "traveler"),
                     default="warrior",
-                    help="класс героя: mage — мантия до земли (21.10)")
+                    help="класс героя: mage — мантия до земли (21.10), traveler — "
+                         "мирный путник в гражданской одежде без оружия (11.11)")
     args = ap.parse_args()
 
     # Норма толщины зависит от пола. Калибровка 20.10 по ОДОБРЕННЫМ игроком
@@ -842,6 +860,14 @@ def main():
             character, proportions, view = cf, pf, VIEW_F
         else:
             character, proportions, view = cm, pm, VIEW
+    elif args.hero_class == "traveler":
+        # Rescued NPC (11.11): the sturdy body contract of the warrior, civilian
+        # clothes and empty hands. The race branch above only matters for the
+        # default tag here -- the traveler is a map NPC, and the race variety in
+        # town comes from the palette-swapped city heads.
+        character = femaleize(CHARACTER_T) if args.sex == "f" else CHARACTER_T
+        proportions = PROPORTIONS_F if args.sex == "f" else PROPORTIONS
+        view = VIEW_F if args.sex == "f" else VIEW
     # Местоимения в тексте поз — английские, и оставленные «He/his» модель
     # рисует мужчину поверх женского описания персонажа. Замена по границам
     # слов, регистр сохраняется, чтобы «He does NOT crouch» не стало «She
@@ -873,6 +899,8 @@ def main():
                        "orc": {"m": "om1", "f": "om2"},
                        "undead": {"m": "nm1", "f": "nm2"},
                        "druid": {"m": "dm1", "f": "dm2"}}[args.race][args.sex]
+    if args.hero_class == "traveler":
+        default_tag = "tv1" if args.sex == "m" else "tv2"
     tag = args.tag or default_tag
     out = Path(args.out) if args.out else OUT_DIR / f"hero_{args.anim}_{tag}.png"
     gen_once(load_key(), args.model, prompt, out, SIZE, args.seed, 1, None)

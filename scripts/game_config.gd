@@ -295,9 +295,9 @@ const DEFAULTS := {
 		# a two-minute skirmish — [world] day_seconds); the event marker is always
 		# visible on the minimap.
 		# 0 = off. Grey-vs-grey skirmishes read as a bug (two packs of the same
-		# beasts fighting each other); the encounter is being redone as
-		# "save the traveller" and is switched on together with that rework.
-		"enabled": 0,           # 0 = off
+		# beasts fighting each other), so the encounter was redone as "save the
+		# traveller" (11.11) and switched on together with that rework.
+		"enabled": 1,           # 0 = off
 		"spawn_period": 45.0,   # seconds between spawn attempts
 		"spawn_chance": 35,     # % chance of an event per attempt
 		"max_active": 2,        # maximum simultaneous events on the map
@@ -307,6 +307,14 @@ const DEFAULTS := {
 		"spawn_max_dist": 900,
 		"members_min": 2,       # size of one skirmish group
 		"members_max": 3,
+		# "Save the traveller" (11.11): the NPC is a civilian who does not fight
+		# back, so his health is high and the incoming damage is scaled down --
+		# otherwise 2-3 Greys finish him before the hero can cross 400-900 px.
+		"rescue_victim_hp": 200,
+		"rescue_victim_dmg_scale": 0.2,
+		"rescue_gold_min": 40,
+		"rescue_gold_max": 80,
+		"rescue_rep": 5,        # reputation with the nearest city's race
 	},
 	"quests": {
 		# City head quests (22.10): offers by map seed, rotation by the world

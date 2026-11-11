@@ -5177,5 +5177,42 @@
   "bone": 0,
   "shoot_delay": 8,
   "shoot_offset": []
+ },
+ "npc/traveler_m": {
+  "desc": "Traveler: peaceful NPC of the rescue event, 4-panel strips (Gemini 3.1 Flash), three-quarter east view + mirror, idle1+move4+attack3+dying4",
+  "name_ru": "Путник",
+  "folder": "npc/traveler_m",
+  "frames": 12,
+  "prefix": "sprites",
+  "dirs": 1,
+  "idle_phases": 1,
+  "move": 4,
+  "move_begin": 0,
+  "attack": 3,
+  "dying": 4,
+  "decay": 0,
+  "cast": 0,
+  "idle": 0,
+  "move_f": [],
+  "move_t": [],
+  "attack_f": [],
+  "attack_t": [],
+  "die_f": [],
+  "dying_t": [],
+  "w": 64,
+  "h": 64,
+  "cx": 32,
+  "cy": 62,
+  "tile": null,
+  "projectile": -1,
+  "palette": 0,
+  "blocks": 4,
+  "resist": {
+   "fire": 10,
+   "water": 10,
+   "air": 10,
+   "earth": 10,
+   "astral": 10
+  }
  }
 }
