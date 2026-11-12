@@ -207,5 +207,49 @@
   "phases": 1,
   "frames": 1,
   "desc": "Seedream rock2"
+ },
+ "212": {
+  "folder": "mushroom_cluster",
+  "index": 0,
+  "w": 48,
+  "h": 48,
+  "cx": 24,
+  "cy": 48,
+  "phases": 1,
+  "frames": 1,
+  "desc": "Seedream mushroom_cluster"
+ },
+ "213": {
+  "folder": "fern",
+  "index": 0,
+  "w": 64,
+  "h": 64,
+  "cx": 32,
+  "cy": 64,
+  "phases": 1,
+  "frames": 1,
+  "desc": "Seedream fern"
+ },
+ "214": {
+  "folder": "dry_bush",
+  "index": 0,
+  "w": 64,
+  "h": 64,
+  "cx": 32,
+  "cy": 64,
+  "phases": 1,
+  "frames": 1,
+  "desc": "Seedream dry_bush"
+ },
+ "215": {
+  "folder": "aloe",
+  "index": 0,
+  "w": 64,
+  "h": 64,
+  "cx": 32,
+  "cy": 64,
+  "phases": 1,
+  "frames": 1,
+  "desc": "Seedream aloe"
  }
 }

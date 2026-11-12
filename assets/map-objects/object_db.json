@@ -264,5 +264,61 @@
   "dead": null,
   "fire": null,
   "variants": []
+ },
+ "mushroom_cluster": {
+  "desc": "Seedream mushroom_cluster",
+  "phases": 1,
+  "w": 48,
+  "h": 48,
+  "cx": 24,
+  "cy": 48,
+  "frames": 1,
+  "anim_time": [],
+  "anim_frame": [],
+  "dead": null,
+  "fire": null,
+  "variants": []
+ },
+ "fern": {
+  "desc": "Seedream fern",
+  "phases": 1,
+  "w": 64,
+  "h": 64,
+  "cx": 32,
+  "cy": 64,
+  "frames": 1,
+  "anim_time": [],
+  "anim_frame": [],
+  "dead": null,
+  "fire": null,
+  "variants": []
+ },
+ "dry_bush": {
+  "desc": "Seedream dry_bush",
+  "phases": 1,
+  "w": 64,
+  "h": 64,
+  "cx": 32,
+  "cy": 64,
+  "frames": 1,
+  "anim_time": [],
+  "anim_frame": [],
+  "dead": null,
+  "fire": null,
+  "variants": []
+ },
+ "aloe": {
+  "desc": "Seedream aloe",
+  "phases": 1,
+  "w": 64,
+  "h": 64,
+  "cx": 32,
+  "cy": 64,
+  "frames": 1,
+  "anim_time": [],
+  "anim_frame": [],
+  "dead": null,
+  "fire": null,
+  "variants": []
  }
 }

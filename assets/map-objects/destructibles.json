@@ -16,5 +16,9 @@
   "palm": 35,
   "cactus": 25,
   "rock": 90,
-  "rock2": 80
+  "rock2": 80,
+  "mushroom_cluster": 5,
+  "fern": 8,
+  "dry_bush": 8,
+  "aloe": 8
 }

@@ -26,6 +26,12 @@ SOURCES: dict[str, tuple[Path, int, int]] = {
     "bush_thorn": (REPO / "import/_stage3_nature/bush_thorn.png", 64, 64),
     "rock": (REPO / "import/_stage3_nature/rock.png", 64, 56),
     "rock2": (REPO / "import/_stage3_nature/rock2.png", 64, 48),
+    # Stage 4: small undergrowth. Canvas stays at the bush size (64) so the
+    # clutter does not read as a tree; the mushroom is smaller on purpose.
+    "mushroom_cluster": (REPO / "import/_stage4_props/mushroom_cluster.png", 48, 48),
+    "fern": (REPO / "import/_stage4_props/fern.png", 64, 64),
+    "dry_bush": (REPO / "import/_stage4_props/dry_bush.png", 64, 64),
+    "aloe": (REPO / "import/_stage4_props/aloe.png", 64, 64),
 }
 
 BG_TOL = 110
