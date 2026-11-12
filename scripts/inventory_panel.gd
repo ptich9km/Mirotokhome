@@ -1254,6 +1254,11 @@ func _on_item_clicked(item: Dictionary, is_double: bool = false) -> void:
 
 	if quality == "Herb":
 		return
+	if quality == "Quest":
+		# A quest item is a parcel, not property (player decision 13.11): it is
+		# never read, used, equipped or sold - only carried and handed over.
+		_flash_equip_error(Loc.t("ui.inv.quest_only"))
+		return
 	if quality == "Book":
 		# A book is knowledge, not a cast: one click is enough (player report
 		# 04.11 — the double-click gate made the starter book look dead).

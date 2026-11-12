@@ -41,12 +41,12 @@ static func ensure_loaded() -> void:
 	_loaded = true
 	var f := FileAccess.open(DB_PATH, FileAccess.READ)
 	if f == null:
-		push_error("ItemDB: не открыть " + DB_PATH)
+		push_error("ItemDB: cannot open " + DB_PATH)
 		return
 	var parsed: Variant = JSON.parse_string(f.get_as_text())
 	f.close()
 	if parsed is not Array:
-		push_error("ItemDB: битый JSON")
+		push_error("ItemDB: broken JSON")
 		return
 	for raw in parsed:
 		if raw is Dictionary:
@@ -57,7 +57,7 @@ static func ensure_loaded() -> void:
 	for raw in _items:
 		var it: Dictionary = raw
 		_by_key[str(it.get("key", ""))] = it
-	print("ItemDB: загружено %d предметов" % _items.size())
+	print("ItemDB: loaded %d items" % _items.size())
 
 static func all() -> Array:
 	ensure_loaded()
@@ -156,6 +156,8 @@ static func find(key: String) -> Dictionary:
 			var base: Dictionary = _by_key.get(str(parts.get("base", "")), {})
 			if not base.is_empty():
 				return _synthesize_plus(base, int(parts["plus"]), str(parts.get("seed", "")))
+	if found.is_empty() and is_quest_key(key):
+		return make_quest_item(quest_base(key))
 	if found.is_empty() and key.begins_with("Book "):
 		# Spell book: the base only stores books of the five vanilla spheres,
 		# while shops build books from SpellDB (SpellDB.make_book_item) — so a
@@ -166,6 +168,42 @@ static func find(key: String) -> Dictionary:
 			return SpellDB.make_sphere_book(sphere)
 		return SpellDB.book_item(key)
 	return found
+
+
+## Quest items: a SEPARATE category of goods that exist only for a quest (player
+## decision 13.11). They look and read like the thing they stand for, but they
+## are a parcel, not property: no reading, no selling, no equipping. The base
+## item itself stays an ordinary thing of the world.
+const QUEST_PREFIX := "Quest "
+
+static func is_quest_key(key: String) -> bool:
+	return str(key).begins_with(QUEST_PREFIX)
+
+static func quest_key(base_key: String) -> String:
+	return QUEST_PREFIX + str(base_key)
+
+## Base item key of a quest item ("" when the key is not a quest item).
+static func quest_base(key: String) -> String:
+	return str(key).trim_prefix(QUEST_PREFIX) if is_quest_key(key) else ""
+
+static func is_quest_item(item: Dictionary) -> bool:
+	return str(item.get("quality", "")) == "Quest"
+
+## The quest copy of a base item. Price 0 and no weight: the bag shows it as a
+## quest good, and nothing can be done with it except hand it over. The record is
+## COPIED from the base, so the name and icon follow the base in both languages
+## without this class reading the language columns itself.
+static func make_quest_item(base_key: String) -> Dictionary:
+	var base := find(base_key)
+	var item := base.duplicate(true) if not base.is_empty() else {}
+	item["key"] = quest_key(base_key)
+	item["quality"] = "Quest"
+	item["quest_base"] = str(base_key)
+	item["type"] = ""
+	item["price"] = 0
+	item["weight"] = 0.0
+	item["effects"] = []
+	return item
 
 ## Слот экипировки: weapon / shield / head / cloak / body / hands / feet / amulet / ring.
 ## Кольцо возвращает "ring" — конкретный слот ring1/ring2 выбирает player.equip_item().
@@ -316,19 +354,19 @@ static func allows_class(item: Dictionary, hero_class: String) -> bool:
 		return true
 	return armor_kind(item) == "heavy"
 
-## Why the item does not fit the class (Russian, for cards and hints). "" if it fits.
+## Why the item does not fit the class (for cards and hints). "" if it fits.
 static func class_block_text(item: Dictionary, hero_class: String) -> String:
 	if allows_class(item, hero_class):
 		return ""
 	if class_of(hero_class) == CLASS_MAGE:
 		if slot_of(item) == "shield":
-			return "Маг не носит щиты"
+			return Loc.t("ui.class.mage_no_shield")
 		if slot_of(item) == "weapon":
-			return "Магу подходит только посох"
-		return "Маг носит только ткань"
+			return Loc.t("ui.class.mage_staff_only")
+		return Loc.t("ui.class.mage_cloth_only")
 	if weapon_kind(item) == "staff":
-		return "Воин не носит посохи"
-	return "Воин носит только металлическую броню"
+		return Loc.t("ui.class.war_no_staff")
+	return Loc.t("ui.class.war_metal_only")
 
 ## What kind of gear the slot takes for the class (Russian, for empty-slot hints).
 static func slot_fits_text(slot: String, hero_class: String) -> String:

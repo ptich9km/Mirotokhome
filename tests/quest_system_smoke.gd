@@ -68,6 +68,7 @@ func _phase() -> void:
 	_test_accept_abandon(qs)
 	_test_turn_in(qs)
 	_test_progress(qs)
+	_test_quest_items(qs)
 	_test_faction_tags(qs)
 	_test_marker(qs)
 	_test_save_roundtrip(qs)
@@ -553,8 +554,52 @@ func _test_spawn_panel() -> void:
 
 # --- 7. Faction tags (forge package E) ---------------------------------------
 
-## A town asks for RIVAL faction tags and pays with a blueprint of its own set.
+## Quest items are their own category (player decision 13.11): a found or handed
+## item is a "Quest ..." copy that cannot be read, sold or equipped, while the
+## base item of the world stays ordinary.
+func _test_quest_items(qs) -> void:
+	var hero := root.find_child("Hero", true, false)
+	hero.set("inventory", [])
+	for tpl_id in ["deliver_tome", "find_relic"]:
+		var q: Dictionary = qs.debug_add_offer(CITY, tpl_id)
+		if q.is_empty():
+			_check(false, "quest template %s is available" % tpl_id)
+			continue
+		var base := str(q.get("item_key", ""))
+		var bag := str(q.get("bag_key", ""))
+		_check(ItemDB.is_quest_key(bag),
+			"%s: the bag copy is a quest item (%s)" % [tpl_id, bag])
+		_check(not ItemDB.is_quest_key(base),
+			"%s: the base item stays ordinary (%s)" % [tpl_id, base])
+		var bag_item := ItemDB.find(bag)
+		_check(str(bag_item.get("quality", "")) == "Quest",
+			"%s: quality Quest (%s)" % [tpl_id, str(bag_item.get("quality", ""))])
+		_check(int(bag_item.get("price", -1)) == 0,
+			"%s: a quest item has no price" % tpl_id)
+		_check(ItemDB.display_name(bag_item) == ItemDB.display_name(ItemDB.find(base)),
+			"%s: it is named after what it stands for" % tpl_id)
+		qs.accept(CITY, str(q["id"]))
+		var taken: Dictionary = qs.quest_by_id(str(q["id"]))
+		if tpl_id == "deliver_tome":
+			_check(str(taken.get("issued", "")) == bag and hero.inventory.has(bag),
+				"deliver: the quest item is handed out on take")
+		else:
+			_check(str(taken.get("bag_key", "")) == bag,
+				"find: the pickup spawns the quest copy")
+		# The base item, by contrast, is ordinary: a book still teaches a spell,
+		# while the quest copy teaches nothing (`learn_book` also refuses the
+		# Quest quality outright - the bag fixture has no Player method here).
+		if base.begins_with("Book "):
+			_check(SpellDB.spell_of_book(bag) == "",
+				"the quest copy of a tome teaches nothing")
+			_check(SpellDB.spell_of_book(base) != "",
+				"the base book still teaches a spell")
+		qs.abandon(str(q["id"]))
+		hero.set("inventory", [])
+
+
 func _test_faction_tags(qs: QuestSystem) -> void:
+	## A town asks for RIVAL faction tags and pays with a blueprint of its own set.
 	qs.reset()
 	var q := qs.debug_add_offer(CITY, "gather_tags")
 	_check(not q.is_empty(), "a forced gather_tags offer is created")

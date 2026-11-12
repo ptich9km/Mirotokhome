@@ -341,6 +341,11 @@ func _make_quest(tpl: Dictionary, rng: RandomNumberGenerator, city_id: String,
 					return {}
 				q["item_key"] = str(pool[rng.randi_range(0, pool.size() - 1)])
 				q["need"] = 1 if type != "GATHER" else count
+				# A quest item is its own category (player decision 13.11): the bag
+				# copy is a "Quest ..." key, while item_key stays the base item for
+				# names, icons and pools. Gathering keeps real goods (herbs).
+				if type in ["FIND_ITEM", "DELIVER"]:
+					q["bag_key"] = ItemDB.quest_key(str(q.get("item_key", "")))
 			if type == "DELIVER":
 				var other := _other_city(city_id, rng)
 				if other == "":
@@ -348,7 +353,7 @@ func _make_quest(tpl: Dictionary, rng: RandomNumberGenerator, city_id: String,
 				q["deliver_city"] = other
 				# The letter is handed out ON TAKE (player decision): a delivery
 				# without the item in hand would ask for nothing.
-				q["issued"] = str(q.get("item_key", ""))
+				q["issued"] = _bag_key(q)
 			if type == "FIND_ITEM":
 				q["target_cell"] = _quest_cell(rng, tpl)
 		_:
@@ -814,7 +819,7 @@ func turn_in(city_id: String, quest_id: String) -> String:
 		for _i in range(n):
 			hero.remove_item(str(q.get("item_key", "")))
 	if hero != null and str(q.get("type", "")) == "FIND_ITEM":
-		hero.remove_item(str(q.get("item_key", "")))
+		hero.remove_item(_bag_key(q))
 	var gained := _grant(q)
 	q["state"] = STATE_DONE
 	q["closed_day"] = _day()
@@ -903,7 +908,7 @@ func notify_item_picked(item_key: String) -> String:
 	for q in active:
 		if str(q.get("type", "")) != "FIND_ITEM":
 			continue
-		if str(q.get("item_key", "")) != item_key:
+		if _bag_key(q) != item_key:
 			continue
 		var qid := str(q.get("id", ""))
 		q["progress"] = maxi(int(q.get("progress", 0)), 1)
@@ -922,9 +927,9 @@ func _sync_progress(q: Dictionary) -> void:
 		"GATHER":
 			q["progress"] = count_item(str(q.get("item_key", "")))
 		"DELIVER":
-			q["progress"] = 1 if count_item(str(q.get("item_key", ""))) > 0 else 0
+			q["progress"] = 1 if count_item(_bag_key(q)) > 0 else 0
 		"FIND_ITEM":
-			var found := count_item(str(q.get("item_key", ""))) > 0 \
+			var found := count_item(_bag_key(q)) > 0 \
 				or int(q.get("progress", 0)) > 0
 			q["progress"] = 1 if found else 0
 
@@ -950,6 +955,13 @@ func sync_inventory() -> void:
 			moved = true
 	if moved:
 		active_changed.emit()
+
+
+## The key the quest item lives under in the bag: a "Quest ..." copy for quests
+## that hand or hide an item, the base key otherwise (gathering real herbs).
+func _bag_key(q: Dictionary) -> String:
+	var bag := str(q.get("bag_key", ""))
+	return bag if bag != "" else str(q.get("item_key", ""))
 
 
 func count_item(item_key: String) -> int:
@@ -1081,7 +1093,7 @@ func _spawn_pickup(q: Dictionary) -> void:
 		return
 	var node := QuestTarget.new()
 	node.name = "QuestTarget_" + str(q.get("id", ""))
-	node.item_key = str(q.get("item_key", ""))
+	node.item_key = _bag_key(q)
 	node.icon = str(q.get("pick", ""))
 	node.quest_id = str(q.get("id", ""))
 	node.position = Vector2(float((cell.x + 0.5) * tile), float((cell.y + 0.5) * tile))

@@ -559,6 +559,9 @@ static func item_card_lines(item: Dictionary, class_block: String = "") -> Array
 		if not (raw is String):
 			continue
 		var v := str(raw)
+		# Quest goods are their own category and are marked as such in the card.
+		if f == "quality" and v == "Quest":
+			v = Loc.t("ui.quality.quest")
 		if v != "" and v != "None":
 			sub.append(v)
 	if not sub.is_empty():

@@ -65,5 +65,8 @@ func contains_point(world: Vector2) -> bool:
 	return world.distance_to(global_position) <= PICK_DIST
 
 func label() -> String:
-	var named := QuestDB.quest_item_name(item_key)
-	return named if named != "" else item_key
+	var named := ItemDB.display_name(ItemDB.find(item_key))
+	if named != "" and named != item_key:
+		return named
+	var quest_name := QuestDB.quest_item_name(ItemDB.quest_base(item_key))
+	return quest_name if quest_name != "" else item_key

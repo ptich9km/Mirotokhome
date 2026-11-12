@@ -135,11 +135,15 @@ static func icon_path(icon_name: String) -> String:
 
 ## Quest icon of an item by its class ("Herb Green Leaf" -> quest_scroll).
 static func item_class_icon(item_key: String) -> String:
+	# A quest item keeps its base name after the "Quest " mark: match the class
+	# on the base, or a quest tome would lose its book icon.
+	var key := ItemDB.quest_base(item_key) if ItemDB.is_quest_key(item_key) \
+		else str(item_key)
 	for rule in QUEST_ICON_RULES:
 		var d: Dictionary = rule
-		if d.has("prefix") and item_key.begins_with(str(d["prefix"])):
+		if d.has("prefix") and key.begins_with(str(d["prefix"])):
 			return str(d["icon"])
-		if d.has("has") and item_key.contains(str(d["has"])):
+		if d.has("has") and key.contains(str(d["has"])):
 			return str(d["icon"])
 	return ""
 
