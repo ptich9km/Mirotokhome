@@ -82,9 +82,9 @@ func _lore_race_map() -> void:
 	_check(Lore.hero_race_to_faction("human") == "humans", "human -> humans")
 	_check(Lore.hero_race_to_faction("ork") == "ork", "ork -> ork")
 	_check(Lore.faction_to_hero_race("humans") == "human", "humans -> human")
-	_check(Lore.faction_city("human") == "Небесный покой",
+	_check(Lore.faction_city("human") == Loc.field(Lore.faction("humans"), "city"),
 		"город людей = Небесный покой (=%s)" % Lore.faction_city("human"))
-	_check(Lore.faction_archmage("human") == "Маша",
+	_check(Lore.faction_archmage("human") == Loc.field(Lore.faction("humans"), "archmage"),
 		"маг людей = Маша (=%s)" % Lore.faction_archmage("human"))
 
 
@@ -99,8 +99,10 @@ func _lore_archmages() -> void:
 		var greet: Array = Lore.archmage_speech(race, "greet")
 		_check(greet.size() > 0, "%s: greet-реплики" % race)
 	var seed_d := Lore.archmage_seed("human")
-	_check(str(seed_d.get("name", "")) == "Маша", "seed human.name = Маша")
-	_check(str(seed_d.get("city", "")) == "Небесный покой", "seed human.city")
+	_check(str(seed_d.get("name", "")) == Loc.field(Lore.faction("humans"), "archmage"),
+		"seed human.name из world.json")
+	_check(str(seed_d.get("city", "")) == Loc.field(Lore.faction("humans"), "city"),
+		"seed human.city из world.json")
 
 
 # --- TickArchmage --------------------------------------------------------------
@@ -167,8 +169,10 @@ func _new_faction_has_archmage() -> void:
 	var f: Dictionary = w.new_faction("Люди", "human")
 	var am: Dictionary = f.get("archmage", {})
 	_check(not am.is_empty(), "new_faction кладёт archmage")
-	_check(str(am.get("name", "")) == "Маша", "archmage.name = Маша (=%s)" % am.get("name"))
-	_check(str(am.get("city", "")) == "Небесный покой", "archmage.city")
+	_check(str(am.get("name", "")) == Loc.field(Lore.faction("humans"), "archmage"),
+		"archmage.name (=%s)" % am.get("name"))
+	_check(str(am.get("city", "")) == Loc.field(Lore.faction("humans"), "city"),
+		"archmage.city")
 	_check(f.get("race", "") == "human", "faction.race = human")
 	var power_start := _cfg_f("power_start")
 	_check(absf(float(am.get("power", -1)) - power_start) < 0.001,
@@ -204,14 +208,15 @@ func _get_archmage_by_race() -> void:
 	w.new_faction("Люди", "human")
 	w.new_faction("Орки", "ork")
 	var by_race: Dictionary = w.get_archmage("human")
-	_check(str(by_race.get("name", "")) == "Маша",
+	_check(str(by_race.get("name", "")) == Loc.field(Lore.faction("humans"), "archmage"),
 		"get_archmage(\"human\") = Маша (=%s)" % by_race.get("name"))
 	var by_ork: Dictionary = w.get_archmage("ork")
-	_check(str(by_ork.get("name", "")) == "Леша",
+	_check(str(by_ork.get("name", "")) == Loc.field(Lore.faction("ork"), "archmage"),
 		"get_archmage(\"ork\") = Леша (=%s)" % by_ork.get("name"))
 	# lore-ключ
 	var by_lore: Dictionary = w.get_archmage("humans")
-	_check(str(by_lore.get("name", "")) == "Маша", "get_archmage(\"humans\") тоже работает")
+	_check(str(by_lore.get("name", "")) == Loc.field(Lore.faction("humans"), "archmage"),
+		"get_archmage(\"humans\") тоже работает")
 	# несуществующая раса
 	var none: Dictionary = w.get_archmage("dragon")
 	_check(none.is_empty(), "несуществующая раса -> {}")

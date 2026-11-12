@@ -71,12 +71,12 @@ func _run() -> void:
 	# --- diagnostics ---
 	var errs := "\n".join(ModLoader.errors())
 	var warns := "\n".join(ModLoader.warnings())
-	_check(errs.contains("уже занят"), "конфликт ключей — ошибка с указанием, кто занял")
+	_check(errs.contains("is already taken"), "конфликт ключей — ошибка с указанием, кто занял")
 	_check(errs.contains("_smoke_clash"), "ошибка называет мод-виновника")
-	_check(errs.contains("не найдены файлы"), "потерянный ассет — ошибка, а не розовый квадрат")
-	_check(errs.contains("битый JSON"), "битый файл мода — ошибка, игра работает")
+	_check(errs.contains("files not found"), "потерянный ассет — ошибка, а не розовый квадрат")
+	_check(errs.contains("broken JSON"), "битый файл мода — ошибка, игра работает")
 	_check(errs.contains("patch 'monsters/no_such_patch_target'"), "patch несуществующего — ошибка")
-	_check(warns.contains("правят два мода"), "два мода на одном ключе — предупреждение")
+	_check(warns.contains("edited by two mods"), "два мода на одном ключе — предупреждение")
 
 	# --- misc ---
 	_check(ModLoader.resolve("mod://_smoke_base/assets/blade.png") ==

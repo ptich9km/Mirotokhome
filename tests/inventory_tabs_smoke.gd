@@ -117,12 +117,14 @@ func _run() -> void:
 	var humans_text := ""
 	for row in rel_rows:
 		var t := _row_text(row)
-		if t.contains("люди"):
+		if t.contains(Lore.faction_label("humans")):
 			humans_text = t
 	_check(humans_text.contains("42"), "репутация людей показана (42): %s" % humans_text)
-	_check(humans_text.to_lower().contains("дружелюбно") or humans_text.to_lower().contains("доверие"),
+	_check(humans_text.contains(Loc.t("ui.inv.rel.friendly"))
+		or humans_text.contains(Loc.t("ui.inv.rel.trust")),
 		"статус человеческой репутации словом: %s" % humans_text)
-	_check(humans_text.contains("Наёмники"), "в строке видно, что открывает репутация")
+	_check(humans_text.contains(Loc.t("ui.inv.rel.summary").split("%")[0].strip_edges()),
+		"в строке видно, что открывает репутация")
 	var pairs := 0
 	for row in rel_rows:
 		if _row_text(row).contains(" — "):
@@ -140,13 +142,16 @@ func _run() -> void:
 	var names := ""
 	for row in craft_rows:
 		names += _row_text(row)
-	for want in ["Кузнец", "Портной", "Мастер", "Алхимия"]:
-		_check(names.contains(want), "навык «%s» на месте" % want)
+	for want in ["ui.inv.craft.smith", "ui.inv.craft.tailor", "ui.inv.craft.master",
+			"ui.inv.craft.alchemy"]:
+		_check(names.contains(Loc.t(want)), "навык «%s» на месте" % Loc.t(want))
 	var lvl_row := ""
 	for row in craft_rows:
-		if _row_text(row).contains("Кузнец") and _row_text(row).contains("ур."):
+		if _row_text(row).contains(Loc.t("ui.inv.craft.smith")) \
+			and _row_text(row).contains(Loc.t("ui.inv.skills.level").split("%")[0].strip_edges()):
 			lvl_row = _row_text(row)
-	_check(lvl_row.contains("ур."), "у навыка показан уровень: %s" % lvl_row)
+	_check(lvl_row.contains(Loc.t("ui.inv.skills.level").split("%")[0].strip_edges()),
+		"у навыка показан уровень: %s" % lvl_row)
 	_check((pages[2] as Control).visible and not (pages[1] as Control).visible,
 		"переключение показало страницу ремёсел")
 

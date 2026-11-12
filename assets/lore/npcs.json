@@ -8,7 +8,12 @@
       "role": "Маг Людей, наставник новичков",
       "city": "Небесный покой",
       "place": "в центре города, на площади",
-      "personality": ["говорит только по делу", "считает потерянных", "не повышает голос", "устала до остервеничия"],
+      "personality": [
+        "говорит только по делу",
+        "считает потерянных",
+        "не повышает голос",
+        "устала до остервеничия"
+      ],
       "voice_note": "Ровный, короткий голос человека, который уже сообщил неприятное и ждёт реакции, а не утешения.",
       "speech": {
         "greet": [
@@ -28,6 +33,27 @@
           "Нет. Это место я не отдам ни Серым, ни тебе с хорошими намерениями.",
           "Откажу. Лучшее, что я могу сделать для твоей расы, - не дать тебе её источить."
         ]
+      },
+      "label_en": "Masha",
+      "role_en": "Mage of the Humans, mentor of newcomers",
+      "place_en": "in the centre of the city, on the square",
+      "city_en": "Sky Rest",
+      "speech_en": {
+        "greet": [
+          "You are one of the new ones. My name is Masha. Come to the post, I will explain on the way.",
+          "Do not stand in the road. Few walk this path, and they have little time.",
+          "I am a mage. My name is Masha. The difference between the two does not matter now - learn to work."
+        ],
+        "idle": [
+          "At the post they count those who came back, every night.",
+          "A mage is not killed, Masha. A weak mage is simply listened to more attentively.",
+          "The Grey are not evil. They belong to nobody. That is worse.",
+          "You want to know how many we are? You will find out when somebody is missing from the count."
+        ],
+        "refuse": [
+          "No. I will not give this place to the Grey, nor to you with good intentions.",
+          "I refuse. The best I can do for your race is not to let you wear it thin."
+        ]
       }
     },
     "lesha": {
@@ -37,7 +63,12 @@
       "role": "Маг Орков, наставник новичков",
       "city": "Путилов град",
       "place": "в центре города, на площади",
-      "personality": ["говорит коротко", "стыдится мягкости", "считает только своих", "держит слово буквально"],
+      "personality": [
+        "говорит коротко",
+        "стыдится мягкости",
+        "считает только своих",
+        "держит слово буквально"
+      ],
       "voice_note": "Хрипловатый, негромкий, с паузами - человек, который привык, что его перебивают и не правы.",
       "speech": {
         "greet": [
@@ -57,6 +88,27 @@
           "Нет. То, что я сжёг, второй раз не отстроить.",
           "Отказ. Мне своих хватает."
         ]
+      },
+      "label_en": "Lesha",
+      "role_en": "Mage of the Orcs, mentor of newcomers",
+      "place_en": "in the centre of the city, on the square",
+      "city_en": "Putilov Grad",
+      "speech_en": {
+        "greet": [
+          "I am Lesha. You have come where you were expected. We will sort out the rest ourselves.",
+          "Do not stand in the doorway. We have two walls, and one of them is you.",
+          "You said you had heard of me. The name is Lesha. The rest - by the road."
+        ],
+        "idle": [
+          "We burn what we cannot hold. It is not anger, it is arithmetic.",
+          "The Grey come at the post every night. Sometimes they make it, sometimes not.",
+          "I am weakening, which means there are fewer of us. Just fewer.",
+          "Do not ask me to be kind. Just do not get in the way."
+        ],
+        "refuse": [
+          "No. What I burned cannot be rebuilt a second time.",
+          "Refused. I have enough of my own to look after."
+        ]
       }
     },
     "vanya": {
@@ -66,7 +118,12 @@
       "role": "Маг Пожинателей, наставник новичков",
       "city": "Ольшевкского стрит",
       "place": "в центре города, на площади",
-      "personality": ["говорит тихо", "извиняется вслух", "считает всех, даже врагов", "не любит обещаний"],
+      "personality": [
+        "говорит тихо",
+        "извиняется вслух",
+        "считает всех, даже врагов",
+        "не любит обещаний"
+      ],
       "voice_note": "Мягкий голос с неприятной спокойной вежливостью - как у человека, который давно привык быть плохим и не спорит об этом.",
       "speech": {
         "greet": [
@@ -86,6 +143,27 @@
           "Нет. Я и так поднял слишком много - не хочу твоих.",
           "Отказ. Слепой сторожей, который умирает каждый месяц, у меня уже есть."
         ]
+      },
+      "label_en": "Vanya",
+      "role_en": "Mage of the Reapers, mentor of newcomers",
+      "place_en": "in the centre of the city, on the square",
+      "city_en": "Olshevsky Street",
+      "speech_en": {
+        "greet": [
+          "Vanya. Yes, that is my name, I know. You came for a mentor - he is in front of you.",
+          "You are alive. That will not hinder you, but it will surprise you. Let us go in and talk.",
+          "It smells of smoke here, get used to it. We will talk on the way, only quieter."
+        ],
+        "idle": [
+          "Raising is easy. The hard part is not leaving the raised without work.",
+          "The Grey do not understand that the dead get tired too.",
+          "I am weakening, so I raise fewer. I am empty as it is.",
+          "Forgive me. That word changes nothing for us, but I say it anyway."
+        ],
+        "refuse": [
+          "No. I have raised too many already - I do not want yours.",
+          "Refused. I already have a blind watchman who dies every month."
+        ]
       }
     },
     "katya": {
@@ -95,7 +173,12 @@
       "role": "Маг Друидов, наставница новичков",
       "city": "Минск город герой",
       "place": "в центре города, на площади",
-      "personality": ["говорит не спеша", "слушает землю", "не любит спешки", "помнит свой лес"],
+      "personality": [
+        "говорит не спеша",
+        "слушает землю",
+        "не любит спешки",
+        "помнит свой лес"
+      ],
       "voice_note": "Тихо и медленно, с паузами на чужой вопрос - как у того, кто сначала дослушает землю, потом отвечает.",
       "speech": {
         "greet": [
@@ -115,6 +198,27 @@
           "Нет. За то, что я не сумела удержать, я расплачиваюсь до сих пор.",
           "Не смогу. Здесь уже посажено столько, что хватит и без меня."
         ]
+      },
+      "label_en": "Katya",
+      "role_en": "Mage of the Druids, mentor of newcomers",
+      "place_en": "in the centre of the city, on the square",
+      "city_en": "Minsk Hero City",
+      "speech_en": {
+        "greet": [
+          "Katya. You have stepped on the roots, that matters - step off them.",
+          "Sit down if you like. I will wait, you are in no hurry.",
+          "I am Katya. There are no hurrying people here. It is not magic, just a habit."
+        ],
+        "idle": [
+          "The earth remembers who walked on it. A mage feels it, others only hear it.",
+          "The Grey come where nothing grows properly any more.",
+          "I am weakening, so everything slows. Even what ought to die.",
+          "That forest I could not hold. It is mine, I do not hide it."
+        ],
+        "refuse": [
+          "No. For what I could not hold I am still paying.",
+          "I cannot. So much is planted here already that there is enough without me."
+        ]
       }
     },
     "shopkeeper": {
@@ -123,7 +227,12 @@
       "archmage": false,
       "role": "торговец в городской лавке",
       "city": "любой торговый город",
-      "personality": ["считает мелкую монету", "не продаёт хлам", "молчит о войне", "вспоминает прежнюю выручку"],
+      "personality": [
+        "считает мелкую монету",
+        "не продаёт хлам",
+        "молчит о войне",
+        "вспоминает прежнюю выручку"
+      ],
       "voice_note": "Сухо, быстро, с привычной поправкой цены на лету - он не торгует эмоциями, только числом.",
       "speech": {
         "greet": [
@@ -141,7 +250,11 @@
         "refuse": [
           "Не возьму. Торговец, который берет подарок, потом не торгуется."
         ]
-      }
+      },
+      "label_en": "Merchant",
+      "role_en": "shopkeeper in the town shop",
+      "place_en": "in the centre of the city, on the square",
+      "city_en": "Sky Rest"
     },
     "guard": {
       "label": "Страж",
@@ -149,7 +262,12 @@
       "archmage": false,
       "role": "дозорный у ворот или у форпоста",
       "city": "любой город фракции или её форпост",
-      "personality": ["стоит ровно", "не выспался", "считает смены", "дослушал до конца"],
+      "personality": [
+        "стоит ровно",
+        "не выспался",
+        "считает смены",
+        "дослушал до конца"
+      ],
       "voice_note": "Короткие выдачивания на два-три слова, как привычка не тратить голос на пустом.",
       "speech": {
         "greet": [
@@ -167,7 +285,11 @@
         "refuse": [
           "Не отойду. Я на посту, а не прогуливаюсь."
         ]
-      }
+      },
+      "label_en": "Guard",
+      "role_en": "watchman at the gate or the outpost",
+      "place_en": "in the centre of the city, on the square",
+      "city_en": "Sky Rest"
     }
   }
 }

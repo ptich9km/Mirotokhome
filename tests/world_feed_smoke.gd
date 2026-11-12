@@ -57,10 +57,19 @@ func _run() -> void:
 		"высота — 25%% вьюпорта (%.0f)" % want_h)
 
 	var text := str(label.text if label != null else "")
-	_check(text.contains("Тихая Заводь"), "имя сектора в заголовке")
+	var wm = load("res://scripts/world/world_map.gd")
+	var sector_name_key := str(wm.sector("s41").get("name_key", ""))
+	var sector_name := Loc.t(sector_name_key)
+	_check(sector_name != "" and text.contains(sector_name),
+		"имя сектора в заголовке (%s)" % sector_name)
 	_check(text.contains("FPS"), "FPS в заголовке одной строкой")
-	_check(text.contains("[день"), "единый формат [день N]")
-	_check(text.contains("[СИМ]"), "префикс SIM")
+	# The day prefix lives in the locale table and was capitalized during the
+	# English pass: take the marker from the table instead of hardcoding the
+	# Russian word, or this guard fails on a translation tweak, not on a bug.
+	var day_pat := Loc.t("ui.feed.day")
+	var day_mark := day_pat.substr(0, day_pat.find("%"))
+	_check(text.contains(day_mark), "единый формат [день N]")
+	_check(text.contains(Loc.t("ui.feed.kind.sim")), "префикс SIM")
 	_check(text.contains("event 11"), "последнее сообщение видно")
 	_check(not text.contains("first message"), "старые сообщения вытеснены (6–8 строк)")
 	_check(not text.contains("gen 1200ms"), "технические цифры скрыты без F3")
@@ -79,7 +88,7 @@ func _run() -> void:
 	await process_frame
 	var off := str(label.text if label != null else "")
 	_check(not off.contains("gen 1200ms"), "повторный F3 скрывает отладку")
-	_check(off.contains("[день"), "лента остаётся после выключения отладки")
+	_check(off.contains(day_mark), "лента остаётся после выключения отладки")
 
 	# Данные болтовни читаются.
 	var data: Dictionary = panel.get("_data")

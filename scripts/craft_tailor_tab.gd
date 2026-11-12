@@ -40,24 +40,23 @@ func _items() -> Array:
 func _item_label(entry: Dictionary) -> String:
 	var recipe: Dictionary = entry.get("recipe", {})
 	if str(entry.get("mode", "")) == RECIPE_ID and recipe.is_empty():
-		return tr("— Рецепты (нужен свиток) —")
+		return Loc.t("ui.craft.recipes_header")
 	if str(entry.get("mode", "")) == RECYCLE_ID:
 		var item: Dictionary = entry["item"]
-		var mark := "" if ItemDB.is_broken(item) else "  [целое]"
-		return "  %s  ×%d%s" % [str(item.get("name_ru", entry["key"])), int(entry["count"]), mark]
+		var mark := "" if ItemDB.is_broken(item) else Loc.t("ui.craft.intact")
+		return "  %s  ×%d%s" % [ItemDB.display_name(item), int(entry["count"]), mark]
 	return super._item_label(entry)
 
 
 func _build_recipe_detail(entry: Dictionary) -> void:
 	var recipe: Dictionary = entry.get("recipe", {})
 	if recipe.is_empty():
-		_detail.add_child(_make_hint(tr(
-			"Одежда мага: ткань + эссенция. Свитки рецептов — в лавке.")))
+		_detail.add_child(_make_hint(Loc.t("ui.craft.tailor.hint")))
 		return
-	_detail.add_child(_heading(str(recipe.get("name_ru", entry.get("id", "")))))
+	_detail.add_child(_heading(CraftDB.display_name(recipe)))
 	_detail.add_child(_tier_cards(recipe))
 	_detail.add_child(HSeparator.new())
-	_detail.add_child(_section(tr("Ингредиенты")))
+	_detail.add_child(_section(Loc.t("ui.craft.ingredients")))
 	for ing in recipe.get("inputs", []):
 		_detail.add_child(_make_ingredient_row(ing))
 

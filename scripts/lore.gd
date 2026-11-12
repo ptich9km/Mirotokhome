@@ -69,13 +69,13 @@ static func _ensure_loaded() -> void:
 static func _load_json(path: String) -> Dictionary:
 	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:
-		push_warning("Lore: не читается %s — канон пуст" % path)
+		push_warning("Lore: cannot read %s - the canon is empty" % path)
 		return {}
 	var parsed = JSON.parse_string(f.get_as_text())
 	f.close()
 	if parsed is Dictionary:
 		return parsed
-	push_warning("Lore: %s не JSON-объект" % path)
+	push_warning("Lore: %s is not a JSON object" % path)
 	return {}
 
 
@@ -107,16 +107,25 @@ static func faction(id: String) -> Dictionary:
 	return f if f is Dictionary else {}
 
 
+## A field with an English twin (`city` -> `city_en`) for the UI language.
+static func _en_field(record: Dictionary, key: String) -> String:
+	if Loc.locale() != Loc.REFERENCE_LOCALE:
+		var en := str(record.get(key + "_en", ""))
+		if en != "":
+			return en
+	return str(record.get(key, ""))
+
+
 ## Имя города фракции. Принимает и Game.hero_race, и ключ world.json.
 static func faction_city(race: String) -> String:
 	var fid := hero_race_to_faction(race)
-	return str(faction(fid).get("city", ""))
+	return _en_field(faction(fid), "city")
 
 
 ## Имя великого мага фракции из world.json («Маша» и т.д.).
 static func faction_archmage(race: String) -> String:
 	var fid := hero_race_to_faction(race)
-	return str(faction(fid).get("archmage", ""))
+	return _en_field(faction(fid), "archmage")
 
 
 ## Словарь NPC-мага (speech/personality) или {}.
@@ -135,6 +144,10 @@ static func archmage_npc(race: String) -> Dictionary:
 static func archmage_speech(race: String, kind: String) -> Array:
 	var n := archmage_npc(race)
 	var speech: Variant = n.get("speech", {})
+	if Loc.locale() != Loc.REFERENCE_LOCALE:
+		var en: Variant = n.get("speech_en", {})
+		if en is Dictionary and (en as Dictionary).has(kind):
+			speech = en
 	if not (speech is Dictionary):
 		return []
 	var lines: Variant = (speech as Dictionary).get(kind, [])

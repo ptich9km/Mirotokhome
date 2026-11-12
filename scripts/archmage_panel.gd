@@ -30,7 +30,8 @@ var _close_button: Button
 var _previous_focus: Control
 var _last_tier := -1
 
-const TIER_LABELS := ["Оборона", "Наступление", "Крепость", "Вершина"]
+## Tier names are localization KEYS: a const cannot call `Loc.t()`.
+const TIER_LABELS := ["ui.mage.tier.0", "ui.mage.tier.1", "ui.mage.tier.2", "ui.mage.tier.3"]
 
 
 ## city_race — раса города, в котором стоит капитан. Пусто — панель открыта не
@@ -108,7 +109,7 @@ func _build_ui() -> void:
 	var title := Label.new()
 	title.name = "Title"
 	title.theme_type_variation = &"ArchmageTitle"
-	title.text = tr("ВЕЛИКИЙ МАГ")
+	title.text = Loc.t("ui.mage.title")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	content.add_child(title)
 
@@ -184,11 +185,11 @@ func _build_ui() -> void:
 	stakes.add_theme_constant_override("separation", UiTheme.SPACE_2)
 	content.add_child(stakes)
 
-	_btn_ingot = _make_stake_button("Сдать слиток", _on_stake_ingot)
+	_btn_ingot = _make_stake_button(Loc.t("ui.mage.stake_ingot"), _on_stake_ingot)
 	stakes.add_child(_btn_ingot)
-	_btn_gold = _make_stake_button("Сдать золото (100)", _on_stake_gold)
+	_btn_gold = _make_stake_button(Loc.f("ui.mage.stake_gold", [_gold_per_stake()]), _on_stake_gold)
 	stakes.add_child(_btn_gold)
-	_btn_potion = _make_stake_button("Сдать зелье", _on_stake_potion)
+	_btn_potion = _make_stake_button(Loc.t("ui.mage.stake_potion"), _on_stake_potion)
 	stakes.add_child(_btn_potion)
 
 	_status_label = Label.new()
@@ -205,7 +206,7 @@ func _build_ui() -> void:
 
 	_close_button = Button.new()
 	_close_button.name = "Close"
-	_close_button.text = tr("Закрыть")
+	_close_button.text = Loc.t("ui.btn.close")
 	_close_button.theme_type_variation = &"ArchmageClose"
 	_close_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_close_button.pressed.connect(close)
@@ -247,14 +248,14 @@ func _refresh() -> void:
 	var am := _archmage()
 	var axis := _race if _race != "" else Game.hero_race
 	if _rep_label != null:
-		_rep_label.text = tr("Отношение: %s %d") \
-			% [Lore.faction_label(axis), Game.hero_reputation(axis)]
+		_rep_label.text = Loc.f("ui.mage.standing",
+			[Lore.faction_label(axis), Game.hero_reputation(axis)])
 	if am.is_empty():
-		_name_label.text = tr("Маг недоступен")
+		_name_label.text = Loc.t("ui.mage.unavailable")
 		_city_label.text = Lore.faction_city(axis)
 		_power_label.text = ""
 		_stance_label.text = ""
-		_speech_label.text = tr("В этом городе великого мага нет.")
+		_speech_label.text = Loc.t("ui.mage.none_here")
 		_set_stake_enabled(false, false, false)
 		if _portrait != null:
 			_portrait.texture = null
@@ -268,22 +269,24 @@ func _refresh() -> void:
 		max_power = float(cfg.get_value("archmage", "power_max", 100.0))
 	_power_bar.max_value = max_power
 	_power_bar.value = power
-	_name_label.text = str(am.get("name", tr("Маг")))
+	_name_label.text = str(am.get("name", Loc.t("ui.mage.name_default")))
 	_city_label.text = str(am.get("city", ""))
-	_power_label.text = tr("Могущество: %d / %d · ступень %d (%s)") % [
+	_power_label.text = Loc.f("ui.mage.power", [
 		int(round(power)), int(max_power), tier,
-		str(TIER_LABELS[clampi(tier, 0, TIER_LABELS.size() - 1)]),
-	]
-	_stance_label.text = tr("Режим: %s") % ("наступление" if str(am.get("stance", "")) == "offensive" else tr("оборона"))
-	if not _speech_label.text.begins_with(tr("Сдавайте")):
-		_speech_label.text = tr("Сдавайте ресурсы: слитки, золото, зелья. Могущество держит фракцию.")
+		Loc.t(str(TIER_LABELS[clampi(tier, 0, TIER_LABELS.size() - 1)])),
+	])
+	_stance_label.text = Loc.f("ui.mage.stance", [
+		Loc.t("ui.mage.stance.offensive") if str(am.get("stance", "")) == "offensive"
+		else Loc.t("ui.mage.stance.defence")])
+	if not _speech_label.text.begins_with(Loc.t("ui.mage.speech_begin")):
+		_speech_label.text = Loc.t("ui.mage.speech")
 	_speak_if_tier_changed(tier)
 	_set_portrait(tier)
 	_sync_captain_sprite(tier)
 	var full := power >= max_power - 0.01
 	_set_stake_enabled(not full, not full and _has_gold_stake(), not full and _find_stake_key("potion") != "")
 	if full:
-		_status_label.text = tr("Маг не возьмёт больше.")
+		_status_label.text = Loc.t("ui.mage.full")
 	else:
 		_status_label.text = ""
 
@@ -300,7 +303,7 @@ func _speak_if_tier_changed(tier: int) -> void:
 		lines = Lore.archmage_speech(Game.hero_race, "greet")
 	if lines.is_empty():
 		return
-	_speech_label.text = tr("«%s»") % str(lines[randi() % lines.size()])
+	_speech_label.text = Loc.f("ui.mage.quote", [str(lines[randi() % lines.size()])])
 
 
 func _set_portrait(tier: int) -> void:
@@ -368,11 +371,14 @@ func _set_stake_enabled(ingot: bool, gold: bool, potion: bool) -> void:
 func _has_gold_stake() -> bool:
 	if not is_instance_valid(player):
 		return false
-	var gps := 100
+	return player.gold >= _gold_per_stake()
+
+
+## Gold the mage takes per stake: read from the SIM script so the button, the
+## check and the deduction cannot disagree.
+func _gold_per_stake() -> int:
 	var ws := _ws_script()
-	if ws != null:
-		gps = int(ws.archmage_gold_per_stake())
-	return player.gold >= gps
+	return int(ws.archmage_gold_per_stake()) if ws != null else 100
 
 
 func _find_stake_key(kind: String) -> String:
@@ -405,35 +411,32 @@ func _do_stake(kind: String) -> void:
 	if am.is_empty():
 		return
 	if float(am.get("power", 0.0)) >= 100.0:
-		_status_label.text = tr("Маг не возьмёт больше.")
+		_status_label.text = Loc.t("ui.mage.full")
 		return
 	var amount := _stake_amount(kind)
 	if amount <= 0.0:
-		_status_label.text = tr("Ставка не настроена.")
+		_status_label.text = Loc.t("ui.mage.no_stake")
 		return
 	if kind == "gold":
-		var gps := 100
-		var ws := _ws_script()
-		if ws != null:
-			gps = int(ws.archmage_gold_per_stake())
+		var gps := _gold_per_stake()
 		if player.gold < gps:
-			_status_label.text = tr("Не хватает золота.")
+			_status_label.text = Loc.t("ui.mage.no_gold")
 			return
 		player.gold -= gps
 	else:
 		var key := _find_stake_key(kind)
 		if key == "":
-			_status_label.text = tr("Нечего отдавать.")
+			_status_label.text = Loc.t("ui.mage.nothing")
 			return
 		player.remove_item(key)
 	var tier_delta: int = bus.state.add_archmage_power(Game.hero_race, amount)
 	SoundDB.play("ui.error")
 	if tier_delta > 0:
-		_status_label.text = tr("Маг окреп (ступень +%d)." % tier_delta)
+		_status_label.text = Loc.f("ui.mage.grown", [tier_delta])
 	elif tier_delta < 0:
-		_status_label.text = tr("Маг слабеет.")
+		_status_label.text = Loc.t("ui.mage.weaker")
 	else:
-		_status_label.text = tr("Плата принята.")
+		_status_label.text = Loc.t("ui.mage.accepted")
 	_last_tier = int(bus.state.get_archmage(Game.hero_race).get("tier", _last_tier))
 	_refresh()
 	inventory_changed.emit()

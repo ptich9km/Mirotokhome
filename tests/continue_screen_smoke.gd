@@ -24,15 +24,15 @@ func _initialize() -> void:
 func _run() -> void:
 	# --- 1. Без сейвов: все слоты пусты, кнопки disabled ---
 	await _open_menu()
-	var load_btn := _find_button("Загрузить игру")
-	_check(load_btn != null, "кнопка «Загрузить игру»")
+	var load_btn := _find_button(Loc.t("ui.menu.load_game"))
+	_check(load_btn != null, "кнопка «%s»" % Loc.t("ui.menu.load_game"))
 	if load_btn != null:
 		load_btn.pressed.emit()
 		await process_frame
 		await create_timer(0.2).timeout
 	var empty_slots := _count_slot_buttons(true)
 	_check(empty_slots == 6, "без сейвов 6 пустых слотов (%d)" % empty_slots)
-	var back := _find_button("Назад")
+	var back := _find_button(Loc.t("ui.common.back"))
 	if back != null:
 		back.pressed.emit()
 		await process_frame
@@ -40,8 +40,8 @@ func _run() -> void:
 	# --- 2. С сохранением: слот заполнен, apply_payload ---
 	_write_save("slot_0", "Тестовый маг", 12, 5000)
 	await _open_menu()
-	load_btn = _find_button("Загрузить игру")
-	_check(load_btn != null, "кнопка «Загрузить игру» (2)")
+	load_btn = _find_button(Loc.t("ui.menu.load_game"))
+	_check(load_btn != null, "кнопка «%s» (2)" % Loc.t("ui.menu.load_game"))
 	if load_btn != null:
 		load_btn.pressed.emit()
 		await process_frame
@@ -66,10 +66,11 @@ func _run() -> void:
 	await create_timer(0.3).timeout
 	var cs = current_scene
 	if cs != null:
-		_check(_find_button_in(cs, "Продолжить") == null,
+		_check(_find_button_in(cs, "Продолжить") == null
+			and _find_button_in(cs, "Continue") == null,
 			"character_select: «Продолжить» удалён")
-		_check(_find_button_in(cs, "В ПУТЬ!") != null,
-			"character_select: «В ПУТЬ!» на месте")
+		_check(_find_button_in(cs, Loc.t("ui.char.start")) != null,
+			"character_select: «%s» на месте" % Loc.t("ui.char.start"))
 
 	_wipe()
 	_report()
@@ -101,6 +102,17 @@ func _write_save(slot: String, hero: String, day: int, stamp: int) -> void:
 			"zone": "mid", "seed": 777, "stamp": stamp },
 	})
 
+## Slot row text is localized ("Слот %d — пусто" / "Slot %d — empty"): the row
+## prefix and the empty marker come from the table, not from a hardcoded word.
+func _slot_prefix() -> String:
+	return str(Loc.t("ui.load.slot_empty").split("%")[0])
+
+
+func _empty_mark() -> String:
+	return str(Loc.t("ui.load.slot_empty").split("%d")[1]).strip_edges() \
+		.trim_prefix("—").strip_edges()
+
+
 func _count_slot_buttons(empty_only: bool) -> int:
 	var mm = current_scene
 	if mm == null:
@@ -108,14 +120,11 @@ func _count_slot_buttons(empty_only: bool) -> int:
 	var n := 0
 	for b in _buttons_in(mm):
 		var t := str((b as Button).text)
-		if not t.contains("Слот"):
+		if not t.contains(_slot_prefix()):
 			continue
-		if empty_only:
-			if t.contains("пусто"):
-				n += 1
-		else:
-			if not t.contains("пусто"):
-				n += 1
+		var empty := t.contains(_empty_mark())
+		if empty_only == empty:
+			n += 1
 	return n
 
 func _find_filled_slot_button() -> Button:
@@ -124,7 +133,7 @@ func _find_filled_slot_button() -> Button:
 		return null
 	for b in _buttons_in(mm):
 		var t := str((b as Button).text)
-		if t.contains("Слот") and not t.contains("пусто"):
+		if t.contains(_slot_prefix()) and not t.contains(_empty_mark()):
 			return b
 	return null
 

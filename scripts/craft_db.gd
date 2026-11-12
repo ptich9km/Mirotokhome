@@ -168,6 +168,18 @@ static func recipe_by_id(id: String) -> Dictionary:
 	return {}
 
 
+## Recipe name in the UI language: the `name_en` column when it exists, the
+## Russian one otherwise. Recipes live in data, so a missing translation must
+## fall back to `name_ru` and never to a raw id.
+static func display_name(recipe: Dictionary) -> String:
+	if Loc.locale() == "en":
+		var en := str(recipe.get("name_en", ""))
+		if en != "":
+			return en
+	var ru := str(recipe.get("name_ru", ""))
+	return ru if ru != "" else str(recipe.get("id", ""))
+
+
 ## Ключ свитка-рецепта для id рецепта.
 static func recipe_scroll_key(recipe_id: String) -> String:
 	return RECIPE_SCROLL_PREFIX + recipe_id

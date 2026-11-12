@@ -109,8 +109,9 @@ func _run() -> void:
 		for c in (sbox as Node).get_children():
 			if c is HBoxContainer:
 				for lab in (c as HBoxContainer).get_children():
-					if lab is Label and str((lab as Label).text).to_upper() in [
-						"АТРИБУТЫ", "БОЙ", "НАВЫКИ", "ПРОЧЕЕ"]:
+					if lab is Label and str((lab as Label).text) in [
+						Loc.t("ui.inv.section.attrs"), Loc.t("ui.inv.section.combat"),
+						Loc.t("ui.inv.section.skills"), Loc.t("ui.inv.section.other")]:
 						sec_titles += 1
 	_check(sec_titles >= 3, "в статах есть секции (найдено заголовков: %d)" % sec_titles)
 	var shield_lab = inv.get("_shield_label")

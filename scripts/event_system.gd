@@ -173,7 +173,7 @@ func spawn_rescue_at(cell: Vector2i) -> int:
 		return 0
 	_events.append(ev)
 	_attach_marker(ev, ttl, MinimapMarkers.Kind.QUEST_RESCUE)
-	print("EVENT: путник и %d Серых в (%d,%d), %.0f сек" % [
+	print("EVENT: traveller and %d Grey at (%d,%d), %.0f s" % [
 		(ev["members_a"] as Array).size(), cell.x, cell.y, ttl])
 	return int(ev["id"])
 
@@ -485,7 +485,7 @@ func _finish_event(ev: Dictionary) -> void:
 	_clear_tags(ev)
 	_remove_marker(ev)
 	_events.erase(ev)
-	print("EVENT: стычка %d завершилась" % int(ev["id"]))
+	print("EVENT: encounter %d finished" % int(ev["id"]))
 
 func _clear_tags(ev: Dictionary) -> void:
 	for key in ["members_a", "members_b", "members_v"]:
@@ -497,12 +497,12 @@ func _clear_tags(ev: Dictionary) -> void:
 ## the traveller is killed off screen and the reward is lost.
 func _expire_event(ev: Dictionary) -> void:
 	if str(ev.get("kind", "")) == "rescue":
-		_finish_rescue(ev, false, "время вышло")
+		_finish_rescue(ev, false, "time ran out")
 		return
 	_free_event_units(ev)
 	_remove_marker(ev)
 	_events.erase(ev)
-	print("EVENT: стычка %d истекла по времени" % int(ev["id"]))
+	print("EVENT: encounter %d expired by time" % int(ev["id"]))
 
 func _free_event_units(ev: Dictionary) -> void:
 	for key in ["members_a", "members_b"]:
@@ -527,14 +527,14 @@ func _finish_rescue(ev: Dictionary, saved: bool, reason: String = "") -> void:
 		_reward_rescue(ev, victim)
 		if victim != null:
 			_leave_for_city(victim, ev)
-		print("EVENT: путник спасён")
+		print("EVENT: traveller saved")
 		return
 	# Failure: the traveller dies where he stands. A live one is finished off by
 	# the event itself (the mobs may already be gone).
 	if victim != null:
 		_clear_tags(ev)
 		victim.call("take_damage", int(victim.get("current_hp")) + 1, null)
-	print("EVENT: путник погиб (%s)" % (reason if reason != "" else "не успели"))
+	print("EVENT: traveller died (%s)" % (reason if reason != "" else "too late"))
 
 ## Золото, репутация ближайшего города и запись в журнал/ленту мира.
 func _reward_rescue(ev: Dictionary, victim: Node2D) -> void:
@@ -551,7 +551,7 @@ func _reward_rescue(ev: Dictionary, victim: Node2D) -> void:
 			st.add_hero_reputation(race, rep)
 		st.log_entry("event", "Traveller saved near %s: +%d gold" % [
 			str(city.get("name", city.get("id", "the road"))), gold])
-	WORLD_FEED.post("world", "Путник спасён: +%d золота" % gold)
+	WORLD_FEED.post("world", Loc.f("ui.feed.rescue", [gold]))
 	SoundDB.play("ui.click")
 
 ## Ближайший к событию город (для репутации и ухода путника).

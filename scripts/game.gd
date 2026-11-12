@@ -232,7 +232,7 @@ static func shield_reduce(unit: Node2D, dmg: int) -> int:
 	unit.set_meta("shield_strength", strength - dmg)
 	var out := maxi(0, dmg - strength)
 	if out == 0:
-		print("%s: щит поглотил весь урон!" % unit.name)
+		print("%s: the shield absorbed all the damage!" % unit.name)
 	return out
 
 ## --- Shared combat math: stats -> chance/damage (for ANY unit) ---
@@ -739,7 +739,7 @@ static func autosave_interval() -> float:
 # --- Hero selection at start (the character_select scene) ---
 static var hero_class: String = "warrior"   # warrior | mage
 static var hero_gender: String = "male"     # male | female
-static var hero_name: String = "Герой"
+static var hero_name: String = Loc.t("ui.sim.hero_default")
 static var hero_character_id: String = "human_m_war"  # race portrait id
 static var hero_portrait: String = ""       # res:// path to the portrait
 static var hero_race: String = "human"      # human | necro | druid | ork
@@ -1205,9 +1205,9 @@ func _ready():  # World and combat initialisation
 	for child in get_children():
 		if child.is_in_group("enemy"):
 			enemies.append(child)
-			print("  Враг найден: ", child.name, " HP=", child.max_hp if "max_hp" in child else "?")
+			print("  Enemy found: ", child.name, " HP=", child.max_hp if "max_hp" in child else "?")
 
-	print("Всего врагов: ", enemies.size())
+	print("Enemies total: ", enemies.size())
 
 	# Add the player to the "player" group for the enemies
 	player.add_to_group("player")
@@ -1349,7 +1349,7 @@ func _spawn_map_units(done: Callable = Callable()) -> void:
 			if not is_inside_tree():
 				return
 			await get_tree().process_frame
-	print("Карта: спавн юнитов %d" % spawned)
+	print("Map: %d units spawned" % spawned)
 	_on_spawn_batch(recs.size(), recs.size())
 	if done.is_valid():
 		done.call()
@@ -1511,7 +1511,7 @@ func _input(event):
 				var sn := str(Game.pending_spell.get("name", ""))
 				if sn != "":
 					Game.hotbar[slot] = {"kind": "spell", "name": sn}
-					print("Быстрая клавиша %d -> %s" % [slot + 1, sn])
+					print("Hotkey %d -> %s" % [slot + 1, sn])
 					if ui != null and ui.has_method("_notify_hotbar_assigned"):
 						ui._notify_hotbar_assigned(slot, sn)
 					return
@@ -1520,7 +1520,7 @@ func _input(event):
 					var item := ItemDB.find(iu)
 					if not item.is_empty():
 						Game.hotbar[slot] = {"kind": "item", "key": iu}
-						print("Быстрая клавиша %d -> %s" % [slot + 1, iu])
+						print("Hotkey %d -> %s" % [slot + 1, iu])
 						if ui != null and ui.has_method("_notify_item_assigned"):
 							ui._notify_item_assigned(slot, iu)
 						return
@@ -1598,7 +1598,7 @@ func handle_click(world_position: Vector2):
 	# The hero is dead (falling/decomposing) — controls do not work
 	if is_instance_valid(player) and player.state in ["dead", "decay"]:
 		return
-	print("Клик в: ", world_position)
+	print("Click at: ", world_position)
 	_pending_herb = null
 	_pending_building = ""
 	_pending_s = {}
@@ -1631,11 +1631,11 @@ func handle_click(world_position: Vector2):
 
 	var enemy = get_enemy_at_position(world_position)
 	if enemy:
-		print("Атака врага!")
+		print("Attack the enemy!")
 		player.attack_target = enemy
 		player.state = "chase"
 	else:
-		print("Движение к: ", world_position)
+		print("Move to: ", world_position)
 		var blocked := Game.occupied_cells([player])
 		var goal := world_position
 		# A click on a BODY (a mercenary, a guard, a Gray that is not a click target)
@@ -1752,7 +1752,7 @@ func _harvest_herb(herb: HerbNode) -> void:
 	if is_instance_valid(ui):
 		ui.refresh_inventory()
 	SoundDB.play("ui.click")
-	print("Собрана трава: %s" % herb.item_key)
+	print("Herb picked: %s" % herb.item_key)
 
 ## The city great mage (captain) under the cursor.
 func _archmage_at_position(click_pos: Vector2) -> Node2D:
@@ -2641,7 +2641,7 @@ func _on_portal_enter(target_sector: String = "") -> void:
 	# An old map without an address: the chain start -> mid -> hard.
 	var next_zone := str(PORTAL_CHAIN.get(Game.map_zone, ""))
 	if next_zone == "":
-		print("Портал из зоны '%s' ведёт в никуда — конец маршрута" % Game.map_zone)
+		print("Portal from zone '%s' leads nowhere - the end of the route" % Game.map_zone)
 		return
 	autosave_now()
 	travel_to_zone(next_zone)
@@ -2714,7 +2714,7 @@ func travel_to_zone(zone: String) -> void:
 		return
 	var sector := str(wm.sector_for_tier(zone))
 	if sector == "":
-		push_error("Переход: нет сектора для тира '%s'" % zone)
+		push_error("Transition: no sector for tier '%s'" % zone)
 		return
 	travel_to_sector(sector)
 
@@ -2727,7 +2727,7 @@ func travel_to_sector(sector_id: String) -> void:
 		return
 	var wm := Game._world_map()
 	if not wm.has(sector_id):
-		push_error("Переход: неизвестный сектор '%s'" % sector_id)
+		push_error("Transition: unknown sector '%s'" % sector_id)
 		return
 	_travelling = true
 	_ensure_world_state()
@@ -2792,7 +2792,7 @@ func travel_to_sector(sector_id: String) -> void:
 	if loaded_slot != "":
 		var store_err := SaveSystem.store_zone_map(loaded_slot, new_path)
 		if store_err != "":
-			push_warning("SaveSystem: карта сектора '%s' не легла в слот %s: %s" % [sector_id, loaded_slot, store_err])
+			push_warning("SaveSystem: the map of sector '%s' did not fit slot %s: %s" % [sector_id, loaded_slot, store_err])
 
 	# Warm-up: shaders and the first map frames compile/draw under the overlay.
 	while Time.get_ticks_msec() - _loading_start_ms < 600:
@@ -2802,7 +2802,7 @@ func travel_to_sector(sector_id: String) -> void:
 	_hide_loading()
 	get_tree().paused = was_paused
 	_travelling = false
-	print("Переход: сектор '%s' (%s), карта %s" % [sector_id, tier, new_path])
+	print("Transition: sector '%s' (%s), map %s" % [sector_id, tier, new_path])
 
 
 ## Prepare the current 4x3 world if it does not exist yet (a new game / dev map).
@@ -3339,7 +3339,7 @@ func _restart_scene(slot: String) -> void:
 	if map_path == "":
 		map_path = _zone_map_path(Game.map_zone, Game.map_seed)
 	if map_path == "" or not FileAccess.file_exists(map_path):
-		push_error("SaveSystem: карта слота '%s' не найдена" % slot)
+		push_error("SaveSystem: the map of slot '%s' is not found" % slot)
 		get_tree().change_scene_to_file("res://scenes/main.tscn")
 		return
 	await _swap_map(map_path, Game.map_zone, true, Game.map_sector)

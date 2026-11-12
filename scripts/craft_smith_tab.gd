@@ -34,12 +34,12 @@ func _items() -> Array:
 func _item_label(entry: Dictionary) -> String:
 	if str(entry.get("mode", "")) == RECYCLE_ID:
 		var item: Dictionary = entry["item"]
-		var mark := "" if ItemDB.is_broken(item) else "  [целое]"
-		return "  %s  ×%d%s" % [str(item.get("name_ru", entry["key"])), int(entry["count"]), mark]
+		var mark := "" if ItemDB.is_broken(item) else Loc.t("ui.craft.intact")
+		return "  %s  ×%d%s" % [ItemDB.display_name(item), int(entry["count"]), mark]
 	var recipe: Dictionary = entry.get("recipe", {})
 	if recipe.is_empty():
-		return tr("— Рецепты (нужен свиток) —")
-	return "    %s" % str(recipe.get("name_ru", entry.get("id", "")))
+		return Loc.t("ui.craft.recipes_header")
+	return "    %s" % CraftDB.display_name(recipe)
 
 
 func _build_detail(entry: Dictionary) -> void:
@@ -52,11 +52,11 @@ func _build_detail(entry: Dictionary) -> void:
 func _build_recycle_detail(entry: Dictionary) -> void:
 	var item: Dictionary = entry["item"]
 	var y := CraftDB.recycle_yield(item)
-	_detail.add_child(_heading(str(item.get("name_ru", entry["key"]))))
+	_detail.add_child(_heading(ItemDB.display_name(item)))
 	if ItemDB.is_broken(item):
-		_detail.add_child(_note(tr("Сломанная вещь: выход по качеству.")))
+		_detail.add_child(_note(Loc.t("ui.craft.smith.broken")))
 	else:
-		_detail.add_child(_note(tr("Целая вещь: выход = 80%% ресурсов крафта.")))
+		_detail.add_child(_note(Loc.t("ui.craft.smith.intact")))
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", UiTheme.SPACE_3)
@@ -67,35 +67,34 @@ func _build_recycle_detail(entry: Dictionary) -> void:
 	got.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	got.add_theme_constant_override("separation", 2)
 	row.add_child(got)
-	got.add_child(_line(tr("Качество: %s") % str(item.get("quality", ""))))
-	got.add_child(_line(tr("В наличии: %d шт") % int(entry["count"])))
+	got.add_child(_line(Loc.f("ui.craft.quality", [str(item.get("quality", ""))])))
+	got.add_child(_line(Loc.f("ui.craft.in_stock", [int(entry["count"])])))
 	got.add_child(HSeparator.new())
 	if int(y.get("ingot", 0)) > 0:
 		var ingot_key := ItemDB.ingot_key(str(item.get("material", "")))
 		var ingot := ItemDB.find(ingot_key)
 		got.add_child(_line("%s ×%d" % [
-			str(ingot.get("name_ru", ingot_key)), int(y["ingot"])]))
+			ItemDB.display_name(ingot), int(y["ingot"])]))
 	if int(y.get("fabric", 0)) > 0:
-		got.add_child(_line("%s ×%d" % [str(ItemDB.find(CraftDB.FABRIC_KEY)
-			.get("name_ru", CraftDB.FABRIC_KEY)), int(y["fabric"])]))
+		got.add_child(_line("%s ×%d" % [
+			ItemDB.display_name(ItemDB.find(CraftDB.FABRIC_KEY)), int(y["fabric"])]))
 	if int(y.get("essence", 0)) > 0:
-		got.add_child(_line("%s ×%d" % [str(ItemDB.find(CraftDB.ESSENCE_KEY)
-			.get("name_ru", CraftDB.ESSENCE_KEY)), int(y["essence"])]))
+		got.add_child(_line("%s ×%d" % [
+			ItemDB.display_name(ItemDB.find(CraftDB.ESSENCE_KEY)), int(y["essence"])]))
 	if int(y.get("ingot", 0)) == 0 and int(y.get("fabric", 0)) == 0 \
 			and int(y.get("essence", 0)) == 0:
-		got.add_child(_line(tr("Нет ресурсов для переплавки")))
+		got.add_child(_line(Loc.t("ui.craft.smith.no_resources")))
 
 
 func _build_recipe_detail(entry: Dictionary) -> void:
 	var recipe: Dictionary = entry.get("recipe", {})
 	if recipe.is_empty():
-		_detail.add_child(_make_hint(tr(
-			"Сломанные вещи дают слитки и ткань. Из них варится новая вещь.")))
+		_detail.add_child(_make_hint(Loc.t("ui.craft.smith.hint")))
 		return
-	_detail.add_child(_heading(str(recipe.get("name_ru", entry.get("id", "")))))
+	_detail.add_child(_heading(CraftDB.display_name(recipe)))
 	_detail.add_child(_tier_cards(recipe))
 	_detail.add_child(HSeparator.new())
-	_detail.add_child(_section(tr("Ингредиенты")))
+	_detail.add_child(_section(Loc.t("ui.craft.ingredients")))
 	for ing in recipe.get("inputs", []):
 		_detail.add_child(_make_ingredient_row(ing))
 
@@ -149,14 +148,14 @@ func _make_ingredient_row(raw: Dictionary) -> Control:
 	m.add_child(row)
 	row.add_child(_make_icon(item, Vector2(40, 40)))
 	var name_label := Label.new()
-	name_label.text = str(item.get("name_ru", item_key))
+	name_label.text = ItemDB.display_name(item)
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(name_label)
 	var count_label := Label.new()
 	count_label.theme_type_variation = &"CraftIngredientOk" \
 		if current >= required else &"CraftIngredientMissing"
-	count_label.text = tr("Есть %d / нужно %d") % [current, required]
+	count_label.text = Loc.f("ui.craft.have_need", [current, required])
 	count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(count_label)
 	return panel

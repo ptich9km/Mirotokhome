@@ -17,17 +17,19 @@ signal inventory_changed
 const RECIPES_PATH := "res://assets/professions/alchemy/recipes.json"
 const SKILL := "alchemy"
 
+## Tiers and zones carry KEYS: a const cannot call `Loc.t()`, and both are shown
+## in the UI language (same trap as the hero presets and the shop tabs).
 const TIER_TITLES := {
-	1: "ПРОСТЫЕ",
-	2: "СРЕДНИЕ",
-	3: "СИЛЬНЫЕ",
-	4: "РЕДКИЕ",
+	1: "ui.alch.tier.1",
+	2: "ui.alch.tier.2",
+	3: "ui.alch.tier.3",
+	4: "ui.alch.tier.4",
 }
 const ZONE_TITLES := {
-	"start": "начальных землях",
-	"mid": "средних землях",
-	"hard": "опасных землях",
-	"faction": "землях фракций",
+	"start": "ui.alch.zone.start",
+	"mid": "ui.alch.zone.mid",
+	"hard": "ui.alch.zone.hard",
+	"faction": "ui.alch.zone.faction",
 }
 
 var player: Player
@@ -83,7 +85,7 @@ func _build_ui() -> void:
 	content.add_child(header)
 	var title := Label.new()
 	title.theme_type_variation = &"AlchemyTitle"
-	title.text = tr("АЛХИМИЯ")
+	title.text = Loc.t("ui.alch.title")
 	header.add_child(title)
 	_skill_label = Label.new()
 	_skill_label.name = "Skill"
@@ -93,7 +95,7 @@ func _build_ui() -> void:
 	header.add_child(_skill_label)
 	var hint := Label.new()
 	hint.theme_type_variation = &"AlchemyHint"
-	hint.text = tr("Соберите травы и создайте зелье")
+	hint.text = Loc.t("ui.alch.hint")
 	hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	header.add_child(hint)
 
@@ -115,7 +117,7 @@ func _build_ui() -> void:
 	recipe_margin.add_child(recipe_column)
 	var recipe_title := Label.new()
 	recipe_title.theme_type_variation = &"AlchemySectionTitle"
-	recipe_title.text = tr("РЕЦЕПТЫ")
+	recipe_title.text = Loc.t("ui.alch.recipes")
 	recipe_column.add_child(recipe_title)
 	var recipe_scroll := ScrollContainer.new()
 	recipe_scroll.name = "RecipeScroll"
@@ -148,20 +150,20 @@ func _build_ui() -> void:
 	_status_label = Label.new()
 	_status_label.name = "Status"
 	_status_label.theme_type_variation = &"AlchemyHint"
-	_status_label.text = tr("Выберите рецепт")
+	_status_label.text = Loc.t("ui.alch.choose")
 	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	footer.add_child(_status_label)
 	_create_button = Button.new()
 	_create_button.name = "Create"
-	_create_button.text = tr("Создать")
+	_create_button.text = Loc.t("ui.alch.create")
 	_create_button.custom_minimum_size = Vector2(180, 46)
 	_create_button.pressed.connect(_create_selected)
 	footer.add_child(_create_button)
 	_close_button = Button.new()
 	_close_button.name = "Close"
-	_close_button.text = tr("Закрыть")
+	_close_button.text = Loc.t("ui.btn.close")
 	_close_button.custom_minimum_size = Vector2(140, 46)
 	_close_button.pressed.connect(close)
 	footer.add_child(_close_button)
@@ -247,7 +249,7 @@ func _refresh() -> void:
 		_create_button.disabled = not _can_craft(_recipes[_selected_index])
 	else:
 		_create_button.disabled = true
-		_status_label.text = tr("Нет доступных рецептов")
+		_status_label.text = Loc.t("ui.alch.no_recipes")
 	_configure_focus()
 	if not _recipe_buttons.is_empty():
 		_recipe_buttons[_selected_index].call_deferred("grab_focus")
@@ -258,7 +260,7 @@ func _refresh() -> void:
 func _make_tier_header(tier: int) -> Label:
 	var label := Label.new()
 	label.theme_type_variation = &"AlchemyTierTitle"
-	label.text = tr(str(TIER_TITLES.get(tier, "ПРОСТЫЕ")))
+	label.text = Loc.t(str(TIER_TITLES.get(tier, "ui.alch.tier.1")))
 	label.custom_minimum_size = Vector2(0, 26)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	return label
@@ -267,9 +269,9 @@ func _make_tier_header(tier: int) -> Label:
 func _recipe_button_text(recipe: Dictionary) -> String:
 	var output_key := str(recipe.get("output", ""))
 	var output := ItemDB.find(output_key)
-	var name := str(output.get("name_ru", output_key))
+	var name := ItemDB.display_name(output)
 	if _is_locked(recipe):
-		return "— %s  (алхимия %d)" % [name, int(recipe.get("skill_min", 0))]
+		return Loc.f("ui.alch.locked", [name, int(recipe.get("skill_min", 0))])
 	return name
 
 
@@ -278,7 +280,7 @@ func _update_skill_label() -> void:
 	var next_exp := Player.skill_to_exp(level + 1)
 	var exp := int(player.experience.get(SKILL, 0)) if is_instance_valid(player) else 0
 	var left := maxi(0, next_exp - exp)
-	_skill_label.text = tr("Навык: %d  ·  до следующего %d") % [level, left]
+	_skill_label.text = Loc.f("ui.alch.skill", [level, left])
 
 
 func _skill_level() -> int:
@@ -299,11 +301,11 @@ func _select_recipe(index: int) -> void:
 	_selected_index = clampi(index, 0, _recipes.size() - 1)
 	var recipe: Dictionary = _recipes[_selected_index]
 	if _is_locked(recipe):
-		_status_label.text = tr("Нужна алхимия %d") % int(recipe.get("skill_min", 0))
+		_status_label.text = Loc.f("ui.alch.need_skill", [int(recipe.get("skill_min", 0))])
 	elif _has_ingredients(recipe):
-		_status_label.text = tr("Все ингредиенты на месте")
+		_status_label.text = Loc.t("ui.alch.all_ok")
 	else:
-		_status_label.text = tr("Не хватает ингредиентов")
+		_status_label.text = Loc.t("ui.alch.not_ok")
 	_refresh()
 
 
@@ -312,7 +314,7 @@ func _build_detail(recipe: Dictionary) -> void:
 	var output := ItemDB.find(output_key)
 	var heading := Label.new()
 	heading.theme_type_variation = &"AlchemyRecipeTitle"
-	heading.text = str(output.get("name_ru", output_key))
+	heading.text = ItemDB.display_name(output)
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_detail.add_child(heading)
 	var icon := TextureRect.new()
@@ -336,7 +338,7 @@ func _build_detail(recipe: Dictionary) -> void:
 	_detail.add_child(divider)
 	var ingredients_title := Label.new()
 	ingredients_title.theme_type_variation = &"AlchemySectionTitle"
-	ingredients_title.text = tr("Ингредиенты")
+	ingredients_title.text = Loc.t("ui.alch.ingredients")
 	_detail.add_child(ingredients_title)
 	for raw in recipe.get("ingredients", []):
 		_detail.add_child(_make_ingredient_row(raw))
@@ -344,10 +346,10 @@ func _build_detail(recipe: Dictionary) -> void:
 	footer.theme_type_variation = &"AlchemyHint"
 	var xp := int(recipe.get("xp", 0))
 	if _is_locked(recipe):
-		footer.text = tr("Откроется на навыке %d (сейчас %d)") % [
-			int(recipe.get("skill_min", 0)), _skill_level()]
+		footer.text = Loc.f("ui.alch.unlock", [
+			int(recipe.get("skill_min", 0)), _skill_level()])
 	else:
-		footer.text = tr("Опыт алхимии за варку: +%d") % xp
+		footer.text = Loc.f("ui.alch.xp", [xp])
 	footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_detail.add_child(footer)
 
@@ -362,31 +364,31 @@ func _effect_lines(item: Dictionary) -> Array[String]:
 		var value := Player._effect_value(line)
 		var duration := int(Player._effect_duration(line, 0.0))
 		if low.begins_with("health="):
-			out.append(tr("Восстанавливает %d здоровья") % value)
+			out.append(Loc.f("ui.alch.effect.health", [value]))
 		elif low.begins_with("mana="):
-			out.append(tr("Восстанавливает %d маны") % value)
+			out.append(Loc.f("ui.alch.effect.mana", [value]))
 		elif low.begins_with("healthregeneration="):
-			out.append(tr("Восстанавливает %d%% здоровья за %d с") % [value, duration])
+			out.append(Loc.f("ui.alch.effect.health_regen", [value, duration]))
 		elif low.begins_with("manaregeneration="):
-			out.append(tr("Восстанавливает %d%% маны за %d с") % [value, duration])
+			out.append(Loc.f("ui.alch.effect.mana_regen", [value, duration]))
 		elif low.begins_with("absorbtion="):
-			out.append(tr("+%d к поглощению на %d с") % [value, duration])
+			out.append(Loc.f("ui.alch.effect.absorb", [value, duration]))
 		elif low.begins_with("attack="):
-			out.append(tr("+%d к атаке на %d с") % [value, duration])
+			out.append(Loc.f("ui.alch.effect.attack", [value, duration]))
 		elif low.begins_with("defense="):
-			out.append(tr("+%d к защите на %d с") % [value, duration])
+			out.append(Loc.f("ui.alch.effect.defense", [value, duration]))
 		elif low.begins_with("speed="):
-			out.append(tr("+%d%% к скорости на %d с") % [value, duration])
+			out.append(Loc.f("ui.alch.effect.speed", [value, duration]))
 		elif low.begins_with("fireresistance="):
-			out.append(tr("+%d к защите от огня на %d с") % [value, duration])
+			out.append(Loc.f("ui.alch.effect.res_fire", [value, duration]))
 		elif low.begins_with("waterresistance="):
-			out.append(tr("+%d к защите от воды на %d с") % [value, duration])
+			out.append(Loc.f("ui.alch.effect.res_water", [value, duration]))
 		elif low.begins_with("airresistance="):
-			out.append(tr("+%d к защите от воздуха на %d с") % [value, duration])
+			out.append(Loc.f("ui.alch.effect.res_air", [value, duration]))
 		elif low.begins_with("earthresistance="):
-			out.append(tr("+%d к защите от земли на %d с") % [value, duration])
+			out.append(Loc.f("ui.alch.effect.res_earth", [value, duration]))
 		elif "duration" not in low:
-			out.append(tr("Навсегда: %s") % line)
+			out.append(Loc.f("ui.alch.effect.forever", [line]))
 	return out
 
 
@@ -420,13 +422,13 @@ func _make_ingredient_row(raw: Dictionary) -> PanelContainer:
 	var prefix := ""
 	if tier > 0:
 		prefix = "[T%d] " % tier
-	name_label.text = prefix + str(item.get("name_ru", item_key))
+	name_label.text = prefix + ItemDB.display_name(item)
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(name_label)
 	var count_label := Label.new()
 	count_label.theme_type_variation = &"AlchemyIngredientOk" if current >= required else &"AlchemyIngredientMissing"
-	count_label.text = tr("Есть %d / нужно %d") % [current, required]
+	count_label.text = Loc.f("ui.craft.have_need", [current, required])
 	count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(count_label)
 	if current < required:
@@ -448,10 +450,10 @@ func _grow_hint(item_key: String) -> String:
 		return ""
 	var parts: Array[String] = []
 	for zone in zones:
-		parts.append(tr(str(ZONE_TITLES.get(str(zone), str(zone)))))
-	var text := tr("Растёт в ") + ", ".join(parts)
+		parts.append(Loc.t(str(ZONE_TITLES.get(str(zone), str(zone)))))
+	var text := Loc.t("ui.alch.grow.prefix") + ", ".join(parts)
 	if HerbDB.tier_of(item_key) >= HerbDB.wild_tier_min():
-		text += tr(" — вдали от городов")
+		text += Loc.t("ui.alch.grow.wild")
 	return text
 
 
@@ -473,10 +475,10 @@ func _has_ingredients(recipe: Dictionary) -> bool:
 
 func _recipe_status_text(recipe: Dictionary) -> String:
 	if _is_locked(recipe):
-		return tr("Нужна алхимия %d") % int(recipe.get("skill_min", 0))
+		return Loc.f("ui.alch.need_skill", [int(recipe.get("skill_min", 0))])
 	if _has_ingredients(recipe):
-		return tr("Все ингредиенты доступны")
-	return tr("Не хватает ингредиентов")
+		return Loc.t("ui.alch.all_ok")
+	return Loc.t("ui.alch.not_ok")
 
 
 func _create_selected() -> void:
@@ -484,10 +486,10 @@ func _create_selected() -> void:
 		return
 	var recipe: Dictionary = _recipes[_selected_index]
 	if _is_locked(recipe):
-		_status_label.text = tr("Нужна алхимия %d") % int(recipe.get("skill_min", 0))
+		_status_label.text = Loc.f("ui.alch.need_skill", [int(recipe.get("skill_min", 0))])
 		return
 	if not _has_ingredients(recipe):
-		_status_label.text = tr("Не хватает ингредиентов")
+		_status_label.text = Loc.t("ui.alch.not_ok")
 		return
 	for raw in recipe.get("ingredients", []):
 		var item_key := str(raw.get("item", ""))
@@ -503,11 +505,11 @@ func _create_selected() -> void:
 	SoundDB.play("ui.craft")
 	inventory_changed.emit()
 	var output := ItemDB.find(output_key)
-	_status_label.text = tr("Создано: %s (алхимия +%d)") % [
-		str(output.get("name_ru", output_key)), xp]
+	_status_label.text = Loc.f("ui.alch.crafted", [
+		ItemDB.display_name(output), xp])
 	if _skill_level() > level_before:
-		_status_label.text = tr("Создано: %s. Навык алхимии вырос до %d!") % [
-			str(output.get("name_ru", output_key)), _skill_level()]
+		_status_label.text = Loc.f("ui.alch.crafted_up", [
+			ItemDB.display_name(output), _skill_level()])
 	_refresh()
 
 

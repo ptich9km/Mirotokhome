@@ -219,11 +219,11 @@ func _run() -> void:
 	# --- Обратная связь при поглощения -----------------------------------------
 	# Из аудита: deal_damage показывал "щит" на ЛЮБОЙ поглощении, а щит считается внутри take_damage
 	# и вовсе не попадает в эту ветку. Кроме того, поглощение щитом стрельный урон показывался полным числом.
-	_check(DamageNumber.text_for(0, "absorb") == "щит",
+	_check(DamageNumber.text_for(0, "absorb") == Loc.t("ui.msg.shield"),
 		"поглощение щитом подписывает «щит»")
-	_check(DamageNumber.text_for(0, "resist") == "стойкость",
+	_check(DamageNumber.text_for(0, "resist") == Loc.t("ui.msg.resist"),
 		"поглощение защитой стихии подписывает «стойкость», а не «щит»")
-	_check(DamageNumber.text_for(0, "armor") == "броня",
+	_check(DamageNumber.text_for(0, "armor") == Loc.t("ui.msg.armor"),
 		"поглощение броней подписывает «броня»")
 	# Щит съел урон внутри take_damage — теперь deal_damage вовсу показывал
 	# полное число. Проверяем: урон снизу не дошёл, а deal_damage всё равно рисовал полное число.

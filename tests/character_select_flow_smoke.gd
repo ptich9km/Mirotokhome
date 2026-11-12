@@ -75,11 +75,13 @@ func _warrior(cs) -> void:
 	_check(int(cs._edit.get("shooting", -1)) == 10, "стрельба осталась 10")
 	_check(str(cs._edit.get("weapon", "")) == "club", "стартовое оружие — булава")
 	var text := _detail_text(cs)
-	_check(text.contains("Булава"), "в описании есть название")
-	_check(text.contains("нежить") and text.contains("125"), "описание обещает 125% по нежити")
-	_check(text.contains("люди") and text.contains("75"), "описание обещает 75% по людям")
-	_check(text.contains("бронз"), "описание показывает бронзовое оружие")
-	_check(text.contains("Защита: 16"), "защита с бронзовым щитом = 16")
+	_check(text.contains(Loc.t("ui.skill.bludgeon")), "в описании есть название")
+	_check(text.contains("125"), "описание обещает 125% (тип существа — из данных карточки)")
+	_check(text.contains("75"), "описание обещает 75% (тип существа — из данных карточки)")
+	_check(text.to_lower().contains("bronze") or text.to_lower().contains("бронз"),
+		"описание показывает бронзовое оружие")
+	_check(text.contains(_part_label(Loc.t("ui.char.hp_def_abs"), 1) + " 16"),
+		"защита с бронзовым щитом = 16")
 	var kit: Array = cs._starter_keys("warrior", "bludgeon")
 	_check(kit.has("Common bronze Mace"), "в наборе бронзовая булава")
 	_check(kit.has("Common bronze Buckler"), "у мужского воина есть бронзовый щит")
@@ -112,8 +114,10 @@ func _mage(cs) -> void:
 	_check(int(cs._edit.get("fire", -1)) == 0, "огонь сброшен в 0")
 	_check(int(cs._edit.get("astral", -1)) == 10, "астрал остался 10")
 	var mage_text := _detail_text(cs)
-	_check(mage_text.contains("Жизнь: 97"), "жизнь мага с направлением = 97")
-	_check(mage_text.contains("Мана: 71"), "мана мага с направлением = 71")
+	_check(mage_text.contains(_part_label(Loc.t("ui.char.hp_mana"), 0) + " 97"),
+		"жизнь мага с направлением = 97")
+	_check(mage_text.contains(_part_label(Loc.t("ui.char.hp_mana"), 1) + " 71"),
+		"мана мага с направлением = 71")
 
 	var kit: Array = cs._starter_keys("mage", "water")
 	_check(kit.has("Common Wood Staff"), "у мага деревянный посох")
@@ -122,6 +126,19 @@ func _mage(cs) -> void:
 		if str(k).begins_with("Book "):
 			has_book = true
 	_check(has_book, "у мага в наборе книга школы")
+
+
+## Label of one numeric segment of a localized template: `_part_label(t, 1)` on
+## "Жизнь: %d · Защита: %d" gives "Защита:" (and "Defence:" in English).
+func _part_label(template: String, index: int) -> String:
+	var parts := template.split("%d")
+	if index >= parts.size():
+		return ""
+	var s := str(parts[index]).strip_edges()
+	while s.begins_with("·"):
+		s = s.substr(1).strip_edges()
+	var colon := s.find(":")
+	return s.substr(0, colon + 1) if colon >= 0 else s
 
 
 func _detail_text(cs) -> String:

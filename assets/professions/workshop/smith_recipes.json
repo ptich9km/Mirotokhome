@@ -6,6 +6,7 @@
   {
    "id": "bronze_cuirass",
    "name_ru": "Кираса бронзовая",
+   "name_en": "bronze Cuirass",
    "craft": "smith",
    "inputs": [
     {"item": "bronze Ingot", "count": 8},
@@ -20,6 +21,7 @@
   {
    "id": "iron_cuirass",
    "name_ru": "Кираса железная",
+   "name_en": "iron Cuirass",
    "craft": "smith",
    "inputs": [
     {"item": "iron Ingot", "count": 6},
@@ -34,6 +36,7 @@
   {
    "id": "iron_plate",
    "name_ru": "Кираса железная, кованая",
+   "name_en": "iron Plate Cuirass",
    "craft": "smith",
    "inputs": [
     {"item": "iron Ingot", "count": 14},
@@ -48,6 +51,7 @@
   {
    "id": "iron_sword",
    "name_ru": "Меч железный",
+   "name_en": "iron Long Sword",
    "craft": "smith",
    "inputs": [
     {"item": "iron Ingot", "count": 5},
@@ -62,6 +66,7 @@
   {
    "id": "iron_axe",
    "name_ru": "Топор железный",
+   "name_en": "iron Axe",
    "craft": "smith",
    "inputs": [
     {"item": "iron Ingot", "count": 7},
@@ -76,6 +81,7 @@
    {
     "id": "iron_buckler",
     "name_ru": "Щит железный",
+    "name_en": "iron Buckler",
     "craft": "smith",
     "inputs": [
      {"item": "iron Ingot", "count": 4},
@@ -90,6 +96,7 @@
    {
     "id": "steel_cuirass",
     "name_ru": "Кираса стальная",
+    "name_en": "steel Cuirass",
     "craft": "smith",
     "inputs": [
      {"item": "steel Ingot", "count": 10},
@@ -104,6 +111,7 @@
    {
     "id": "gold_cuirass",
     "name_ru": "Кираса золотая",
+    "name_en": "gold Cuirass",
     "craft": "smith",
     "inputs": [
      {"item": "gold Ingot", "count": 8},
@@ -119,6 +127,7 @@
   {
    "id": "faction_humans_heavy_head",
    "name_ru": "Шлем Альянса",
+   "name_en": "Alliance Helm",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 6},
@@ -134,6 +143,7 @@
   {
    "id": "faction_humans_heavy_body",
    "name_ru": "Кираса Альянса",
+   "name_en": "Alliance Cuirass",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 10},
@@ -149,6 +159,7 @@
   {
    "id": "faction_humans_heavy_hands",
    "name_ru": "Латные наручи Альянса",
+   "name_en": "Alliance Plate Bracers",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 4},
@@ -164,6 +175,7 @@
   {
    "id": "faction_humans_heavy_feet",
    "name_ru": "Латные сапоги Альянса",
+   "name_en": "Alliance Plate Boots",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 5},
@@ -179,6 +191,7 @@
   {
    "id": "faction_ork_heavy_head",
    "name_ru": "Шлем Орды",
+   "name_en": "Horde Helm",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 6},
@@ -194,6 +207,7 @@
   {
    "id": "faction_ork_heavy_body",
    "name_ru": "Кираса Орды",
+   "name_en": "Horde Cuirass",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 10},
@@ -209,6 +223,7 @@
   {
    "id": "faction_ork_heavy_hands",
    "name_ru": "Латные наручи Орды",
+   "name_en": "Horde Plate Bracers",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 4},
@@ -224,6 +239,7 @@
   {
    "id": "faction_ork_heavy_feet",
    "name_ru": "Латные сапоги Орды",
+   "name_en": "Horde Plate Boots",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 5},
@@ -239,6 +255,7 @@
   {
    "id": "faction_necro_heavy_head",
    "name_ru": "Шлем Пожинателей",
+   "name_en": "Reaper Helm",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 6},
@@ -254,6 +271,7 @@
   {
    "id": "faction_necro_heavy_body",
    "name_ru": "Кираса Пожинателей",
+   "name_en": "Reaper Cuirass",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 10},
@@ -269,6 +287,7 @@
   {
    "id": "faction_necro_heavy_hands",
    "name_ru": "Латные наручи Пожинателей",
+   "name_en": "Reaper Plate Bracers",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 4},
@@ -284,6 +303,7 @@
   {
    "id": "faction_necro_heavy_feet",
    "name_ru": "Латные сапоги Пожинателей",
+   "name_en": "Reaper Plate Boots",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 5},
@@ -299,6 +319,7 @@
   {
    "id": "faction_druid_heavy_head",
    "name_ru": "Шлем Круга",
+   "name_en": "Circle Helm",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 6},
@@ -314,6 +335,7 @@
   {
    "id": "faction_druid_heavy_body",
    "name_ru": "Кираса Круга",
+   "name_en": "Circle Cuirass",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 10},
@@ -329,6 +351,7 @@
   {
    "id": "faction_druid_heavy_hands",
    "name_ru": "Латные наручи Круга",
+   "name_en": "Circle Plate Bracers",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 4},
@@ -344,6 +367,7 @@
   {
    "id": "faction_druid_heavy_feet",
    "name_ru": "Латные сапоги Круга",
+   "name_en": "Circle Plate Boots",
    "craft": "smith",
    "inputs": [
     {"item": "steel Ingot", "count": 5},

@@ -112,7 +112,7 @@ func _run() -> void:
 	n = _numbers().size()
 	_check(_hero.use_potion("Potion Small Mana"), "бутылка маны выпита")
 	var mana_nums := _new_numbers(n)
-	_check(mana_nums == ["+12 маны"],
+	_check(mana_nums == [Loc.f("ui.msg.mana", [12])],
 		"бутылка маны показывает '+12 маны' (%s)" % str(mana_nums))
 
 	# 5. A cast heal still shows its number.

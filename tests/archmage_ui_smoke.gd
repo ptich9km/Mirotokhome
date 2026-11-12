@@ -106,7 +106,7 @@ func _run() -> void:
 	var am0 = _bus_state().get_archmage("human")
 	_check(am0 is Dictionary and not (am0 as Dictionary).is_empty(), "get_archmage(human) не пуст")
 	if am0 is Dictionary:
-		_check(str((am0 as Dictionary).get("name", "")) == "Маша",
+		_check(str((am0 as Dictionary).get("name", "")) == Loc.field(Lore.faction("humans"), "archmage"),
 			"маг людей Маша (=%s)" % (am0 as Dictionary).get("name"))
 
 	print("-- панель --")

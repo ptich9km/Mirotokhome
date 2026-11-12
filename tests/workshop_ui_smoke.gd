@@ -113,9 +113,12 @@ func _test_structure(panel: WorkshopPanel) -> void:
 	# Три вкладки: кузнец, портной, мастер (master_enabled=1).
 	_check(tabs.get_tab_count() == 3,
 		"три вкладки (%d)" % tabs.get_tab_count())
-	_check(tabs.get_tab_title(0) == "Кузнец", "первая вкладка «Кузнец»")
-	_check(tabs.get_tab_title(1) == "Портной", "вторая вкладка «Портной»")
-	_check(tabs.get_tab_title(2) == "Мастер", "третья вкладка «Мастер»")
+	_check(tabs.get_tab_title(0) == Loc.t("ui.inv.craft.smith"),
+		"первая вкладка «Кузнец» (%s)" % tabs.get_tab_title(0))
+	_check(tabs.get_tab_title(1) == Loc.t("ui.inv.craft.tailor"),
+		"вторая вкладка «Портной» (%s)" % tabs.get_tab_title(1))
+	_check(tabs.get_tab_title(2) == Loc.t("ui.inv.craft.master"),
+		"третья вкладка «Мастер» (%s)" % tabs.get_tab_title(2))
 	_check(tabs.get_child_count() == 3, "три вкладки в контейнере")
 
 	var smith := _tab_of(panel, CraftDB.SMITH)
@@ -246,7 +249,8 @@ func _test_smelt_flow(panel: WorkshopPanel) -> void:
 	var status := str(smith.call("_recycle",
 		smith.call("_items")[_index_of(smith, idx)]))
 
-	_check(status.find("Переработано") >= 0, "статус сообщает о переработке (%s)" % status)
+	_check(status.find(Loc.t("ui.craft.salvaged").split("%")[0]) >= 0,
+		"статус сообщает о переработке (%s)" % status)
 	_check(_count(player, "iron Ingot") == ingots_before + int(expected["ingot"]),
 		"слитков +%d (было %d, стало %d)" % [int(expected["ingot"]), ingots_before,
 			_count(player, "iron Ingot")])
@@ -288,7 +292,8 @@ func _test_craft_flow(panel: WorkshopPanel) -> void:
 		var k := str(ing["item"])
 		before[k] = _count(player, k)
 	var status := str(smith.call("_craft", recipe))
-	_check(status.find("Создано") >= 0, "крафт удался (%s)" % status)
+	_check(status.find(Loc.t("ui.craft.crafted").split("%")[0]) >= 0,
+		"крафт удался (%s)" % status)
 	var produced := 0
 	for ing in recipe.get("inputs", []):
 		var k := str(ing["item"])

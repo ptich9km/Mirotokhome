@@ -6,6 +6,7 @@
   {
    "id": "linen_cape",
    "name_ru": "Накидка льняная",
+   "name_en": "Linen Cape",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 4},
@@ -20,6 +21,7 @@
   {
    "id": "linen_cloak",
    "name_ru": "Плащ льняной",
+   "name_en": "Linen Cloak",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 6},
@@ -34,6 +36,7 @@
   {
    "id": "linen_robe",
    "name_ru": "Роба льняная",
+   "name_en": "Linen Robe",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 10},
@@ -49,6 +52,7 @@
   {
    "id": "linen_hat",
    "name_ru": "Колпак льняной",
+   "name_en": "Linen Hat",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -63,6 +67,7 @@
   {
    "id": "faction_humans_light_head",
    "name_ru": "Капюшон Альянса",
+   "name_en": "Alliance Cap",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -78,6 +83,7 @@
   {
    "id": "faction_humans_light_body",
    "name_ru": "Роба Альянса",
+   "name_en": "Alliance Scale Mail",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 10},
@@ -93,6 +99,7 @@
   {
    "id": "faction_humans_light_hands",
    "name_ru": "Наручи Альянса",
+   "name_en": "Alliance Bracers",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 6},
@@ -108,6 +115,7 @@
   {
    "id": "faction_humans_light_feet",
    "name_ru": "Сапоги Альянса",
+   "name_en": "Alliance Boots",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -123,6 +131,7 @@
   {
    "id": "faction_ork_light_head",
    "name_ru": "Капюшон Орды",
+   "name_en": "Horde Cap",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -138,6 +147,7 @@
   {
    "id": "faction_ork_light_body",
    "name_ru": "Роба Орды",
+   "name_en": "Horde Scale Mail",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 10},
@@ -153,6 +163,7 @@
   {
    "id": "faction_ork_light_hands",
    "name_ru": "Наручи Орды",
+   "name_en": "Horde Bracers",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 6},
@@ -168,6 +179,7 @@
   {
    "id": "faction_ork_light_feet",
    "name_ru": "Сапоги Орды",
+   "name_en": "Horde Boots",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -183,6 +195,7 @@
   {
    "id": "faction_necro_light_head",
    "name_ru": "Капюшон Пожинателей",
+   "name_en": "Reaper Cap",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -198,6 +211,7 @@
   {
    "id": "faction_necro_light_body",
    "name_ru": "Роба Пожинателей",
+   "name_en": "Reaper Scale Mail",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 10},
@@ -213,6 +227,7 @@
   {
    "id": "faction_necro_light_hands",
    "name_ru": "Наручи Пожинателей",
+   "name_en": "Reaper Bracers",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 6},
@@ -228,6 +243,7 @@
   {
    "id": "faction_necro_light_feet",
    "name_ru": "Сапоги Пожинателей",
+   "name_en": "Reaper Boots",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -243,6 +259,7 @@
   {
    "id": "faction_druid_light_head",
    "name_ru": "Капюшон Круга",
+   "name_en": "Circle Cap",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -258,6 +275,7 @@
   {
    "id": "faction_druid_light_body",
    "name_ru": "Роба Круга",
+   "name_en": "Circle Scale Mail",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 10},
@@ -273,6 +291,7 @@
   {
    "id": "faction_druid_light_hands",
    "name_ru": "Наручи Круга",
+   "name_en": "Circle Bracers",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 6},
@@ -288,6 +307,7 @@
   {
    "id": "faction_druid_light_feet",
    "name_ru": "Сапоги Круга",
+   "name_en": "Circle Boots",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -303,6 +323,7 @@
   {
    "id": "faction_humans_magic_head",
    "name_ru": "Магический колпак Альянса",
+   "name_en": "Alliance Hat",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -318,6 +339,7 @@
   {
    "id": "faction_humans_magic_body",
    "name_ru": "Магическая мантия Альянса",
+   "name_en": "Alliance Robe",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 10},
@@ -333,6 +355,7 @@
   {
    "id": "faction_ork_magic_head",
    "name_ru": "Магический колпак Орды",
+   "name_en": "Horde Hat",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -348,6 +371,7 @@
   {
    "id": "faction_ork_magic_body",
    "name_ru": "Магическая мантия Орды",
+   "name_en": "Horde Robe",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 10},
@@ -363,6 +387,7 @@
   {
    "id": "faction_necro_magic_head",
    "name_ru": "Магический колпак Пожинателей",
+   "name_en": "Reaper Hat",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -378,6 +403,7 @@
   {
    "id": "faction_necro_magic_body",
    "name_ru": "Магическая мантия Пожинателей",
+   "name_en": "Reaper Robe",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 10},
@@ -393,6 +419,7 @@
   {
    "id": "faction_druid_magic_head",
    "name_ru": "Магический колпак Круга",
+   "name_en": "Circle Hat",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -408,6 +435,7 @@
   {
    "id": "faction_druid_magic_body",
    "name_ru": "Магическая мантия Круга",
+   "name_en": "Circle Robe",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 10},
@@ -423,6 +451,7 @@
   {
    "id": "faction_humans_magic_hands",
    "name_ru": "Магические перчатки Альянса",
+   "name_en": "Alliance Gloves",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 6},
@@ -438,6 +467,7 @@
   {
    "id": "faction_humans_magic_feet",
    "name_ru": "Магические туфли Альянса",
+   "name_en": "Alliance Shoes",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -453,6 +483,7 @@
   {
    "id": "faction_ork_magic_hands",
    "name_ru": "Магические перчатки Орды",
+   "name_en": "Horde Gloves",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 6},
@@ -468,6 +499,7 @@
   {
    "id": "faction_ork_magic_feet",
    "name_ru": "Магические туфли Орды",
+   "name_en": "Horde Shoes",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -483,6 +515,7 @@
   {
    "id": "faction_necro_magic_hands",
    "name_ru": "Магические перчатки Пожинателей",
+   "name_en": "Reaper Gloves",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 6},
@@ -498,6 +531,7 @@
   {
    "id": "faction_necro_magic_feet",
    "name_ru": "Магические туфли Пожинателей",
+   "name_en": "Reaper Shoes",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},
@@ -513,6 +547,7 @@
   {
    "id": "faction_druid_magic_hands",
    "name_ru": "Магические перчатки Круга",
+   "name_en": "Circle Gloves",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 6},
@@ -528,6 +563,7 @@
   {
    "id": "faction_druid_magic_feet",
    "name_ru": "Магические туфли Круга",
+   "name_en": "Circle Shoes",
    "craft": "tailor",
    "inputs": [
     {"item": "Fabric", "count": 5},

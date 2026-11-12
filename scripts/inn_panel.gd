@@ -81,16 +81,13 @@ func _attach_hover(slot: Control, entry: Dictionary, set_name: String,
 func _hover_lines(entry: Dictionary, set_name: String, display_name: String) -> Array:
 	var lines: Array = [display_name]
 	var sub: Array[String] = []
-	var desc := str(UnitDB.get_set(set_name).get("desc", set_name))
-	if desc != display_name and not desc.is_empty():
-		sub.append(desc)
-	sub.append(tr("HP %d") % int(entry.get("hp", 0)))
-	sub.append(tr("Урон %d") % int(entry.get("dmg", 0)))
+	sub.append(Loc.f("ui.inn.hp", [int(entry.get("hp", 0))]))
+	sub.append(Loc.f("ui.inn.damage", [int(entry.get("dmg", 0))]))
 	lines.append(" · ".join(sub))
 	var note := _hostile_note(set_name)
 	if not note.is_empty():
 		lines.append(note)
-	lines.append(tr("Цена найма: %d з") % int(entry.get("cost", 0)))
+	lines.append(Loc.f("ui.inn.hire_price", [int(entry.get("cost", 0))]))
 	return lines
 
 func _build_ui() -> void:
@@ -142,7 +139,7 @@ func _build_ui() -> void:
 	var title := Label.new()
 	title.name = "Title"
 	title.theme_type_variation = &"InnTitle"
-	title.text = tr("ТАВЕРНА")
+	title.text = Loc.t("ui.inn.title")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 	_gold_label = Label.new()
@@ -157,7 +154,7 @@ func _build_ui() -> void:
 	header.add_child(_rep_label)
 	_close_button = Button.new()
 	_close_button.name = "Close"
-	_close_button.text = tr("Закрыть")
+	_close_button.text = Loc.t("ui.btn.close")
 	_close_button.theme_type_variation = &"InnClose"
 	_close_button.custom_minimum_size = Vector2(120, 32)
 	_close_button.pressed.connect(close)
@@ -176,7 +173,7 @@ func _build_ui() -> void:
 	body.add_child(recruit_col)
 	var recruit_title := Label.new()
 	recruit_title.theme_type_variation = &"InnSectionLabel"
-	recruit_title.text = tr("НАЁМНИКИ")
+	recruit_title.text = Loc.t("ui.inn.recruits")
 	recruit_col.add_child(recruit_title)
 	var scroll := ScrollContainer.new()
 	scroll.name = "RecruitScroll"
@@ -213,17 +210,17 @@ func _build_ui() -> void:
 	var heading := Label.new()
 	heading.name = "Heading"
 	heading.theme_type_variation = &"InnSectionLabel"
-	heading.text = tr("РЕКРУТЕР")
+	heading.text = Loc.t("ui.inn.recruiter")
 	mcontent.add_child(heading)
 	_talk_label = Label.new()
 	_talk_label.name = "TalkText"
-	_talk_label.text = tr("Спросите дорожные слухи перед наймом отряда.")
+	_talk_label.text = Loc.t("ui.inn.talk_hint")
 	_talk_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_talk_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	mcontent.add_child(_talk_label)
 	_talk_button = Button.new()
 	_talk_button.name = "Talk"
-	_talk_button.text = tr("Поговорить")
+	_talk_button.text = Loc.t("ui.inn.talk")
 	_talk_button.theme_type_variation = &"InnTalkButton"
 	_talk_button.custom_minimum_size = Vector2(160, 32)
 	_talk_button.pressed.connect(_talk)
@@ -314,24 +311,24 @@ func _refresh() -> void:
 		UiKit.hide_hover_card(_hover_card)
 	if not is_instance_valid(player):
 		return
-	_gold_label.text = tr("Золото: %d") % player.gold
+	_gold_label.text = Loc.f("ui.card.gold", [player.gold])
 	if _rep_label != null:
 		if _race == "":
-			_rep_label.text = tr("Репутация: нет города")
+			_rep_label.text = Loc.t("ui.inn.rep.none")
 		else:
-			_rep_label.text = tr("Репутация: %s %d · тир наёмников %d") \
-				% [Lore.faction_label(_race), _rep, _tier()]
-	_party_label.text = tr("Отряд: %d/%d · наём на одну прогулку, опыт не делится") % [Game.party.size(), MAX_PARTY]
+			_rep_label.text = Loc.f("ui.inn.rep.tier",
+				[Lore.faction_label(_race), _rep, _tier()])
+	_party_label.text = Loc.f("ui.inn.party", [Game.party.size(), MAX_PARTY])
 	if _rep_hint != null:
 		var next_need := _next_tier_need()
 		if _race == "":
-			_rep_hint.text = tr("Ассортимент зависит от отношения фракции. Репутация растёт за задания главы города.")
+			_rep_hint.text = Loc.t("ui.inn.hint.base")
 		elif next_need > 0:
-			_rep_hint.text = tr("Ассортимент зависит от отношения фракции «%s»: %d. Следующий тир наёмников — с %d репутации (задания главы города).") \
-				% [Lore.faction_label(_race), _rep, next_need]
+			_rep_hint.text = Loc.f("ui.inn.hint.next",
+				[Lore.faction_label(_race), _rep, next_need])
 		else:
-			_rep_hint.text = tr("Ассортимент зависит от отношения фракции «%s»: %d. Открыт высший тир наёмников.") \
-				% [Lore.faction_label(_race), _rep]
+			_rep_hint.text = Loc.f("ui.inn.hint.top",
+				[Lore.faction_label(_race), _rep])
 	var action_buttons: Array[Button] = []
 	var slots_to_fill := maxi(_candidates.size(), _CELL_COLUMNS)
 	for index in range(slots_to_fill):
@@ -365,8 +362,7 @@ func _make_recruit_slot(entry: Dictionary) -> PanelContainer:
 		return slot
 
 	var set_name := str(entry["set"])
-	var unit := UnitDB.get_set(set_name)
-	var display_name := str(unit.get("desc", set_name))
+	var display_name := UnitDB.display_name(set_name)
 	var portrait := TextureRect.new()
 	portrait.texture = UnitDB.preview_frame(set_name)
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -395,7 +391,7 @@ func _make_recruit_slot(entry: Dictionary) -> PanelContainer:
 		var need_label := Label.new()
 		need_label.name = "Locked"
 		need_label.theme_type_variation = &"InnCandidateStats"
-		need_label.text = tr("Нужна репутация: %d") % int(entry.get("need", 0))
+		need_label.text = Loc.f("ui.inn.need_rep", [int(entry.get("need", 0))])
 		need_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		need_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		need_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -406,9 +402,9 @@ func _make_recruit_slot(entry: Dictionary) -> PanelContainer:
 	var hire := Button.new()
 	hire.name = "Hire"
 	hire.theme_type_variation = &"InnHireButton"
-	hire.text = tr("Нанять %d з") % int(entry["cost"])
+	hire.text = Loc.f("ui.inn.hire_cost", [int(entry["cost"])])
 	hire.tooltip_text = "%s — %s\n%s" % [display_name, _hostile_note(set_name),
-		tr("Нанять за %d з") % int(entry["cost"])]
+		Loc.f("ui.inn.hire_cost_tip", [int(entry["cost"])])]
 	hire.custom_minimum_size = Vector2(0, 26)
 	hire.focus_mode = Control.FOCUS_ALL
 	hire.pressed.connect(_hire.bind(entry))
@@ -484,7 +480,8 @@ func _talk() -> void:
 	SoundDB.play_raced_voice("voice.npc.inn", _race, idx + 1)
 
 func _hostile_note(set_name: String) -> String:
-	return tr("мирный") if not UnitDB.is_hostile(set_name) else tr("дикий")
+	return Loc.t("ui.inn.peaceful") if not UnitDB.is_hostile(set_name) \
+		else Loc.t("ui.inn.wild")
 
 func _hire(candidate: Dictionary) -> void:
 	if not is_instance_valid(player):
@@ -517,9 +514,9 @@ func _hire(candidate: Dictionary) -> void:
 			_candidates.remove_at(index)
 			break
 	_talk_label.text = Loc.f("ui.talk.inn.hired",
-		[str(UnitDB.get_set(set_name).get("desc", set_name))])
+		[UnitDB.display_name(set_name)])
 	_refresh()
-	print("Нанят наёмник: %s" % set_name)
+	print("Hired: %s" % set_name)
 
 func _spawn_spot() -> Vector2:
 	var map_node = get_tree().get_first_node_in_group("alm_map")

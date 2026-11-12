@@ -47,14 +47,15 @@ func _run() -> void:
 	for b in btns:
 		texts.append((b as Button).text)
 	print("INFO кнопки: %s" % str(texts))
-	for need in ["Новая игра", "Загрузить игру", "Моды и дополнения",
-			"Сетевая игра", "Об авторах", "Выйти"]:
+	for need in ["ui.menu.new_game", "ui.menu.load_game", "ui.menu.mods",
+			"ui.menu.network", "ui.menu.about", "ui.menu.quit"]:
+		var want := Loc.t(need)
 		var found := false
 		for t in texts:
-			if str(t) == need:
+			if str(t) == want:
 				found = true
 				break
-		_check(found, "есть кнопка «%s»" % need)
+		_check(found, "есть кнопка «%s» (%s)" % [want, need])
 	_check(texts.size() >= 6, "кнопок не меньше 6 (%d)" % texts.size())
 
 	# --- Branding ---
@@ -66,7 +67,7 @@ func _run() -> void:
 		"версия/автор в подвале (info)")
 
 	# --- Загрузить игру: 6 слотов ---
-	var load_btn := _find_button(mm, "Загрузить игру")
+	var load_btn := _find_button(mm, Loc.t("ui.menu.load_game"))
 	_check(load_btn != null, "кнопка «Загрузить игру»")
 	if load_btn != null:
 		load_btn.pressed.emit()
@@ -76,11 +77,15 @@ func _run() -> void:
 		var slot_texts: Array[String] = []
 		var empty_slots := 0
 		var disabled := 0
+		# "Slot %d — empty": the prefix identifies a slot row, the tail the state.
+		var slot_prefix := Loc.t("ui.load.slot_empty").split("%")[0]
+		var empty_mark := Loc.t("ui.load.slot_empty").split("%d")[1] \
+			.strip_edges().trim_prefix("—").strip_edges()
 		for b in slot_btns:
 			var t := str((b as Button).text)
-			if t.contains("Слот"):
+			if t.contains(slot_prefix):
 				slot_texts.append(t)
-				if t.contains("пусто"):
+				if t.contains(empty_mark):
 					empty_slots += 1
 				if (b as Button).disabled:
 					disabled += 1
@@ -89,7 +94,7 @@ func _run() -> void:
 		_check(empty_slots == 6, "без сохранений все пустые (%d)" % empty_slots)
 		_check(disabled == 6, "пустые слоты disabled (%d)" % disabled)
 		# Назад
-		var back := _find_button(mm, "Назад")
+		var back := _find_button(mm, Loc.t("ui.common.back"))
 		_check(back != null, "кнопка «Назад» в панели загрузки")
 		if back != null:
 			back.pressed.emit()
@@ -103,7 +108,7 @@ func _run() -> void:
 	# --- Моды: отдельная панель (29.10), а не меню-оверлей ---
 	# Менеджер модов переехал из оверлея в свою панель: нужен список со строками,
 	# превью, переключателями и порядком загрузки — в 420 px оверлея это не влезает.
-	var mods_btn := _find_button(mm, "Моды и дополнения")
+	var mods_btn := _find_button(mm, Loc.t("ui.menu.mods"))
 	_check(mods_btn != null, "кнопка «Моды и дополнения»")
 	if mods_btn != null:
 		mods_btn.pressed.emit()
@@ -127,10 +132,10 @@ func _run() -> void:
 			_check(mm.get("_mods_panel") == null, "Esc закрывает панель модов")
 
 	# --- сеть / об авторах / выход (панели) ---
-	for pair in [["Сетевая игра", "Сетевая"],
-			["Об авторах", "Об авторах"], ["Выйти", "Выйти"]]:
-		var b := _find_button(mm, str(pair[0]))
-		_check(b != null, "кнопка «%s»" % pair[0])
+	for pair in [["ui.menu.network", "ui.menu.network"],
+			["ui.menu.about", "ui.menu.about"], ["ui.menu.quit", "ui.menu.quit"]]:
+		var b := _find_button(mm, Loc.t(str(pair[0])))
+		_check(b != null, "кнопка «%s»" % Loc.t(str(pair[0])))
 		if b == null:
 			continue
 		b.pressed.emit()
@@ -156,22 +161,22 @@ func _run() -> void:
 		_check(themed, "кнопки оверлея «%s» непрозрачные (стиль темы, не движка)" % pair[0])
 		await create_timer(0.15).timeout
 		var ov = mm.get("_overlay")
-		_check(ov != null and (ov as Control).visible, "оверлей «%s» открыт" % pair[1])
-		if pair[0] == "Об авторах":
+		_check(ov != null and (ov as Control).visible, "оверлей «%s» открыт" % Loc.t(str(pair[1])))
+		if pair[0] == "ui.menu.about":
 			var txt := _all_text(mm)
 			_check(txt.contains("ptich9km") or txt.contains("MIROTOKHOME"),
 				"об авторах: есть MIROTOKHOME/ptich9km")
-		if pair[0] == "Выйти":
+		if pair[0] == "ui.menu.quit":
 			# Не нажимаем «Да» — иначе headless quit
-			var yes := _find_button(mm, "Да")
+			var yes := _find_button(mm, Loc.t("ui.common.yes"))
 			_check(yes != null, "подтверждение выхода: есть «Да»")
-			var no := _find_button(mm, "Нет")
+			var no := _find_button(mm, Loc.t("ui.common.no"))
 			_check(no != null, "подтверждение выхода: есть «Нет»")
 			if no != null:
 				no.pressed.emit()
 				await process_frame
 		else:
-			var back := _find_button(mm, "Назад")
+			var back := _find_button(mm, Loc.t("ui.common.back"))
 			if back != null:
 				back.pressed.emit()
 				await process_frame
@@ -191,9 +196,10 @@ func _run() -> void:
 	var cs = current_scene
 	if cs != null:
 		var cont := _find_button(cs, "Продолжить")
-		_check(cont == null, "на character_select нет «Продолжить»")
-		var start := _find_button(cs, "В ПУТЬ!")
-		_check(start != null, "на character_select есть «В ПУТЬ!»")
+		var cont_en := _find_button(cs, "Continue")
+		_check(cont == null and cont_en == null, "на character_select нет «Продолжить»")
+		var start := _find_button(cs, Loc.t("ui.char.start"))
+		_check(start != null, "на character_select есть «%s»" % Loc.t("ui.char.start"))
 
 	_report()
 

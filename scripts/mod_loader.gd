@@ -225,7 +225,7 @@ static func overlay(db: String, base: Variant) -> void:
 			if _apply_entry(m, e, base, is_array, db):
 				applied += 1
 	if applied > 0:
-		print("ModLoader: %s — записей из модов: %d (модов: %d)" % [db, applied, _mods.size()])
+		print("ModLoader: %s - records from mods: %d (mods: %d)" % [db, applied, _mods.size()])
 
 
 # --- scanning -----------------------------------------------------------------
@@ -266,7 +266,7 @@ static func _scan() -> void:
 				var m := _read_mod(mod_dir, folder)
 				if not m.is_empty():
 					if seen.has(m["id"]):
-						_errors.append("мод '%s' объявлен дважды: %s и %s" % [m["id"], seen[m["id"]], m["dir"]])
+						_errors.append("mod '%s' is declared twice: %s and %s" % [m["id"], seen[m["id"]], m["dir"]])
 					else:
 						seen[m["id"]] = m["dir"]
 						found.append(m)
@@ -283,7 +283,7 @@ static func _scan() -> void:
 		var ok := true
 		for dep in m.get("depends_on", []):
 			if not ids.has(str(dep)):
-				_errors.append("мод '%s': нет зависимости '%s'" % [m["id"], dep])
+				_errors.append("mod '%s': missing dependency '%s'" % [m["id"], dep])
 				ok = false
 		if ok:
 			good.append(m)
@@ -299,11 +299,11 @@ static func _scan() -> void:
 				off = str(dep)
 				break
 		if off != "":
-			_errors.append("мод '%s' не загружен: зависимость '%s' выключена" % [m["id"], off])
+			_errors.append("mod '%s' is not loaded: dependency '%s' is disabled" % [m["id"], off])
 			continue
 		_mods.append(m)
 	if not _all.is_empty() or not _errors.is_empty():
-		print("ModLoader: найдено %d, включено %d, ошибок %d, предупреждений %d" %
+		print("ModLoader: found %d, enabled %d, errors %d, warnings %d" %
 			[_all.size(), _mods.size(), _errors.size(), _warnings.size()])
 
 
@@ -326,7 +326,7 @@ static func _save_config() -> void:
 	cfg.set_value("mods", "order", _manual_order)
 	var err := cfg.save(CONFIG_PATH)
 	if err != OK:
-		push_warning("ModLoader: не записать %s (%d)" % [CONFIG_PATH, err])
+		push_warning("ModLoader: cannot write %s (%d)" % [CONFIG_PATH, err])
 
 
 static func _as_array(value: Variant) -> Array[String]:
@@ -357,15 +357,15 @@ static func _read_mod(dir: String, folder: String) -> Dictionary:
 		return {}
 	var parsed: Variant = _parse_json(man_path)
 	if not (parsed is Dictionary):
-		_errors.append("мод '%s': битый %s" % [folder, MANIFEST_NAME])
+		_errors.append("mod '%s': broken %s" % [folder, MANIFEST_NAME])
 		return {}
 	var man: Dictionary = parsed
 	var id := str(man.get("id", "")).strip_edges()
 	if id == "":
-		_errors.append("мод '%s': в %s нет поля id" % [folder, MANIFEST_NAME])
+		_errors.append("mod '%s': %s has no id field" % [folder, MANIFEST_NAME])
 		return {}
 	if id != folder:
-		_warnings.append("мод '%s': id '%s' не совпадает с именем папки" % [folder, id])
+		_warnings.append("mod '%s': id '%s' does not match the folder name" % [folder, id])
 	var m: Dictionary = {
 		"id": id,
 		"dir": dir,
@@ -398,13 +398,13 @@ static func _read_entries(dir: String, mod_id: String) -> Array:
 				if e is Dictionary:
 					out.append(e)
 				else:
-					_errors.append("мод '%s': в %s запись не объект" % [mod_id, path])
+					_errors.append("mod '%s': an entry in %s is not an object" % [mod_id, path])
 		elif parsed is Dictionary and parsed.get("entries", null) is Array:
 			for e in parsed["entries"]:
 				if e is Dictionary:
 					out.append(e)
 		else:
-			_errors.append("мод '%s': битый JSON в %s (нужен массив записей)" % [mod_id, path])
+			_errors.append("mod '%s': broken JSON in %s (an array of entries is required)" % [mod_id, path])
 	return out
 
 
@@ -483,7 +483,7 @@ static func _sort_mods(list: Array[Dictionary]) -> Array[Dictionary]:
 			var names: Array[String] = []
 			for m in pending:
 				names.append(str(m["id"]))
-			_errors.append("цикл зависимостей, не загружены: %s" % ", ".join(names))
+			_errors.append("dependency cycle, not loaded: %s" % ", ".join(names))
 			break
 	return out
 
@@ -514,15 +514,15 @@ static func _apply_entry(m: Dictionary, e: Dictionary, base: Variant, is_array: 
 	var key := str(e.get("key", "")).strip_edges()
 	var op := str(e.get("op", "add")).to_lower()
 	if key == "":
-		_errors.append("мод '%s': запись без key (into=%s)" % [mod_id, str(e.get("into", "?"))])
+		_errors.append("mod '%s': entry without key (into=%s)" % [mod_id, str(e.get("into", "?"))])
 		return false
 	if op != "add" and op != "patch" and op != "remove" and op != "append":
-		_errors.append("мод '%s': неизвестная op '%s' у '%s'" % [mod_id, op, key])
+		_errors.append("mod '%s': unknown op '%s' at '%s'" % [mod_id, op, key])
 		return false
 
 	if op == "remove":
 		if not _has_def(base, key, is_array, db):
-			_warnings.append("мод '%s': remove '%s' — такого ключа нет" % [mod_id, key])
+			_warnings.append("mod '%s': remove '%s' - no such key" % [mod_id, key])
 			return false
 		_erase_def(base, key, is_array, db)
 		return true
@@ -535,7 +535,7 @@ static func _apply_entry(m: Dictionary, e: Dictionary, base: Variant, is_array: 
 		fields[str(k)] = _expand(e[k], missing)
 	if not missing.is_empty():
 		# A lost asset is not a "pink square in game" but a refused entry.
-		_errors.append("мод '%s': '%s' — не найдены файлы: %s" % [mod_id, key, ", ".join(missing)])
+		_errors.append("mod '%s': '%s' - files not found: %s" % [mod_id, key, ", ".join(missing)])
 		return false
 
 	var existing: Variant = _get_def(base, key, is_array, db)
@@ -546,12 +546,12 @@ static func _apply_entry(m: Dictionary, e: Dictionary, base: Variant, is_array: 
 	# (a rewrite easily loses a neighbouring mod's change).
 	if op == "append":
 		if not exists:
-			_errors.append("мод '%s': append '%s' — ключа нет" % [mod_id, key])
+			_errors.append("mod '%s': append '%s' - no such key" % [mod_id, key])
 			return false
 		var cur: Variant = (existing as Dictionary).get("value", null)
 		var add: Variant = fields.get("value", null)
 		if not (cur is Array) or not (add is Array):
-			_errors.append("мод '%s': append '%s' — значение не список" % [mod_id, key])
+			_errors.append("mod '%s': append '%s' - the value is not a list" % [mod_id, key])
 			return false
 		var merged: Dictionary = (existing as Dictionary).duplicate(true)
 		var merged_list: Array = (cur as Array).duplicate()
@@ -563,7 +563,7 @@ static func _apply_entry(m: Dictionary, e: Dictionary, base: Variant, is_array: 
 
 	if op == "patch":
 		if not exists:
-			_errors.append("мод '%s': patch '%s' — ключа нет (для нового используйте add)" % [mod_id, key])
+			_errors.append("mod '%s': patch '%s' - no such key (use add for a new one)" % [mod_id, key])
 			return false
 		_put_def(base, key, _deep_merge(existing, fields), is_array, db)
 		_note_patch(db, key, mod_id)
@@ -571,14 +571,14 @@ static func _apply_entry(m: Dictionary, e: Dictionary, base: Variant, is_array: 
 
 	# op == "add"
 	if exists:
-		_errors.append("мод '%s': ключ '%s' уже занят (%s) — нужен op \"patch\"" % [mod_id, key, _owner_of(db, key)])
+		_errors.append("mod '%s': key '%s' is already taken (%s) - op \"patch\" is required" % [mod_id, key, _owner_of(db, key)])
 		return false
 	var ext := str(e.get("extends", "")).strip_edges()
 	var def: Dictionary = {}
 	if ext != "":
 		var parent: Variant = _get_def(base, ext, is_array, db)
 		if not (parent is Dictionary):
-			_errors.append("мод '%s': '%s' — extends '%s' не найден в %s" % [mod_id, key, ext, db])
+			_errors.append("mod '%s': '%s' - extends '%s' not found in %s" % [mod_id, key, ext, db])
 			return false
 		def = _deep_merge(parent, fields)
 	else:
@@ -589,7 +589,7 @@ static func _apply_entry(m: Dictionary, e: Dictionary, base: Variant, is_array: 
 
 
 static func _owner_of(db: String, key: String) -> String:
-	return str(_owners.get(db + "|" + key, "база игры"))
+	return str(_owners.get(db + "|" + key, "game base"))
 
 
 static func _note_patch(db: String, key: String, mod_id: String) -> void:
@@ -601,7 +601,7 @@ static func _note_patch(db: String, key: String, mod_id: String) -> void:
 		return
 	list.append(mod_id)
 	if list.size() == 2:
-		_warnings.append("'%s' (%s) правят два мода: %s — применяется последний" % [key, db, ", ".join(list)])
+		_warnings.append("'%s' (%s) is edited by two mods: %s - the last one wins" % [key, db, ", ".join(list)])
 
 
 static func _get_def(base: Variant, key: String, is_array: bool, db: String) -> Variant:

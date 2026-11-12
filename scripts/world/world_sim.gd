@@ -115,11 +115,11 @@ func _tick_archmages() -> void:
 		f["archmage"] = a
 		if new_tier != old_tier:
 			var city := str(a.get("city", f.get("name", fid)))
-			var mname := str(a.get("name", "маг"))
+			var mname := str(a.get("name", Loc.t("ui.sim.mage_default")))
 			if new_tier > old_tier:
-				_log("archmage", "%s: %s крепче (ступень %d)" % [city, mname, new_tier])
+				_log("archmage", Loc.f("ui.sim.archmage_stronger", [city, mname, new_tier]))
 			else:
-				_log("archmage", "%s: %s слабеет (ступень %d)" % [city, mname, new_tier])
+				_log("archmage", Loc.f("ui.sim.archmage_weaker", [city, mname, new_tier]))
 
 
 func _archmage_tier(power: float) -> int:
@@ -226,7 +226,7 @@ func _fight(aid: String, a: Dictionary) -> void:
 	# Even armies annihilate each other in one tick; handling it explicitly
 	# avoids leaving a "power 0" husk on the map that can never fight again.
 	if a["power"] <= 0 and e["power"] <= 0:
-		_log("battle", "Армии %s и %s уничтожили друг друга" % [aid, eid])
+		_log("battle", Loc.f("ui.sim.armies_mutual", [aid, eid]))
 		state.armies.erase(aid)
 		state.armies.erase(eid)
 		return
@@ -236,7 +236,8 @@ func _fight(aid: String, a: Dictionary) -> void:
 	elif e["power"] <= 0:
 		winner = aid
 	if winner != "":
-		_log("battle", "Армия %s уничтожила %s" % [winner, (aid if winner == eid else eid)])
+		_log("battle", Loc.f("ui.sim.army_won",
+			[winner, (aid if winner == eid else eid)]))
 		state.armies.erase(winner if winner == eid else aid)
 
 
@@ -269,7 +270,8 @@ func TickSettlements() -> void:
 		# Once per 10 days: a hungry city would otherwise write one revolt line
 		# per day and flood the journal (cap 400 in the live game).
 		if c["loyalty"] < 15.0 and state.day % 10 == 0:
-			_log("revolt", "Жители %s бунтуют (верность %d%%)" % [c.get("name", cid), int(c["loyalty"])])
+			_log("revolt", Loc.f("ui.sim.revolt",
+				[c.get("name", cid), int(c["loyalty"])]))
 
 
 ## How hard hunger is felt today. Only a deficit counts: a surplus is not
@@ -282,9 +284,9 @@ func hunger_of(net: float) -> float:
 # --- 5. События -----------------------------------------------------------------
 func TickEvents() -> void:
 	if state.day % 10 == 0 and randi_range(1, 3) == 1:
-		_log("omen", "Угроза мира растёт (день %d)" % state.day)
+		_log("omen", Loc.f("ui.sim.threat", [state.day]))
 	if state.day % 30 == 0:
-		_log("faction", "Фракции обновляют дипломатию каждый месяц")
+		_log("faction", Loc.t("ui.sim.diplomacy"))
 
 
 # --- 6. Игрок (но SIM знает про него как про юнита, не как про UI) -------------
@@ -294,7 +296,7 @@ func TickPlayer() -> void:
 	h["level"] = int(h.get("level", 1))
 	if state.day % 7 == 0:
 		h["level"] += 1
-		_log("hero", "Герой окреп (ур. %d)" % h["level"])
+		_log("hero", Loc.f("ui.sim.hero_level", [h["level"]]))
 
 
 # --- 7. Факт завершения тика (без ссылок на UI/ноды) ---------------------------

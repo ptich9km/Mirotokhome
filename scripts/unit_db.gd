@@ -65,6 +65,20 @@ static func set_name_for_id(unit_id: int) -> String:
 	ensure_loaded()
 	return str(_by_id.get(unit_id, ""))
 
+
+## Display name of a set in the UI language: `desc_en` when it exists, the
+## Russian `desc` otherwise, and the set key as the last resort. The tavern cards,
+## the hire line and the hover card all read one name, otherwise the same unit is
+## called two different things in one panel.
+static func display_name(set_name: String) -> String:
+	var data := get_set(set_name)
+	if Loc.locale() != Loc.REFERENCE_LOCALE:
+		var en := str(data.get("desc_en", ""))
+		if en != "":
+			return en
+	var ru := str(data.get("desc", ""))
+	return ru if ru != "" else set_name
+
 ## Set data by unit ID or {} (if the ID is unknown).
 static func get_set_by_id(unit_id: int) -> Dictionary:
 	return get_set(set_name_for_id(unit_id))

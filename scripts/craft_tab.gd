@@ -136,7 +136,7 @@ func _build() -> void:
 
 	_status_label = Label.new()
 	_status_label.theme_type_variation = &"%sHint" % _variation_prefix()
-	_status_label.text = tr("Выберите предмет или рецепт")
+	_status_label.text = Loc.t("ui.craft.choose")
 	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	footer.add_child(_status_label)
@@ -208,11 +208,11 @@ func _skill() -> int:
 
 func _action_label(entry: Dictionary) -> String:
 	if str(entry.get("mode", "")) == RECYCLE_ID:
-		return tr("Переработать")
+		return Loc.t("ui.craft.recycle")
 	var recipe: Dictionary = entry.get("recipe", {})
 	if recipe.is_empty():
 		return ""
-	return tr("Создать")
+	return Loc.t("ui.craft.create")
 
 
 func _action_block_reason(entry: Dictionary) -> String:
@@ -223,7 +223,7 @@ func _action_block_reason(entry: Dictionary) -> String:
 		return ""
 	for ing in recipe.get("inputs", []):
 		if _item_count(str(ing.get("item", ""))) < int(ing.get("count", 0)):
-			return tr("Не хватает ингредиентов")
+			return Loc.t("ui.craft.no_ingredients")
 	return ""
 
 
@@ -238,11 +238,11 @@ func _perform(entry: Dictionary) -> String:
 ## таблица выхода в CraftDB.recycle_yield.
 func _recycle(entry: Dictionary) -> String:
 	if not is_instance_valid(player):
-		return tr("Нет героя")
+		return Loc.t("ui.craft.no_hero")
 	var item: Dictionary = entry["item"]
 	var key := str(entry["key"])
 	if not player.remove_item(key):
-		return tr("Нечего перерабатывать")
+		return Loc.t("ui.craft.nothing_to_salvage")
 	var y := CraftDB.recycle_yield(item)
 	var given: Array[String] = []
 	if int(y.get("ingot", 0)) > 0:
@@ -251,18 +251,20 @@ func _recycle(entry: Dictionary) -> String:
 			for _i in int(y["ingot"]):
 				player.add_item(ingot_key)
 			given.append("%s ×%d" % [
-				str(ItemDB.find(ingot_key).get("name_ru", ingot_key)), int(y["ingot"])])
+				ItemDB.display_name(ItemDB.find(ingot_key)), int(y["ingot"])])
 	if int(y.get("fabric", 0)) > 0:
 		for _i in int(y["fabric"]):
 			player.add_item(CraftDB.FABRIC_KEY)
-		given.append("%s ×%d" % [tr("Ткань"), int(y["fabric"])])
+		given.append("%s ×%d" % [ItemDB.display_name(ItemDB.find(CraftDB.FABRIC_KEY)),
+			int(y["fabric"])])
 	if int(y.get("essence", 0)) > 0:
 		for _i in int(y["essence"]):
 			player.add_item(CraftDB.ESSENCE_KEY)
-		given.append("%s ×%d" % [tr("Магическая эссенция"), int(y["essence"])])
+		given.append("%s ×%d" % [ItemDB.display_name(ItemDB.find(CraftDB.ESSENCE_KEY)),
+			int(y["essence"])])
 	player.gain_skill_exp(str(CraftDB.SKILL_OF.get(craft, "")), CraftDB.xp_for_recycle())
 	SoundDB.play("ui.craft")
-	return tr("Переработано: %s") % ", ".join(given)
+	return Loc.f("ui.craft.salvaged", [", ".join(given)])
 
 
 ## АТОМНОЕ ПОТРЕБЛЕНИЕ. Проверка и списание - в одном проходе, а не
@@ -271,26 +273,26 @@ func _recycle(entry: Dictionary) -> String:
 ## тот дефект, что зафиксирован в alchemy_panel.gd:291-309.
 func _craft(recipe: Dictionary) -> String:
 	if recipe.is_empty():
-		return tr("Рецепт не выбран")
+		return Loc.t("ui.craft.recipe_not_chosen")
 	if not is_instance_valid(player):
-		return tr("Нет героя")
-	# 1. Сколько нужно и сколько есть - без списания.
+		return Loc.t("ui.craft.no_hero")
+	# 1. How much is needed and how much is there - without consuming.
 	var need := {}
 	for ing in recipe.get("inputs", []):
 		var k := str(ing.get("item", ""))
 		need[k] = int(need.get(k, 0)) + int(ing.get("count", 0))
-	# 2. Проверяем ВСЁ сразу, до первого списания.
+	# 2. Check EVERYTHING at once, before the first removal.
 	for k: String in need:
 		if _item_count(k) < int(need[k]):
-			return tr("Не хватает: %s") % str(ItemDB.find(k).get("name_ru", k))
+			return Loc.f("ui.craft.missing", [ItemDB.display_name(ItemDB.find(k))])
 	var recipe_id := str(recipe.get("id", ""))
 	if not CraftDB.has_recipe(player, recipe_id):
-		return tr("Рецепт не изучен")
+		return Loc.t("ui.craft.recipe_not_learned")
 	var rare := CraftDB.is_rare_recipe(recipe)
 	var scroll_key := CraftDB.recipe_scroll_key(recipe_id)
 	if rare and not player.inventory.has(scroll_key):
-		return tr("Нужен свиток редкого рецепта")
-	# 3. Списываем. A rare scroll is the single-run permit for this craft.
+		return Loc.t("ui.craft.rare_scroll_needed")
+	# 3. Consume. A rare scroll is the single-run permit for this craft.
 	for k: String in need:
 		for _i in int(need[k]):
 			player.remove_item(k)
@@ -300,21 +302,21 @@ func _craft(recipe: Dictionary) -> String:
 	var out_key := CraftDB.output_key(recipe, tier)
 	var out := ItemDB.find(out_key)
 	if out.is_empty():
-		# Откат: рецепт без результата - ошибка базы, а не состояния игрока.
+		# Rollback: a recipe without a result is a database error, not player state.
 		for k: String in need:
 			for _i in int(need[k]):
 				player.add_item(k)
 		if rare:
 			player.add_item(scroll_key)
-		return tr("Рецепт без результата")
+		return Loc.t("ui.craft.recipe_no_output")
 	player.add_item(out_key)
 	player.gain_skill_exp(str(CraftDB.SKILL_OF.get(craft, "")), CraftDB.xp_for_craft(tier))
 	SoundDB.play("ui.craft")
-	var prefix := tr("Создано: %s") % str(out.get("name_ru", out_key))
+	var prefix := Loc.f("ui.craft.crafted", [ItemDB.display_name(out)])
 	if tier == CraftDB.TIER_MASTER:
-		return prefix + tr(" — мастерская вещь!")
+		return prefix + Loc.t("ui.craft.crafted_master")
 	if tier == CraftDB.TIER_IMPROVED:
-		return prefix + tr(" — улучшенная вещь")
+		return prefix + Loc.t("ui.craft.crafted_improved")
 	return prefix
 
 
@@ -363,7 +365,7 @@ func _rebuild_detail() -> void:
 		_build_detail(entry)
 	var label := _action_label(entry)
 	var reason := _action_block_reason(entry)
-	_action_button.text = label if label != "" else tr("Недоступно")
+	_action_button.text = label if label != "" else Loc.t("ui.craft.unavailable")
 	_action_button.disabled = label == "" or reason != ""
 	if reason != "":
 		_status_label.text = reason
@@ -381,7 +383,7 @@ func _make_hint(text: String) -> Label:
 func _make_empty_hint() -> Label:
 	var l := Label.new()
 	l.theme_type_variation = &"CraftEmpty"
-	l.text = tr("Ничего не выбрано")
+	l.text = Loc.t("ui.craft.nothing_selected")
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER

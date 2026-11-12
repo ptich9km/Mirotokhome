@@ -33,10 +33,12 @@ var _inv_scroll: ScrollContainer
 var _inv_title: Label
 var _player: Player
 
+## Tab captions are KEYS: a const cannot call `Loc.t()`, and the caption must
+## follow the UI language.
 const TAB_TITLES := {
-	CraftDB.SMITH: "Кузнец",
-	CraftDB.TAILOR: "Портной",
-	CraftDB.MASTER: "Мастер",
+	CraftDB.SMITH: "ui.inv.craft.smith",
+	CraftDB.TAILOR: "ui.inv.craft.tailor",
+	CraftDB.MASTER: "ui.inv.craft.master",
 }
 
 const _CELL_INV := Vector2(72, 76)
@@ -97,7 +99,7 @@ func _build_ui(p: Player) -> void:
 	var title := Label.new()
 	title.name = "Title"
 	title.theme_type_variation = &"WorkshopTitle"
-	title.text = tr("МАСТЕРСКАЯ")
+	title.text = Loc.t("ui.craft.title")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	header.add_child(title)
@@ -105,7 +107,7 @@ func _build_ui(p: Player) -> void:
 	_close_button = Button.new()
 	_close_button.name = "Close"
 	_close_button.theme_type_variation = &"WorkshopClose"
-	_close_button.text = tr("Закрыть")
+	_close_button.text = Loc.t("ui.btn.close")
 	_close_button.custom_minimum_size = Vector2(120, 32)
 	_close_button.focus_mode = Control.FOCUS_ALL
 	_close_button.pressed.connect(close)
@@ -130,7 +132,8 @@ func _build_ui(p: Player) -> void:
 		tab.request_refresh.connect(refresh_active)
 		tab.request_inventory_changed.connect(_on_inventory_changed)
 		_tabs.add_child(tab)
-		_tabs.set_tab_title(_tabs.get_tab_idx_from_control(tab), tr(TAB_TITLES.get(kind, kind)))
+		_tabs.set_tab_title(_tabs.get_tab_idx_from_control(tab),
+			Loc.t(str(TAB_TITLES.get(kind, kind))))
 		_craft_tabs.append(tab)
 
 	# Инвентарь игрока: аккуратная полка внизу панели (как в магазине).
@@ -147,7 +150,7 @@ func _build_ui(p: Player) -> void:
 	inv_m.add_child(inv_col)
 	_inv_title = Label.new()
 	_inv_title.theme_type_variation = &"CraftSection"
-	_inv_title.text = tr("ВАШ ИНВЕНТАРЬ")
+	_inv_title.text = Loc.t("ui.craft.inv_title")
 	inv_col.add_child(_inv_title)
 	_inv_scroll = ScrollContainer.new()
 	_inv_scroll.name = "InvShelfScroll"
@@ -170,7 +173,7 @@ func _build_ui(p: Player) -> void:
 
 	_footer_label = Label.new()
 	_footer_label.theme_type_variation = &"WorkshopHint"
-	_footer_label.text = tr("Металл — из сломанного и целого снаряжения. Свитки рецептов — в лавке.")
+	_footer_label.text = Loc.t("ui.craft.footer")
 	_footer_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	footer.add_child(_footer_label)
 
@@ -227,8 +230,7 @@ func _make_inv_slot(item: Dictionary, count: int) -> PanelContainer:
 		cl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		cl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		box.add_child(cl)
-	var key := str(item.get("key", item.get("name_ru", "")))
-	slot.tooltip_text = "%s\n%s" % [str(item.get("name_ru", key)), str(item.get("quality", ""))]
+	slot.tooltip_text = "%s\n%s" % [ItemDB.display_name(item), str(item.get("quality", ""))]
 	return slot
 
 

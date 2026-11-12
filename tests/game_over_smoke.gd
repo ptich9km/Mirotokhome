@@ -129,8 +129,8 @@ func _death_sequence() -> void:
 		"через 1 с появился чёрный экран с надписью")
 	_check(_game.get("_save_menu") == null, "меню загрузки ещё нет")
 	if death_screen != null and is_instance_valid(death_screen):
-		_check(_find_label(death_screen, "ВЫ ПОГИБЛИ") != null,
-			"на экране надпись «ВЫ ПОГИБЛИ»")
+		_check(_find_label(death_screen, Loc.t("ui.gameover.title")) != null,
+			"на экране надпись «%s»" % Loc.t("ui.gameover.title"))
 
 	# Stage 2: compact screen with the title, then the load list.
 	await create_timer(1.6).timeout
@@ -142,8 +142,8 @@ func _death_sequence() -> void:
 	_check(menu.get("_backdrop") != null, "под меню чёрный фон")
 	_check(Game.is_paused, "мир на паузе (Game.is_paused)")
 	_check(paused, "дерево на паузе")
-	_check(_find_label(menu, "ВЫ ПОГИБЛИ") != null, "в меню есть заголовок смерти")
-	_check(_find_label(menu, "Загрузите сохранение") != null, "есть подсказка загрузки")
+	_check(_find_label(menu, Loc.t("ui.gameover.title")) != null, "в меню есть заголовок смерти")
+	_check(_find_label(menu, Loc.t("ui.gameover.hint")) != null, "есть подсказка загрузки")
 
 	var save_short := Loc.t("ui.save.save_short")
 	var delete_short := Loc.t("ui.save.delete_short")

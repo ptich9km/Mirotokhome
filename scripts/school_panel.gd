@@ -13,11 +13,14 @@ extends CanvasLayer
 signal closed
 signal inventory_changed
 
+## Skill rows: the first column is a localization KEY, translated when the row is
+## built (a const cannot call `Loc.t()`).
 const SKILLS := [
-	["Меч", "blade_skill"], ["Топор", "axe_skill"], ["Булава", "bludgeon_skill"],
-	["Копьё", "pike_skill"], ["Стрельба", "shooting_skill"],
-	["Огонь", "fire_skill"], ["Вода", "water_skill"], ["Воздух", "air_skill"],
-	["Земля", "earth_skill"], ["Астрал", "astral_skill"],
+	["ui.skill.blade", "blade_skill"], ["ui.skill.axe", "axe_skill"],
+	["ui.skill.bludgeon", "bludgeon_skill"], ["ui.skill.pike", "pike_skill"],
+	["ui.skill.shooting", "shooting_skill"], ["ui.skill.fire", "fire_skill"],
+	["ui.skill.water", "water_skill"], ["ui.skill.air", "air_skill"],
+	["ui.skill.earth", "earth_skill"], ["ui.skill.astral", "astral_skill"],
 ]
 
 const _DESIGN_WIDTH := 760
@@ -132,7 +135,7 @@ func _build_ui() -> void:
 	content.add_child(header)
 	var title := Label.new()
 	title.theme_type_variation = &"SchoolTitle"
-	title.text = tr("ШКОЛА ТРЕНИРОВОК")
+	title.text = Loc.t("ui.school.title")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 	_gold_label = Label.new()
@@ -145,10 +148,10 @@ func _build_ui() -> void:
 	head.name = "Head"
 	head.add_theme_constant_override("separation", 10)
 	content.add_child(head)
-	for spec in [["Навык", 260], ["Уровень", 110], ["Цена", 120], ["", 170]]:
+	for spec in [["ui.school.skill", 260], ["ui.school.level", 110], ["ui.school.price", 120], ["", 170]]:
 		var h := Label.new()
 		h.theme_type_variation = &"SchoolColumnTitle"
-		h.text = str(spec[0])
+		h.text = Loc.t(str(spec[0])) if str(spec[0]) != "" else ""
 		h.custom_minimum_size = Vector2(float(spec[1]), 24)
 		head.add_child(h)
 
@@ -177,7 +180,7 @@ func _build_ui() -> void:
 	footer.alignment = BoxContainer.ALIGNMENT_CENTER
 	content.add_child(footer)
 	_close_button = Button.new()
-	_close_button.text = tr("Закрыть")
+	_close_button.text = Loc.t("ui.btn.close")
 	_close_button.custom_minimum_size = Vector2(160, 38)
 	_close_button.pressed.connect(close)
 	footer.add_child(_close_button)
@@ -196,7 +199,7 @@ func _make_row(skill_name: String, field: String) -> Control:
 	margin.add_child(row)
 
 	var name_lbl := Label.new()
-	name_lbl.text = skill_name
+	name_lbl.text = Loc.t(skill_name)
 	name_lbl.custom_minimum_size = Vector2(260, _ROW_HEIGHT - 12)
 	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(name_lbl)
@@ -215,7 +218,7 @@ func _make_row(skill_name: String, field: String) -> Control:
 	row.add_child(cost_lbl)
 
 	var btn := Button.new()
-	btn.text = tr("Обучить")
+	btn.text = Loc.t("ui.school.train")
 	btn.custom_minimum_size = Vector2(170, _ROW_HEIGHT - 12)
 	btn.focus_mode = Control.FOCUS_ALL
 	btn.pressed.connect(_train.bind(field))
@@ -231,7 +234,7 @@ func _train_cost(level: int) -> int:
 func _refresh() -> void:
 	if not is_instance_valid(player):
 		return
-	_gold_label.text = tr("Золото: %d") % player.gold
+	_gold_label.text = Loc.f("ui.card.gold", [player.gold])
 	for r in _rows:
 		var level := int(player.get(r["field"]))
 		var cost := _train_cost(level)
@@ -245,7 +248,7 @@ func _train(field: String) -> void:
 	var level := int(player.get(field))
 	var cost := _train_cost(level)
 	if player.gold < cost:
-		print("Не хватает золота!")
+		print("Not enough gold!")
 		return
 	player.gold -= cost
 	# set_skill_field, а не player.set: он пишет И поле, И опыт. Раньше здесь
@@ -253,7 +256,7 @@ func _train(field: String) -> void:
 	player.set_skill_field(field, level + 1)
 	SoundDB.play("ui.craft")
 	_refresh()
-	print("Навык %s -> %d" % [field, level + 1])
+	print("Skill %s -> %d" % [field, level + 1])
 
 func _input(event: InputEvent) -> void:
 	if UiKit.esc_pressed(event):

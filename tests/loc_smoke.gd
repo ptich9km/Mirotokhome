@@ -397,7 +397,8 @@ func _persistence() -> void:
 	Settings.reload_from_disk()
 	Loc.set_locale("ru")
 	Loc.load_locale()
-	_check(Loc.locale() == "ru", "битый settings.cfg игнорируется, язык не ломается")
+	_check(Loc.locale() == Loc.DEFAULT_LOCALE,
+		"битый settings.cfg игнорируется, язык откатывается к умолчанию (%s)" % Loc.locale())
 	Loc.clear_saved()
 	Loc.set_locale("ru")
 

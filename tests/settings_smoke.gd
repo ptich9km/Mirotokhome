@@ -118,7 +118,8 @@ func _corrupt_file_is_survivable() -> void:
 		"битый файл -> громкость по умолчанию, а не падение (%.2f)"
 			% Settings.master_volume())
 	Loc.load_locale()
-	_check(Loc.locale() == "ru", "битый файл -> язык по умолчанию")
+	_check(Loc.locale() == Loc.DEFAULT_LOCALE, "битый файл -> язык по умолчанию (%s)"
+		% Loc.locale())
 	Settings.reset_to_defaults()
 	Settings.reload_from_disk()
 	Loc.clear_saved()

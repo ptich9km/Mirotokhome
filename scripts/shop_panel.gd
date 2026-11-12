@@ -7,14 +7,16 @@ signal inventory_changed
 ## Категории — toggle-кнопки в шапке. Снаряжение в лавке НЕТ (08.10):
 ## снаряжение = лут + крафт по свиткам; лавка продаёт зелья, книги и рецепты.
 ## Рецепты разбиты по виду, иначе в общей куче неудобно искать (08.10).
+## Category tabs carry a KEY, not a translation: a const cannot call `Loc.t()`,
+## and the label must follow the UI language (same trap as the hero presets).
 const CATEGORIES := [
-	{"id": "recipes_armor", "label": "Рец. Броня"},
-	{"id": "recipes_weapon", "label": "Рец. Оружие"},
-	{"id": "recipes_clothes", "label": "Рец. Маг. одежда"},
-	{"id": "potions", "label": "Зелья"},
-	{"id": "materials", "label": "Материалы"},
-	{"id": "books", "label": "Книги и свитки"},
-	{"id": "recipes_faction", "label": "Рец. Фракция"},
+	{"id": "recipes_armor", "key": "ui.shop.cat.armor"},
+	{"id": "recipes_weapon", "key": "ui.shop.cat.weapon"},
+	{"id": "recipes_clothes", "key": "ui.shop.cat.clothes"},
+	{"id": "potions", "key": "ui.shop.cat.potions"},
+	{"id": "materials", "key": "ui.shop.cat.materials"},
+	{"id": "books", "key": "ui.shop.cat.books"},
+	{"id": "recipes_faction", "key": "ui.shop.cat.faction"},
 ]
 ## Dialogue lines live in `assets/locale/ui.json` so the subtitle follows the UI
 ## language; the index also picks the voice take (`voice.npc.merchant.N`).
@@ -131,7 +133,7 @@ func _build_ui() -> void:
 	var title := Label.new()
 	title.name = "Title"
 	title.theme_type_variation = &"ShopTitle"
-	title.text = tr("МАГАЗИН")
+	title.text = Loc.t("ui.shop.title")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 	_gold_label = Label.new()
@@ -146,7 +148,7 @@ func _build_ui() -> void:
 	header.add_child(_rep_label)
 	_close_button = Button.new()
 	_close_button.name = "Close"
-	_close_button.text = tr("Закрыть")
+	_close_button.text = Loc.t("ui.btn.close")
 	_close_button.theme_type_variation = &"ShopClose"
 	_close_button.custom_minimum_size = Vector2(120, 32)
 	_close_button.pressed.connect(close)
@@ -173,7 +175,7 @@ func _build_ui() -> void:
 	body.add_child(buy_col)
 	var buy_title := Label.new()
 	buy_title.theme_type_variation = &"ShopSection"
-	buy_title.text = tr("У торговца")
+	buy_title.text = Loc.t("ui.shop.buy_title")
 	buy_col.add_child(buy_title)
 	_npc_notice = Label.new()
 	_npc_notice.name = "ReputationNotice"
@@ -205,7 +207,7 @@ func _build_ui() -> void:
 	body.add_child(sell_col)
 	var sell_title := Label.new()
 	sell_title.theme_type_variation = &"ShopSection"
-	sell_title.text = tr("Ваш склад")
+	sell_title.text = Loc.t("ui.shop.sell_title")
 	sell_col.add_child(sell_title)
 	_player_scroll = ScrollContainer.new()
 	_player_scroll.name = "PlayerShelfScroll"
@@ -237,14 +239,14 @@ func _build_ui() -> void:
 	mmargin.add_child(mrow)
 	_merchant_label = Label.new()
 	_merchant_label.name = "MerchantText"
-	_merchant_label.text = tr("Торговец предлагает снаряжение и зелья.")
+	_merchant_label.text = Loc.t("ui.shop.merchant_hello")
 	_merchant_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_merchant_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_merchant_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	mrow.add_child(_merchant_label)
 	_merchant_button = Button.new()
 	_merchant_button.name = "Talk"
-	_merchant_button.text = tr("Поговорить")
+	_merchant_button.text = Loc.t("ui.shop.talk")
 	_merchant_button.theme_type_variation = &"ShopPrimary"
 	_merchant_button.custom_minimum_size = Vector2(140, 32)
 	_merchant_button.pressed.connect(_talk)
@@ -264,8 +266,9 @@ func _build_category_buttons(parent: Node) -> void:
 		var category: Dictionary = CATEGORIES[index]
 		var button := Button.new()
 		button.name = "Category%d" % index
-		button.text = str(category["label"])
-		button.tooltip_text = str(category["label"])
+		var label := Loc.t(str(category["key"]))
+		button.text = label
+		button.tooltip_text = label
 		button.theme_type_variation = &"ShopCategoryButton"
 		button.toggle_mode = true
 		button.button_group = _category_group
@@ -317,15 +320,17 @@ func _find_trade_button(node: Node) -> Button:
 
 func _hover_lines(item: Dictionary, buying: bool, count: int) -> Array:
 	var key := str(item.get("key", ""))
-	var lines: Array = [str(item.get("name_ru", key))]
+	# Item names live in the data with both languages; reading `name_ru` here left
+	# the shop in Russian after the UI switched to English.
+	var lines: Array = [ItemDB.display_name(item)]
 	var sub: Array[String] = []
-	var type := str(item.get("type", ""))
+	var type := _text_field(item, "type")
 	if type != "":
 		sub.append(type)
-	var material := str(item.get("material", ""))
+	var material := _text_field(item, "material")
 	if material != "" and material != "None":
 		sub.append(material)
-	var quality := str(item.get("quality", ""))
+	var quality := _text_field(item, "quality")
 	if quality != "" and quality != "Common":
 		sub.append(quality)
 	if not sub.is_empty():
@@ -335,21 +340,29 @@ func _hover_lines(item: Dictionary, buying: bool, count: int) -> Array:
 		lines.append(stats)
 	var level := int(item.get("level", 0))
 	if level > 0:
-		lines.append(tr("Нужен уровень: %d") % level)
-	lines.append(tr("Вес: %.1f") % float(item.get("weight", 0.0)))
+		lines.append(Loc.f("ui.shop.need_level", [level]))
+	lines.append(Loc.f("ui.shop.weight", [float(item.get("weight", 0.0))]))
 	if not buying and count > 1:
-		lines.append(tr("В складе: %d шт.") % count)
+		lines.append(Loc.f("ui.shop.in_storage", [count]))
 	if buying and Game.SHOP_STOCK_LIMITS.has(key):
-		lines.append(tr("Осталось сегодня: %d шт.") % _stock_left(key))
+		lines.append(Loc.f("ui.shop.stock_left", [_stock_left(key)]))
 	var price := int(item.get("price", 0))
 	if buying:
-		lines.append(tr("Цена: %d з") % _buy_price(price))
+		lines.append(Loc.f("ui.shop.price", [_buy_price(price)]))
 	else:
-		lines.append(tr("Продать за: %d з") % _sell_price(price))
+		lines.append(Loc.f("ui.shop.sell_for", [_sell_price(price)]))
 	return lines
 
 func _sell_price(price: int) -> int:
 	return maxi(1, int(price / float(maxi(1, GameConfig.geti("economy", "sell_price_div")))))
+
+
+## A text field of an item record. Potions and scrolls carry `material: null`
+## in the data, and `str(null)` is the literal "<null>", which used to be shown
+## in the shop card. Only real strings count; anything else is "no value".
+func _text_field(item: Dictionary, key: String) -> String:
+	var value: Variant = item.get(key, "")
+	return str(value) if value is String else ""
 
 
 ## Скидка по репутации: 0 / 5 / 10 / 15 % на порогах [reputation].
@@ -378,11 +391,11 @@ func _update_layout() -> void:
 ## Подсказка под вкладками: ассортимент и цена зависят от отношения фракции
 ## города. Игрок должен видеть это ДО того, как решит, что товар пропал.
 func _trade_hint() -> String:
-	var base := tr("Слева покупка, справа продажа.")
+	var base := Loc.t("ui.shop.hint.base")
 	if _race == "":
-		return tr("%s Ассортимент зависит от отношения фракции.") % base
-	return tr("%s Отношение фракции «%s»: %d, скидка %d%%.") \
-		% [base, Lore.faction_label(_race), _rep, _discount_percent()]
+		return Loc.f("ui.shop.hint.no_city", [base])
+	return Loc.f("ui.shop.hint.rep",
+		[base, Lore.faction_label(_race), _rep, _discount_percent()])
 
 
 ## Плашка над полкой, когда часть товаров закрыта репутацией: эльфийские
@@ -396,15 +409,14 @@ func _update_rep_notice(category: String) -> void:
 		# Пакет F: полка фракционных чертежей. Она не «пустая без причины»:
 		# чертежи можно добыть захватом форпоста, а тут — второй источник.
 		if _race == "":
-			_npc_notice.text = tr("Фракционные чертежи: на этой карте нет города.")
+			_npc_notice.text = Loc.t("ui.shop.notice.faction_nocity")
 		else:
-			_npc_notice.text = tr("Чертежи наборов фракции «%s»: добываются за захват форпоста или покупаются здесь.") \
-				% Lore.faction_label(_race)
+			_npc_notice.text = Loc.f("ui.shop.notice.faction",
+				[Lore.faction_label(_race)])
 		_npc_notice.visible = true
 		return
 	if category == "books" and _rep < elven:
-		_npc_notice.text = tr("Эльфийские свитки: нужна репутация %d (сейчас %d).") \
-			% [elven, _rep]
+		_npc_notice.text = Loc.f("ui.shop.notice.elven", [elven, _rep])
 		_npc_notice.visible = true
 	else:
 		_npc_notice.visible = false
@@ -414,17 +426,17 @@ func _refresh() -> void:
 		return
 	if _hover_card != null:
 		UiKit.hide_hover_card(_hover_card)
-	_gold_label.text = tr("Золото: %d") % player.gold
+	_gold_label.text = Loc.f("ui.card.gold", [player.gold])
 	if _rep_label != null:
 		var discount := _discount_percent()
 		if _race == "":
-			_rep_label.text = tr("Репутация: нет города")
+			_rep_label.text = Loc.t("ui.shop.rep.none")
 		elif discount > 0:
-			_rep_label.text = tr("Репутация: %s %d · скидка %d%%") \
-				% [Lore.faction_label(_race), _rep, discount]
+			_rep_label.text = Loc.f("ui.shop.rep.discount",
+				[Lore.faction_label(_race), _rep, discount])
 		else:
-			_rep_label.text = tr("Репутация: %s %d") \
-				% [Lore.faction_label(_race), _rep]
+			_rep_label.text = Loc.f("ui.shop.rep.plain",
+				[Lore.faction_label(_race), _rep])
 	_hint_label.text = _trade_hint()
 	for index in range(_category_buttons.size()):
 		_category_buttons[index].button_pressed = index == _category_index
@@ -506,6 +518,9 @@ func _build_sell_list() -> Array[Button]:
 			var item := ItemDB.find(str(key))
 			if item.is_empty():
 				continue
+			# Quest items are not goods: they cannot be sold.
+			if ItemDB.is_quest_item(item):
+				continue
 			var item_key := str(key)
 			seen[item_key] = int(seen.get(item_key, 0)) + 1
 		for item_key in seen:
@@ -538,7 +553,7 @@ func _make_shop_slot(item: Dictionary, buying: bool, count: int) -> PanelContain
 	if item.is_empty():
 		return slot
 	var key := str(item.get("key", ""))
-	var name := str(item.get("name_ru", key))
+	var name := ItemDB.display_name(item)
 	var base_price := int(item.get("price", 0))
 	var price := _buy_price(base_price) if buying else base_price
 	var icon := TextureRect.new()
@@ -572,12 +587,14 @@ func _make_shop_slot(item: Dictionary, buying: bool, count: int) -> PanelContain
 	var button := Button.new()
 	button.name = "Trade"
 	if buying and stock == 0:
-		button.text = tr("Нет в наличии")
+		button.text = Loc.t("ui.shop.out_of_stock")
 	elif buying and stock > 0:
-		button.text = tr("Купить %d (%d)") % [price, stock]
+		button.text = Loc.f("ui.shop.buy_n_stock", [price, stock])
 	else:
-		button.text = tr("Купить %d") % price if buying else tr("%d з") % _sell_price(price)
-	button.tooltip_text = "%s — %s" % [name, tr("продать за %d з") % _sell_price(price) if not buying else tr("купить за %d з") % price]
+		button.text = Loc.f("ui.shop.buy_n", [price]) if buying \
+			else Loc.f("ui.shop.price_short", [_sell_price(price)])
+	var tip := Loc.t("ui.shop.tip.sell") if not buying else Loc.t("ui.shop.tip.buy")
+	button.tooltip_text = "%s — %s" % [name, Loc.f(tip, [_sell_price(price) if not buying else price])]
 	button.custom_minimum_size = Vector2(0, 22)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.focus_mode = Control.FOCUS_ALL
@@ -591,22 +608,23 @@ func _item_stats(item: Dictionary) -> String:
 	var dmin := int(item.get("damage_min", 0))
 	var dmax := int(item.get("damage_max", 0))
 	if dmax > 0 or dmin > 0:
-		parts.append("Урон %d-%d" % [dmin, dmax] if dmin != dmax else "Урон %d" % dmax)
+		parts.append(Loc.f("ui.shop.stat.damage_range", [dmin, dmax]) if dmin != dmax
+			else Loc.f("ui.shop.stat.damage", [dmax]))
 	var to_hit := int(item.get("to_hit", 0))
 	if to_hit != 0:
-		parts.append("Точн. %+d" % to_hit)
+		parts.append(Loc.f("ui.shop.stat.to_hit", [to_hit]))
 	var defence := int(item.get("defence", 0))
 	if defence != 0:
-		parts.append("Броня %d" % defence)
+		parts.append(Loc.f("ui.shop.stat.armor", [defence]))
 	var absorption := int(item.get("absorption", 0))
 	if absorption != 0:
-		parts.append("Погл. %d" % absorption)
+		parts.append(Loc.f("ui.shop.stat.absorb", [absorption]))
 	var magcap := int(item.get("magcap", 0))
 	if magcap != 0:
-		parts.append("Мана %d" % magcap)
+		parts.append(Loc.f("ui.shop.stat.mana", [magcap]))
 	var level := int(item.get("level", 0))
 	if level > 0:
-		parts.append("ур. %d" % level)
+		parts.append(Loc.f("ui.inv.skills.level", [level]))
 	return " · ".join(parts)
 
 func _category_items(category_index: int) -> Array[Dictionary]:
@@ -636,10 +654,11 @@ func _category_items(category_index: int) -> Array[Dictionary]:
 				matches = str(item.get("key", "")) == CraftDB.ESSENCE_KEY
 			"books":
 				# Scrolls from the base. Books of a SINGLE spell are added below
-				# via make_book_item. Since 2026-10-30 SCHOOL books are sold too
-				# (quality "Book"): the five vanilla ones cost 0 (they are given
-				# at start), while a mod can sell its own — and that opens the
-				# whole new magic school.
+				# via make_book_item. School books (quality "Book") are sold too:
+				# the five vanilla ones cost 0 (they are given at start), while a
+				# mod can sell its own. Since 13.11 a book teaches ONE spell - a
+				# school book is the simplest spell of that school, not the whole
+				# school.
 				matches = quality in ["Scroll", "SuperScroll", "Book"]
 			"recipes_armor":
 				matches = quality == "Recipe" and str(item.get("bp", "")) == "armor"
@@ -770,7 +789,7 @@ func _buy_item(key: String, price: int) -> void:
 	SoundDB.play("ui.craft")
 	inventory_changed.emit()
 	_refresh()
-	print("Куплено: " + key)
+	print("Bought: " + key)
 
 
 ## Stock of a limited item: how many are left today. -1 means "no limit".
@@ -793,7 +812,7 @@ func _sell_item(key: String, price: int) -> void:
 	SoundDB.play("ui.craft")
 	inventory_changed.emit()
 	_refresh()
-	print("Продано: " + key)
+	print("Sold: " + key)
 
 func _talk() -> void:
 	if not is_instance_valid(_merchant_label):

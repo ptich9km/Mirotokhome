@@ -233,6 +233,7 @@
  },
  "ork_mage_a52/t0": {
   "desc": "Орк-маг A52 (слабый)",
+  "desc_en": "Orc mage A52 (weak)",
   "folder": "ork_mage_a52/t0",
   "prefix": "sprites",
   "frames": 8,
@@ -291,6 +292,7 @@
  },
  "ork_mage_a52/t1": {
   "desc": "Орк-маг A52",
+  "desc_en": "Orc mage A52",
   "folder": "ork_mage_a52/t1",
   "prefix": "sprites",
   "frames": 8,
@@ -349,6 +351,7 @@
  },
  "ork_mage_a52/t2": {
   "desc": "Орк-маг A52 (средний)",
+  "desc_en": "Orc mage A52 (medium)",
   "folder": "ork_mage_a52/t2",
   "prefix": "sprites",
   "frames": 8,
@@ -407,6 +410,7 @@
  },
  "ork_mage_a52/t3": {
   "desc": "Орк-маг A52 (сильный)",
+  "desc_en": "Orc mage A52 (strong)",
   "folder": "ork_mage_a52/t3",
   "prefix": "sprites",
   "frames": 8,

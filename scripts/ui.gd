@@ -1281,7 +1281,9 @@ func _faction_of_set(set_name: String) -> String:
 	# lore world.json, otherwise the tooltip said "Passer-by".
 	var city_race := MapGenerator.race_of_set(set_name)
 	if city_race != "":
-		var label := str(Lore.faction(city_race).get("label", ""))
+		# `Loc.field` picks `label_en` in English: reading the raw canon field
+		# left the Russian faction name inside an English tooltip.
+		var label := Loc.field(Lore.faction(city_race), "label")
 		return label if label != "" else city_race
 	if set_name.begins_with("ork_mage"):
 		return Loc.t("ui.faction_name.ork")

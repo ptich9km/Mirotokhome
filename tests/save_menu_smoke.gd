@@ -266,7 +266,8 @@ func _test_version_rejected(game) -> void:
 	menu.load_requested.emit(SLOT)
 	await process_frame
 	var status := str(menu.get("_status").text)
-	_check(status.find("новее") >= 0 or status.find("отменена") >= 0,
+	var version_note := Loc.t("ui.save.status.version").split("%")[0]
+	_check(status.find(version_note) >= 0,
 		"в меню показано внятное сообщение о версии («%s»)" % status)
 	_check(int(Game.map_seed) == 4242, "состояние игры не изменилось при отказе")
 	# Вернуть слот в рабочее состояние для чистоты.

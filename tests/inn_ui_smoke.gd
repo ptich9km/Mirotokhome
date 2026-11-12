@@ -65,7 +65,13 @@ func _run() -> void:
 	_check(locked_cards == CELL_COLUMNS - expect_n,
 		"закрытые тиры показаны замками (%d из %d)" % [locked_cards, CELL_COLUMNS])
 	var rep_hint = _panel.get("_rep_hint")
-	_check(rep_hint is Label and str((rep_hint as Label).text).to_lower().contains("репутац"),
+	# The hint names the city faction: take the label from the same source the
+	# panel uses, or the guard fails on a translated word, not on a bug.
+	var hint_text := str((rep_hint as Label).text) if rep_hint is Label else ""
+	var inn_race := str(_panel.get("_race"))
+	var hint_ok := hint_text.contains(Lore.faction_label(inn_race)) \
+		if inn_race != "" else not hint_text.is_empty()
+	_check(rep_hint is Label and hint_ok,
 		"подсказка объясняет, что ассортимент зависит от репутации")
 
 	# Ячейки контентные, не артовые 96×107.57

@@ -47,19 +47,24 @@ func _run() -> void:
 	_report()
 
 func _test_factions(ui) -> void:
+	var orcs := Loc.t("ui.faction_name.ork")
+	var undead := Loc.t("ui.faction_name.necro")
+	var humans := Loc.field(Lore.faction("humans"), "label")
+	var grey := Loc.t("ui.faction_name.grey")
+	var druids := Loc.t("ui.faction_name.druid")
 	var cases := {
-		"monsters/orc": "Орды Огня",
-		"monsters/goblin": "Орды Огня",
-		"monsters/skeleton": "Пожинатели",
-		"monsters/zombie": "Пожинатели",
+		"monsters/orc": orcs,
+		"monsters/goblin": orcs,
+		"monsters/skeleton": undead,
+		"monsters/zombie": undead,
 		# The old "humans/swordsman" case pointed at art removed on 11.10; city
 		# guards are the real Alliance sets, so the guard checks one of those.
-		"city_human_warrior/t0": "Альянс Света",
-		"ork_mage_a52/t1": "Орды Огня",
-		"ork_mage_a52/t3": "Орды Огня",
-		"ork_mage/t1": "Орды Огня",
-		"monsters/bat": "Серые",
-		"monsters/druid": "Круг Друидов",
+		"city_human_warrior/t0": humans,
+		"ork_mage_a52/t1": orcs,
+		"ork_mage_a52/t3": orcs,
+		"ork_mage/t1": orcs,
+		"monsters/bat": grey,
+		"monsters/druid": druids,
 	}
 	for set_name in cases:
 		var got: String = ui.call("_faction_of_set", set_name)
@@ -73,8 +78,13 @@ func _test_item_card(ui) -> void:
 		return
 	var lines: Array = ui.call("_item_card_lines", it)
 	var text := "\n".join(PackedStringArray(lines))
-	_check(text.contains("Урон"), "карточка оружия показывает урон (%s)" % text)
-	_check(text.contains("Вес") and text.contains("Цена"), "карточка показывает вес и цену")
+	_check(text.contains(Loc.t("ui.tip.damage").split("%")[0].strip_edges()),
+		"карточка оружия показывает урон (%s)" % text)
+	var wp := Loc.t("ui.tip.weight_price")
+	var weight_word := wp.split("%")[0].strip_edges()
+	var price_word := wp.split("·")[1].split("%")[0].strip_edges() if wp.contains("·") else ""
+	_check(text.contains(weight_word) and (price_word == "" or text.contains(price_word)),
+		"карточка показывает вес и цену")
 
 func _test_loot_card(ui) -> void:
 	# LootBag удалён (03.10) — на его месте LootDrop с тем же полем items.
@@ -86,8 +96,8 @@ func _test_loot_card(ui) -> void:
 	await process_frame
 	var lines: Array = ui.call("_loot_tooltip_lines", lb)
 	var text := "\n".join(PackedStringArray(lines))
-	_check(text.contains("Добыча"), "карточка лута с заголовком")
-	_check(text.contains("Золото: 5"), "карточка лута показывает золото")
+	_check(text.contains(Loc.t("ui.card.loot")), "карточка лута с заголовком")
+	_check(text.contains(Loc.f("ui.card.gold", [5])), "карточка лута показывает золото")
 	_check(lines.size() >= 3, "карточка лута содержит и предметы (%s)" % text)
 	lb.queue_free()
 
@@ -103,13 +113,16 @@ func _test_unit_card(ui) -> void:
 	# База (hover): название + фракция, без HP.
 	var lines: Array = ui.call("_unit_tooltip_lines", unit)
 	var text := "\n".join(PackedStringArray(lines))
-	_check(not text.contains("Здоровье:"), "база без HP (он в полной карточке Alt)")
-	_check(text.contains("Фракция:"), "база показывает фракцию (%s)" % text)
+	_check(not text.contains(Loc.t("ui.card.health").split("%")[0].strip_edges()),
+		"база без HP (он в полной карточке Alt)")
+	_check(text.contains(Loc.t("ui.card.faction").split("%")[0].strip_edges()),
+		"база показывает фракцию (%s)" % text)
 	# Полная (Alt): добавляет HP и боевые статы.
 	ui.set("_world_hover_unit", unit)
 	var full: Array = ui.call("_unit_tooltip_full", ["u0", lines])
 	var ftext := "\n".join(PackedStringArray(full))
-	_check(ftext.contains("Здоровье:") or ftext.contains("Атака:"),
+	_check(ftext.contains(Loc.t("ui.card.health").split("%")[0].strip_edges())
+		or ftext.contains(Loc.t("ui.card.attack").split("%")[0].strip_edges()),
 		"полная карточка содержит бой/HP (%s)" % ftext)
 	# _update_world_tooltip с фейковой целью: не падает, bounds = viewport.
 	ui.set("_world_hover_key", "u0")
@@ -125,7 +138,8 @@ func _test_building_card(ui) -> void:
 	var lines: Array = ui.call("_building_tooltip_lines", {"type_id": -1})
 	_check(not lines.is_empty(), "карточка здания всегда непустая")
 	var text := "\n".join(PackedStringArray(lines))
-	_check(text.contains("Здание"), "карточка здания с типом «Здание»")
+	_check(text.contains(Loc.t("ui.card.building")),
+		"карточка здания с типом «%s»" % Loc.t("ui.card.building"))
 
 func _test_empty_target_no_crash(ui) -> void:
 	# Без цели под курсором функция должна просто сбрасывать таймер и прятать карточку.

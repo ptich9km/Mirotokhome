@@ -285,7 +285,7 @@ func _test_class_rule() -> void:
 		"плащ подходит магу")
 	_check(ItemDB.class_block_text(ItemDB.find(AMULET), "mage") == "",
 		"амулет — без объяснения отказа (подходит обоим)")
-	_check(ItemDB.slot_fits_text("weapon", "mage").contains("посох"),
+	_check(ItemDB.slot_fits_text("weapon", "mage") == Loc.t("ui.slot.fits.staff"),
 		"пустой слот оружия мага рассказывает про посох")
 
 	# Вернуть воина: дальнейшие проверки — про его экипировку.

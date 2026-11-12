@@ -56,7 +56,8 @@ func _run() -> void:
 	craft_tab.setup(p, CraftDB.SMITH)
 	var made := str(craft_tab.call("_craft",
 		CraftDB.recipe_by_id("faction_humans_heavy_head")))
-	_check(made.begins_with("Создано"), "редкий рецепт скрафчен (%s)" % made)
+	_check(made.begins_with(Loc.t("ui.craft.crafted").split("%")[0]),
+		"редкий рецепт скрафчен (%s)" % made)
 	_check(not p.inventory.has("Recipe faction_humans_heavy_head"),
 		"редкий свиток израсходован крафтом")
 	craft_tab.free()

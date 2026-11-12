@@ -135,7 +135,7 @@ static func _is_flat_payload(payload: Dictionary) -> bool:
 static func save(slot: String, payload: Dictionary) -> String:
 	if not (payload.get("hero", null) is Dictionary) \
 			or not (payload.get("map", null) is Dictionary):
-		return "сохранение без блоков hero/map"
+		return "a save without the hero/map blocks"
 	if _is_flat_payload(payload):
 		payload = payload.duplicate()
 		payload["world"] = {"day": int((payload.get("meta", {}) as Dictionary).get("day", 0))}
@@ -188,10 +188,10 @@ static func _mirror_world_files(slot: String, map_path: String, basename: String
 			continue
 		var dst: String = dst_dir + dst_base + str(raw_suffix)
 		if not _atomic_copy(src, dst):
-			return "не удалось записать карту %s" % dst.get_file()
+			return "could not write the map %s" % dst.get_file()
 		copied += 1
 	if copied == 0:
-		return "файлы карты не найдены рядом с .alm (%s)" % src_dir
+		return "the map files are not next to the .alm (%s)" % src_dir
 	return ""
 
 
@@ -286,7 +286,7 @@ static func _write_part(slot: String, part: String, doc: Dictionary) -> String:
 	var tmp := path + ".tmp"
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
-		return "не удалось открыть %s для записи (код %d)" % [tmp, FileAccess.get_open_error()]
+		return "could not open %s for writing (code %d)" % [tmp, FileAccess.get_open_error()]
 	f.store_string(JSON.stringify(doc))
 	f.flush()
 	f.close()
@@ -295,11 +295,11 @@ static func _write_part(slot: String, part: String, doc: Dictionary) -> String:
 	var err := DirAccess.rename_absolute(
 		ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(path))
 	if err != OK:
-		return "не удалось переименовать %s.tmp: %d" % [path, err]
+		return "could not rename %s.tmp: %d" % [path, err]
 	if not _reads_ok(path):
 		if _restore_path_from_bak(path):
-			return "записанный %s не читается, выполнен откат на .bak" % path.get_file()
-		return "%s не читается после записи" % path.get_file()
+			return "the written %s does not read back, rolled back to .bak" % path.get_file()
+		return "%s does not read back after writing" % path.get_file()
 	return ""
 
 
@@ -800,7 +800,7 @@ static func restore_map(slot: String) -> void:
 	if src == "":
 		return
 	if not _stage_world_files(slot, src, "save_%s" % slot):
-		push_warning("SaveSystem: карта слота %s не разложена" % slot)
+		push_warning("SaveSystem: the map of slot %s was not unpacked" % slot)
 		return
 	Game.pending_map_path = MapGenerator.MAPS_DIR + "save_%s.alm" % slot
 
@@ -867,7 +867,7 @@ static func restore_zone_map(slot: String, zone: String) -> String:
 ## (`map_<seed>_<zone>_<race>`) so that the search by zone works.
 static func store_zone_map(slot: String, map_path: String) -> String:
 	if map_path == "" or not FileAccess.file_exists(map_path):
-		return "карты нет: %s" % map_path
+		return "no map: %s" % map_path
 	return _mirror_world_files(slot, map_path, map_path.get_file().get_basename())
 
 
@@ -930,9 +930,9 @@ static func _check_mods(saved: Variant) -> void:
 		if not now.has(id):
 			missing.append(id)
 		elif now[id] != ver:
-			push_warning("Сейв: мод '%s' другой версии (%s -> %s)" % [id, ver, str(now[id])])
+			push_warning("Save: mod '%s' has another version (%s -> %s)" % [id, ver, str(now[id])])
 	if not missing.is_empty():
-		push_warning("Сейв: моды не загружены (%s) — часть предметов и монстров будет недоступна" %
+		push_warning("Save: mods are not loaded (%s) - some items and monsters will be unavailable" %
 			", ".join(missing))
 
 

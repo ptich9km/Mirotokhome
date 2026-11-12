@@ -36,12 +36,12 @@ func _items() -> Array:
 func _item_label(entry: Dictionary) -> String:
 	var item: Dictionary = entry["item"]
 	var target := int(entry.get("target", 0))
-	return "  %s  [→ +%d]" % [str(item.get("name_ru", entry["key"])), target]
+	return "  %s  [→ +%d]" % [ItemDB.display_name(item), target]
 
 
 func _action_label(entry: Dictionary) -> String:
 	if str(entry.get("mode", "")) == "forge":
-		return tr("Улучшить")
+		return Loc.t("ui.craft.master.improve")
 	return super._action_label(entry)
 
 
@@ -49,7 +49,7 @@ func _action_block_reason(entry: Dictionary) -> String:
 	if str(entry.get("mode", "")) != "forge":
 		return super._action_block_reason(entry)
 	if not is_instance_valid(player):
-		return tr("Нет героя")
+		return Loc.t("ui.craft.no_hero")
 	var item: Dictionary = entry["item"]
 	var block := ForgeDB.can_upgrade(item, player)
 	if block != "":
@@ -62,7 +62,7 @@ func _action_block_reason(entry: Dictionary) -> String:
 		if key == "" or need <= 0:
 			continue
 		if _item_count(key) < need:
-			return tr("Не хватает: %s") % str(ItemDB.find(key).get("name_ru", key))
+			return Loc.f("ui.craft.missing", [ItemDB.display_name(ItemDB.find(key))])
 	return ""
 
 
@@ -81,9 +81,8 @@ func _build_detail(entry: Dictionary) -> void:
 	var target := int(entry.get("target", 0))
 	var plus := ItemDB.plus_of(str(entry["key"]))
 	var cost := ForgeDB.cost(item, target)
-	_detail.add_child(_heading(str(item.get("name_ru", entry["key"]))))
-	_detail.add_child(_note(tr(
-		"Мастер улучшает только вещи, скравченные героем (Crafted / Fine / Master).")))
+	_detail.add_child(_heading(ItemDB.display_name(item)))
+	_detail.add_child(_note(Loc.t("ui.craft.master.only_own")))
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", UiTheme.SPACE_3)
@@ -95,7 +94,7 @@ func _build_detail(entry: Dictionary) -> void:
 	arrow.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(arrow)
 
-	_detail.add_child(_section(tr("Стоимость улучшения")))
+	_detail.add_child(_section(Loc.t("ui.craft.master.cost")))
 	if int(cost.get("resource_count", 0)) > 0:
 		_detail.add_child(_make_cost_row(str(cost.get("resource", "")),
 			int(cost.get("resource_count", 0))))
@@ -106,11 +105,11 @@ func _build_detail(entry: Dictionary) -> void:
 
 	var chance := ForgeDB.success_chance(target)
 	if chance < 100:
-		_detail.add_child(_note(tr("Шанс успеха: %d%%. При неудаче вещь остаётся, материалы сгорают.") % chance))
+		_detail.add_child(_note(Loc.f("ui.craft.master.chance", [chance])))
 	else:
-		_detail.add_child(_note(tr("Улучшение гарантировано.")))
+		_detail.add_child(_note(Loc.t("ui.craft.master.guaranteed")))
 	var cap := ForgeDB.cap_for(item, player)
-	_detail.add_child(_note(tr("Потолок: +%d (навык мастера). Сейчас +%d.") % [cap, plus]))
+	_detail.add_child(_note(Loc.f("ui.craft.master.cap", [cap, plus])))
 
 
 func _make_cost_row(item_key: String, required: int) -> Control:
@@ -129,14 +128,14 @@ func _make_cost_row(item_key: String, required: int) -> Control:
 	m.add_child(row)
 	row.add_child(_make_icon(item, Vector2(40, 40)))
 	var name_label := Label.new()
-	name_label.text = str(item.get("name_ru", item_key))
+	name_label.text = ItemDB.display_name(item)
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(name_label)
 	var count_label := Label.new()
 	count_label.theme_type_variation = &"CraftIngredientOk" \
 		if current >= required else &"CraftIngredientMissing"
-	count_label.text = tr("Есть %d / нужно %d") % [current, required]
+	count_label.text = Loc.f("ui.craft.have_need", [current, required])
 	count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(count_label)
 	return panel
@@ -147,6 +146,4 @@ func _variation_prefix() -> String:
 
 
 func _build_recipe_detail(entry: Dictionary) -> void:
-	_detail.add_child(_make_hint(tr(
-		"Здесь только вещи, скравченные героем (Crafted / Fine / Master).\n"
-		+ "Выберите вещь — мастер поднимет её на следующий плюс.")))
+	_detail.add_child(_make_hint(Loc.t("ui.craft.master.hint")))

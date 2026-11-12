@@ -39,7 +39,7 @@ var relations := {}          # "fA:fB" -> int (>-100..100), матрица от�
 ## как фракция относится к герою. Награда за квест поднимает это число.
 var hero_reputation := {}
 var hero := {                # «привилегированный» герой: в SIM, но щадится угрозой
-	"name": "Герой", "faction_id": "", "level": 1,
+	"name": Loc.t("ui.sim.hero_default"), "faction_id": "", "level": 1,
 	"curr_hp": 100, "max_hp": 100, "pos": Vector2.ZERO,
 }
 var journal: Array[Dictionary] = []   # журнал событий мира (день, вид, текст)
@@ -56,7 +56,6 @@ var outposts: Dictionary = {}
 const WORLD_CAPITAL_FACTIONS: Array = ["humans", "ork", "necro", "druid"]
 
 # --- Служебное ----------------------------------------------------------------
-static var primer := "мир"
 
 func _id(kind: String) -> String:
 	if kind == "u":
@@ -79,7 +78,7 @@ func _id(kind: String) -> String:
 func new_unit(faction_id: String = "", sphere: String = "") -> Dictionary:
 	var id := _id("u")
 	units[id] = {
-		"id": id, "name": "Юнит %s" % id, "faction_id": faction_id, "city_id": "",
+		"id": id, "name": Loc.f("ui.sim.unit", [id]), "faction_id": faction_id, "city_id": "",
 		"sphere": sphere, "curr_hp": 100, "max_hp": 100,
 		"attack": 10, "defense": 5, "magic": 0, "level": 1,
 	}
@@ -139,21 +138,15 @@ func new_faction(name: String, race: String = "") -> Dictionary:
 ## нет». Старые сейвы приходят с тем же набором из двух фракций.
 ##
 ## Возвращает, сколько фракций добавлено. Идемпотентна.
-const RACE_FACTION_LABEL := {
-	"humans": "Люди", "ork": "Орки", "necro": "Нежить", "druid": "Друиды",
-}
-
 func ensure_race_factions() -> int:
 	var added := 0
 	var lore = load("res://scripts/lore.gd")
 	for race in WORLD_CAPITAL_FACTIONS:
 		if _has_faction_for_race(str(race)):
 			continue
-		var label := str(RACE_FACTION_LABEL.get(str(race), str(race)))
+		var label := str(race)
 		if lore != null:
-			var fd: Dictionary = lore.faction(str(race)) as Dictionary
-			if str(fd.get("label", "")) != "":
-				label = str(fd.get("label"))
+			label = str(lore.faction_label(str(race)))
 		new_faction(label, str(race))
 		added += 1
 	return added
@@ -419,11 +412,9 @@ func apply_map_cities(sector_id: String, map_cities: Array, region_name: String 
 			continue
 		var n := int(ordinal.get(race, 0)) + 1
 		ordinal[race] = n
-		var base: String = str(RACE_FACTION_LABEL.get(race, "Город"))
+		var base := Loc.t("ui.sim.city_default")
 		if lore != null:
-			var fd: Dictionary = lore.faction(race) as Dictionary
-			if str(fd.get("city", "")) != "":
-				base = str(fd.get("city"))
+			base = str(lore.faction_city(race))
 		var cname := str(base) if n == 1 else "%s %d" % [str(base), n]
 		var c: Dictionary = new_city(cname, str(f.get("id", "")),
 			str(region.get("id", "")), sector_id)
@@ -469,12 +460,10 @@ func _faction_for_race(race: String) -> Dictionary:
 		var f: Dictionary = factions[id]
 		if str(f.get("race", "")) == race:
 			return f
-	var label := str(RACE_FACTION_LABEL.get(race, race))
+	var label := str(race)
 	var lore = load("res://scripts/lore.gd")
 	if lore != null:
-		var fd: Dictionary = lore.faction(race) as Dictionary
-		if str(fd.get("label", "")) != "":
-			label = str(fd.get("label"))
+		label = str(lore.faction_label(str(race)))
 	return new_faction(label, race)
 
 
@@ -483,7 +472,8 @@ func _region_for_sector(sector_id: String, region_name: String) -> Dictionary:
 		var r: Dictionary = regions[id]
 		if str(r.get("sector_id", "")) == sector_id:
 			return r
-	var r: Dictionary = new_region(region_name if region_name != "" else "Сектор " + sector_id)
+	var r: Dictionary = new_region(region_name if region_name != ""
+		else Loc.f("ui.sim.sector", [sector_id]))
 	r["sector_id"] = sector_id
 	return r
 

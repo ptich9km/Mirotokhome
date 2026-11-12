@@ -37,7 +37,14 @@ const TABLE_PATH := "res://assets/locale/ui.json"
 const SETTINGS_SECTION := "player"
 const SETTINGS_KEY := "language"
 
-const DEFAULT_LOCALE := "ru"
+## What a fresh install starts in. The store page and the audience are English,
+## so English is the default; a player who picks Russian keeps it until they
+## change it back (the choice is written to `user://settings.cfg`).
+const DEFAULT_LOCALE := "en"
+## The reference language: every key is authored in Russian first, and a missing
+## translation of any other language falls back to it. NOT the same as the
+## default choice — see DEFAULT_LOCALE above.
+const REFERENCE_LOCALE := "ru"
 const LOCALES := ["ru", "en"]
 
 static var _table: Dictionary = {}
@@ -82,8 +89,8 @@ static func available() -> Array:
 
 ## Строка по ключу для текущего языка.
 ##
-## Порядок отката: текущий язык -> русский -> сам ключ. Русский обязателен как
-## база: он эталонный, и его наличие проверяет `loc_smoke`.
+## Порядок отката: текущий язык -> русский (эталон) -> сам ключ. Русский
+## обязателен как база: он эталонный, и его наличие проверяет `loc_smoke`.
 static func t(key: String) -> String:
 	_ensure_loaded()
 	var entry = _table.get(key)
@@ -91,7 +98,7 @@ static func t(key: String) -> String:
 		return key
 	var picked := str((entry as Dictionary).get(_locale, ""))
 	if picked == "":
-		picked = str((entry as Dictionary).get(DEFAULT_LOCALE, ""))
+		picked = str((entry as Dictionary).get(REFERENCE_LOCALE, ""))
 	if picked == "":
 		return key
 	return picked
@@ -122,7 +129,7 @@ static func keys() -> Array:
 ## Candidate locales in the fallback order: the current one first, then the
 ## reference one. Missing entries are reported by loc_smoke, not hidden.
 static func locales_in_use() -> Array:
-	return [_locale, DEFAULT_LOCALE]
+	return [_locale, REFERENCE_LOCALE]
 
 
 ## Is the key in the locale table at all (any language).
@@ -147,7 +154,7 @@ static func text_in(key: String, code: String) -> String:
 ## A missing or null English column falls back to Russian rather than to "".
 static func field(record: Dictionary, key: String) -> String:
 	_ensure_loaded()
-	if _locale != DEFAULT_LOCALE:
+	if _locale != REFERENCE_LOCALE:
 		var translated = record.get(key + "_en", "")
 		if translated is String and str(translated) != "":
 			return str(translated)
@@ -166,7 +173,7 @@ static func pair(value: Variant) -> String:
 	var picked = entry.get(_locale, "")
 	if picked is String and str(picked) != "":
 		return str(picked)
-	var base = entry.get(DEFAULT_LOCALE, "")
+	var base = entry.get(REFERENCE_LOCALE, "")
 	return str(base) if base is String else ""
 
 
@@ -185,7 +192,8 @@ static func entry_complete(key: String) -> bool:
 # --- Хранение выбора (файл принадлежит Settings) ---
 
 ## Читает язык из `user://settings.cfg`. Битый файл игнорируется — язык молча
-## остаётся русским, как и весь остальной конфиг в проекте.
+## остаётся тем, что задан по умолчанию (английский, как и весь остальной
+## конфиг в проекте).
 static func load_locale() -> void:
 	_ensure_loaded()
 	var raw: Variant = Settings.get_value("player", SETTINGS_KEY, DEFAULT_LOCALE)
@@ -202,7 +210,7 @@ static func save_locale() -> bool:
 	return Settings.save()
 
 
-## Удаляет сохранённый язык (для тестов: сброс к русскому).
+## Удаляет сохранённый язык (для тестов: сброс к языку по умолчанию).
 static func clear_saved() -> void:
 	Settings.reset_to_defaults()
 	_locale = DEFAULT_LOCALE

@@ -149,7 +149,8 @@ func _test_hover_card() -> void:
 	if lines.size() > 0:
 		_check(not str(lines[0]).is_empty(), "первая строка — название")
 	var joined := " | ".join(lines)
-	_check(joined.contains("з") or joined.contains("Цена"),
+	# Price label without the number: "Цена: " / "Price: " — language-agnostic.
+	_check(joined.contains(Loc.t("ui.shop.price").split("%")[0]),
 		"в карточке есть цена")
 	slot.emit_signal("mouse_exited")
 	await process_frame
@@ -202,8 +203,9 @@ func _test_rep_notice() -> void:
 		_check(str((notice as Label).text).contains("40"),
 			"плашка называет порог репутации")
 	var hint = _shop.get("_hint_label")
-	_check(hint is Label and str((hint as Label).text).contains("фракц"),
-		"подсказка говорит, что ассортимент зависит от фракции")
+	var faction_label := Lore.faction_label(str(_shop.get("_race")))
+	_check(hint is Label and str((hint as Label).text).contains(faction_label),
+		"подсказка называет фракцию города (%s)" % faction_label)
 
 
 ## Пакет F: полка фракционных чертежей — только наборы своей фракции, с плашкой.
@@ -236,9 +238,10 @@ func _test_faction_shelf() -> void:
 	var notice = _shop.get("_npc_notice")
 	_check(notice is Label and (notice as Label).visible,
 		"полка фракции объяснена плашкой")
+	var shelf_label := Lore.faction_label(str(_shop.get("_race")))
 	if notice is Label:
-		_check(str((notice as Label).text).to_lower().contains("фракц"),
-			"плашка называет фракцию")
+		_check(str((notice as Label).text).contains(shelf_label),
+			"плашка называет фракцию (%s)" % shelf_label)
 	# Чертежи фракции не должны просачиваться в другие вкладки рецептов.
 	for other in range(ShopPanel.CATEGORIES.size()):
 		if other == idx:

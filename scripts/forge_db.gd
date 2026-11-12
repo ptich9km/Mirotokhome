@@ -73,19 +73,19 @@ static func cost(item: Dictionary, target: int = -1) -> Dictionary:
 
 static func can_upgrade(item: Dictionary, player: Player) -> String:
 	if not is_instance_valid(player) or item.is_empty():
-		return "Нет предмета"
+		return Loc.t("ui.craft.forge.no_item")
 	if not ItemDB.is_equippable(item):
-		return "Это не снаряжение"
+		return Loc.t("ui.craft.forge.not_equipment")
 	if not is_forgeable(item):
-		return "Улучшать можно только скравченные героем вещи"
+		return Loc.t("ui.craft.forge.crafted_only")
 	var plus := ItemDB.plus_of(str(item.get("key", "")))
 	if plus >= MAX_PLUS:
-		return "Уже +7"
+		return Loc.t("ui.craft.forge.max")
 	var cap := cap_for(item, player)
 	if plus + 1 > cap:
 		if cap <= 0:
-			return "Это качество не улучшается"
-		return "Нужен навык мастера для +%d" % (plus + 1)
+			return Loc.t("ui.craft.forge.quality_immutable")
+		return Loc.f("ui.craft.forge.need_skill", [plus + 1])
 	return ""
 
 
@@ -109,7 +109,7 @@ static func upgrade(player: Player, key: String,
 		rng: RandomNumberGenerator = null, roll_override: int = -1) -> Dictionary:
 	var item := ItemDB.find(key)
 	if item.is_empty():
-		return {"ok": false, "message": "Предмет не найден", "new_key": ""}
+		return {"ok": false, "message": Loc.t("ui.craft.forge.not_found"), "new_key": ""}
 	var block := can_upgrade(item, player)
 	if block != "":
 		return {"ok": false, "message": block, "new_key": key}
@@ -120,11 +120,11 @@ static func upgrade(player: Player, key: String,
 	var need_ess := int(c.get("essence", 0))
 	var need_boss := int(c.get("boss_core", 0))
 	if not _has(player, resource, need_res):
-		return {"ok": false, "message": "Не хватает: %s" % _name_of(resource), "new_key": key}
+		return {"ok": false, "message": Loc.f("ui.craft.missing", [_name_of(resource)]), "new_key": key}
 	if not _has(player, ESSENCE_KEY, need_ess):
-		return {"ok": false, "message": "Не хватает: %s" % _name_of(ESSENCE_KEY), "new_key": key}
+		return {"ok": false, "message": Loc.f("ui.craft.missing", [_name_of(ESSENCE_KEY)]), "new_key": key}
 	if not _has(player, BOSS_CORE, need_boss):
-		return {"ok": false, "message": "Не хватает: %s" % _name_of(BOSS_CORE), "new_key": key}
+		return {"ok": false, "message": Loc.f("ui.craft.missing", [_name_of(BOSS_CORE)]), "new_key": key}
 
 	_spend(player, resource, need_res)
 	_spend(player, ESSENCE_KEY, need_ess)
@@ -144,7 +144,7 @@ static func upgrade(player: Player, key: String,
 		var new_key := ItemDB.plus_key(ItemDB.base_key(key), target, seed)
 		_replace(player, key, new_key)
 		player.gain_skill_exp("mastering", 15 + target * 5)
-		return {"ok": true, "message": "Улучшено до +%d" % target, "new_key": new_key}
+		return {"ok": true, "message": Loc.f("ui.craft.forge.improved", [target]), "new_key": new_key}
 
 	# Soft fail: the item survives. A +7 attempt from +6 falls back to +5 by
 	# the player's decision; a +6 attempt stays at +5.
@@ -155,7 +155,7 @@ static func upgrade(player: Player, key: String,
 		new_key = ItemDB.plus_key(ItemDB.base_key(key), fallback, seed)
 		_replace(player, key, new_key)
 	player.gain_skill_exp("mastering", 5)
-	return {"ok": false, "message": "Неудача — вещь осталась", "new_key": new_key}
+	return {"ok": false, "message": Loc.t("ui.craft.forge.failed"), "new_key": new_key}
 
 
 static func _replace(player: Player, old_key: String, new_key: String) -> void:

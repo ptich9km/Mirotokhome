@@ -33,18 +33,18 @@ static func text_for(value: int, type: String = "damage") -> String:
 		"heal":
 			return "+%d" % value
 		"miss":
-			return "Промах"
+			return Loc.t("ui.msg.miss")
 		"mana":
-			return "+%d маны" % value
+			return Loc.f("ui.msg.mana", [value])
 		"absorb":
-			# Щит съел урон целиком (поглощение внутри take_damage).
-			return "щит"
+			# The shield swallowed the whole hit (absorption inside take_damage).
+			return Loc.t("ui.msg.shield")
 		"resist":
-			# Урон срезала защита стихии.
-			return "стойкость"
+			# Elemental resistance cut the damage.
+			return Loc.t("ui.msg.resist")
 		"armor":
-			# Урон съела броня (физический удар).
-			return "броня"
+			# Armour ate the damage (physical hit).
+			return Loc.t("ui.msg.armor")
 		"dot":
 			return "%d" % value
 		_:
