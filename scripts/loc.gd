@@ -140,6 +140,36 @@ static func text_in(key: String, code: String) -> String:
 	return str((entry as Dictionary).get(code, ""))
 
 
+## A field of a DATA record in the current language: `label_en` when the record
+## carries it and the locale is English, otherwise `label` itself. Data files
+## (hero_names, hero_directions, content_rules) keep the two columns side by side
+## instead of duplicating whole records, so this is the single place that picks.
+## A missing or null English column falls back to Russian rather than to "".
+static func field(record: Dictionary, key: String) -> String:
+	_ensure_loaded()
+	if _locale != DEFAULT_LOCALE:
+		var translated = record.get(key + "_en", "")
+		if translated is String and str(translated) != "":
+			return str(translated)
+	var base = record.get(key, "")
+	return str(base) if base is String else ""
+
+
+## A `{ru, en}` pair from data (creature type labels): the current language with
+## Russian as the fallback. Not the same as `field()`: a pair has no separate
+## `_en` column, both languages live inside one value.
+static func pair(value: Variant) -> String:
+	_ensure_loaded()
+	if not (value is Dictionary):
+		return str(value) if value is String else ""
+	var entry: Dictionary = value
+	var picked = entry.get(_locale, "")
+	if picked is String and str(picked) != "":
+		return str(picked)
+	var base = entry.get(DEFAULT_LOCALE, "")
+	return str(base) if base is String else ""
+
+
 ## Есть ли в таблице все языки — иначе ключ молча откатится на русский.
 static func entry_complete(key: String) -> bool:
 	_ensure_loaded()

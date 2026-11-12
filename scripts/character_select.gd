@@ -17,30 +17,30 @@ static func races() -> Array:
 ## Статы пресетов — прежние 4 карточки (пол × класс), без привязки к Аллодовским id.
 const PRESETS := [
 	{
-		"role": "warrior", "gender": "male", "title": "Воин",
-		"desc": "Сила и выносливость. Бронзовое оружие и щит.",
+		"role": "warrior", "gender": "male", "title": "ui.char.class.warrior",
+		"desc": "ui.char.desc.warrior_m",
 		"stats": {"body": 12, "agility": 11, "mind": 9, "spirit": 8,
 			"blade": 30, "bludgeon": 15, "pike": 10, "fire": 5, "water": 5, "air": 5, "earth": 5, "astral": 5,
 			"weapon": "sword", "shield": true, "armor": "heavy"},
 	},
 	{
-		"role": "warrior", "gender": "female", "title": "Воин",
-		"desc": "Быстрая и ловкая. Бронзовое оружие, без щита.",
+		"role": "warrior", "gender": "female", "title": "ui.char.class.warrior",
+		"desc": "ui.char.desc.warrior_f",
 		"stats": {"body": 10, "agility": 13, "mind": 9, "spirit": 8,
 			"blade": 30, "bludgeon": 15, "pike": 10, "fire": 5, "water": 5, "air": 5, "earth": 5, "astral": 5,
 			"weapon": "sword", "shield": false, "armor": "heavy"},
 	},
 	{
-		"role": "mage", "gender": "male", "title": "Маг",
-		"desc": "Могучий разум. Посох и книга школы.",
+		"role": "mage", "gender": "male", "title": "ui.char.class.mage",
+		"desc": "ui.char.desc.mage_m",
 		"stats": {"body": 8, "agility": 9, "mind": 13, "spirit": 12,
 			"blade": 5, "bludgeon": 5, "pike": 5,
 			"fire": 5, "water": 5, "air": 5, "earth": 5, "astral": 5,
 			"weapon": "staff", "shield": false, "armor": "heavy"},
 	},
 	{
-		"role": "mage", "gender": "female", "title": "Маг",
-		"desc": "Дух и интуиция. Посох и книга школы.",
+		"role": "mage", "gender": "female", "title": "ui.char.class.mage",
+		"desc": "ui.char.desc.mage_f",
 		"stats": {"body": 7, "agility": 10, "mind": 12, "spirit": 13,
 			"blade": 5, "bludgeon": 5, "pike": 5,
 			"fire": 5, "water": 5, "air": 5, "earth": 5, "astral": 5,
@@ -64,24 +64,22 @@ var _race_buttons: Array = []
 var _style_btn: Button = null
 var CHARACTERS: Array = []  # пересобирается при смене расы/стиля
 
-# Греческие имена (по полу персонажа)
-const MALE_NAMES := [
-	"Адонис", "Александр", "Аристотель", "Ахилл", "Гектор", "Гелиос",
-	"Геракл", "Гиперион", "Демосфен", "Дионис", "Евклид", "Зенон",
-	"Икар", "Кирилл", "Леонид", "Ликург", "Милон", "Нестор",
-	"Одиссей", "Орест", "Пан", "Парис", "Персей", "Платон",
-	"Прокл", "Прометей", "Сократ", "Софокл", "Тезей", "Феникс", "Эдип", "Ясон",
-]
-const FEMALE_NAMES := [
-	"Аглая", "Ариадна", "Артемида", "Аталанта", "Афина", "Галатея",
-	"Геката", "Гелика", "Гермиона", "Деметра", "Елена", "Ирида",
-	"Ифигения", "Кассандра", "Клеопатра", "Клио", "Кора", "Лаодамия",
-	"Леда", "Медея", "Мегара", "Ника", "Олимпиада", "Пандора",
-	"Пенелопа", "Персефона", "Рея", "Селена", "София", "Талия", "Хлоя", "Эвридика",
-]
-
 const CARD_SIZE := Vector2(210, 330)
 const CARD_GAP := 24.0
+## Greek names live in data, not in code: a pair ru/en per name (see the file's
+## own comment for why a pair and not two lists).
+const NAMES_PATH := "res://assets/config/hero_names.json"
+static var _names_cache: Dictionary = {}
+
+## Пул имён для пола: male / female. Пустой список, если файл не прочитан -
+## кнопка «🎲» тогда просто не меняет поле.
+static func hero_names(gender: String) -> Array:
+	if _names_cache.is_empty():
+		var parsed = JSON.parse_string(FileAccess.get_file_as_string(NAMES_PATH))
+		if parsed is Dictionary:
+			_names_cache = parsed
+	var pool = _names_cache.get("female" if gender == "female" else "male", [])
+	return pool if pool is Array else []
 ## Ширина карточки фиксирована, высота — нет: на низком окне (1280×600) ряд карточек
 ## обязан сжиматься, иначе панель характеристик уезжает за нижний край.
 const CARD_WIDTH := 210.0
@@ -123,7 +121,8 @@ const SKILL_IDS := ["blade", "axe", "bludgeon", "pike", "shooting",
 	"fire", "water", "air", "earth", "astral"]
 const STATS_ORDER := ["body", "agility", "mind", "spirit"]
 const STAT_TITLES := {
-	"body": "ТЕЛО", "agility": "ЛОВКОСТЬ", "mind": "РАЗУМ", "spirit": "ДУХ",
+	"body": "ui.char.stat.body", "agility": "ui.char.stat.agility",
+	"mind": "ui.char.stat.mind", "spirit": "ui.char.stat.spirit",
 }
 
 func _ready():
@@ -191,7 +190,7 @@ func _setup_race_row() -> void:
 		var race: Dictionary = race_list[i]
 		var b := Button.new()
 		b.name = "Race_" + str(race["id"])
-		b.text = str(race["label"])
+		b.text = Loc.field(race, "label")
 		b.custom_minimum_size = Vector2(120, 32)
 		b.toggle_mode = true
 		b.button_pressed = str(race["id"]) == _race
@@ -211,7 +210,7 @@ func _refresh_style_btn() -> void:
 	if _style_btn == null:
 		return
 	_style_btn.visible = _race == "human"
-	_style_btn.text = "Стиль A" if _style <= 1 else "Стиль B"
+	_style_btn.text = Loc.t("ui.char.style_a" if _style <= 1 else "ui.char.style_b")
 
 
 func _on_race_pressed(race_id: String) -> void:
@@ -311,7 +310,7 @@ func _setup_title() -> void:
 	_title_label = title
 	var sub := Label.new()
 	sub.theme_type_variation = &"CsSub"
-	sub.text = "Шаг 1 из 2 · Класс и пол"
+	sub.text = Loc.t("ui.char.step1")
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sub)
 	_subtitle_label = sub
@@ -342,8 +341,8 @@ func _show_step(step: int) -> void:
 	if is_instance_valid(_step2_box):
 		_step2_box.visible = step == 2
 	if is_instance_valid(_subtitle_label):
-		_subtitle_label.text = "Шаг 1 из 2 · Класс и пол" if step == 1 \
-			else "Шаг 2 из 2 · Путь развития"
+		_subtitle_label.text = Loc.t("ui.char.step1") if step == 1 \
+			else Loc.t("ui.char.step2")
 	if step == 2:
 		_refresh_direction_buttons()
 		_refresh_direction_detail()
@@ -420,7 +419,8 @@ func _make_card(c: Dictionary, idx: int) -> Control:
 	# Подпись: класс + пол
 	var label := Label.new()
 	label.theme_type_variation = &"CsName"
-	label.text = "%s\n%s" % [c["title"], "Мужчина" if c["gender"] == "male" else "Женщина"]
+	label.text = "%s\n%s" % [Loc.t(str(c["title"])),
+				Loc.t("ui.char.male") if c["gender"] == "male" else Loc.t("ui.char.female")]
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(label)
@@ -463,7 +463,7 @@ func _setup_name_row() -> void:
 	_name_row = row
 
 	var lab := Label.new()
-	lab.text = "Имя героя:"
+	lab.text = Loc.t("ui.char.name_label")
 	lab.add_theme_font_size_override("font_size", 18)
 	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(lab)
@@ -472,14 +472,14 @@ func _setup_name_row() -> void:
 	name_input.custom_minimum_size = Vector2(260, 40)
 	name_input.max_length = 20
 	name_input.add_theme_font_size_override("font_size", 18)
-	name_input.placeholder_text = "Введите имя..."
+	name_input.placeholder_text = Loc.t("ui.char.name_placeholder")
 	row.add_child(name_input)
 
 	# Кнопка случайного греческого имени
 	_name_btn = Button.new()
-	_name_btn.text = "🎲 Имя"
+	_name_btn.text = Loc.t("ui.char.name_btn")
 	_name_btn.custom_minimum_size = Vector2(120, 40)
-	_name_btn.tooltip_text = "Случайное греческое имя"
+	_name_btn.tooltip_text = Loc.t("ui.char.name_btn_tip")
 	_name_btn.pressed.connect(_random_name)
 	row.add_child(_name_btn)
 
@@ -488,7 +488,7 @@ func _setup_name_row() -> void:
 	_world_btn = Button.new()
 	_world_btn.custom_minimum_size = Vector2(260, 40)
 	_world_btn.clip_text = true
-	_world_btn.tooltip_text = "Начало игры: сид мира, зона или готовая карта"
+	_world_btn.tooltip_text = Loc.t("ui.char.world_tip_default")
 	_world_btn.pressed.connect(_open_world_panel)
 	row.add_child(_world_btn)
 	_update_world_button()
@@ -497,7 +497,7 @@ func _setup_name_row() -> void:
 	# обязан случиться до старта.
 	_next_btn = Button.new()
 	_next_btn.name = "NextStep"
-	_next_btn.text = "Далее: развитие →"
+	_next_btn.text = Loc.t("ui.char.next")
 	_next_btn.custom_minimum_size = Vector2(220, 48)
 	_next_btn.add_theme_font_size_override("font_size", 20)
 	_next_btn.pressed.connect(func() -> void:
@@ -512,8 +512,8 @@ func _update_world_button() -> void:
 	if _world_btn == null:
 		return
 	var text := _start_setup.summary()
-	_world_btn.text = "Мир: " + text
-	_world_btn.tooltip_text = "Начало игры — " + text
+	_world_btn.text = Loc.f("ui.char.world_btn", [text])
+	_world_btn.tooltip_text = Loc.f("ui.char.world_tip", [text])
 
 func _open_world_panel() -> void:
 	SoundDB.play("ui.click")
@@ -547,13 +547,16 @@ func _on_world_edit(map_path: String) -> void:
 
 func _random_name() -> void:
 	var c: Dictionary = CHARACTERS[selected]
-	var pool: Array = FEMALE_NAMES if c["gender"] == "female" else MALE_NAMES
+	var pool := hero_names(str(c["gender"]))
+	if pool.is_empty():
+		return
 	# не повторяем подряд
 	var i := randi() % pool.size()
 	if pool.size() > 1 and i == _name_idx:
 		i = (i + 1) % pool.size()
 	_name_idx = i
-	name_input.text = str(pool[i])
+	var entry: Dictionary = pool[i]
+	name_input.text = str(entry.get(Loc.locale(), str(entry.get("ru", ""))))
 
 func _setup_step2_buttons() -> void:
 	var row := HBoxContainer.new()
@@ -564,7 +567,7 @@ func _setup_step2_buttons() -> void:
 
 	_back_btn = Button.new()
 	_back_btn.name = "BackStep"
-	_back_btn.text = "← Назад"
+	_back_btn.text = Loc.t("ui.char.back")
 	_back_btn.custom_minimum_size = Vector2(160, 44)
 	_back_btn.add_theme_font_size_override("font_size", 18)
 	_back_btn.pressed.connect(func() -> void:
@@ -573,7 +576,7 @@ func _setup_step2_buttons() -> void:
 	row.add_child(_back_btn)
 
 	_start_btn = Button.new()
-	_start_btn.text = "В ПУТЬ!"
+	_start_btn.text = Loc.t("ui.char.start")
 	_start_btn.custom_minimum_size = Vector2(220, 48)
 	_start_btn.add_theme_font_size_override("font_size", 24)
 	_start_btn.pressed.connect(_start_game)
@@ -600,7 +603,7 @@ func _setup_editor() -> void:
 	col.add_child(row1)
 
 	var lab := Label.new()
-	lab.text = "Характеристики:"
+	lab.text = Loc.t("ui.char.stats")
 	lab.add_theme_font_size_override("font_size", 15)
 	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row1.add_child(lab)
@@ -650,7 +653,7 @@ func _setup_editor() -> void:
 	# The link the player asked about: which stat feeds which number.
 	var hint := Label.new()
 	hint.theme_type_variation = &"CsDesc"
-	hint.text = "Тело → жизнь и поглощение   ·   Ловкость → защита, скорость и меткость   ·   Разум → сила магии   ·   Дух → мана (магу) и сопротивление стихиям"
+	hint.text = Loc.t("ui.char.stats_hint")
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(hint)
 
@@ -695,7 +698,7 @@ func _setup_directions() -> void:
 
 	var head := Label.new()
 	head.theme_type_variation = &"CsStatTitle"
-	head.text = "ОСНОВНОЕ УМЕНИЕ"
+	head.text = Loc.t("ui.char.main_skill")
 	left.add_child(head)
 
 	_dir_list = VBoxContainer.new()
@@ -708,7 +711,7 @@ func _setup_directions() -> void:
 
 	var aux_head := Label.new()
 	aux_head.theme_type_variation = &"CsStatTitle"
-	aux_head.text = "ВСПОМОГАТЕЛЬНОЕ · 60%"
+	aux_head.text = Loc.t("ui.char.aux_skill")
 	left.add_child(aux_head)
 
 	_aux_button = Button.new()
@@ -760,7 +763,8 @@ func _rebuild_direction_buttons() -> void:
 	for d in HeroDirections.primaries(role):
 		var skill := str((d as Dictionary).get("skill", ""))
 		var b := Button.new()
-		b.text = "  " + str((d as Dictionary).get("label", skill))
+		var label := Loc.field(d as Dictionary, "label")
+		b.text = "  " + (label if label != "" else skill)
 		b.toggle_mode = true
 		b.custom_minimum_size = Vector2(0, 40)
 		b.add_theme_font_size_override("font_size", 18)
@@ -776,7 +780,8 @@ func _rebuild_direction_buttons() -> void:
 	UiKit.wire_grid_focus(typed, 1)
 	var aux := HeroDirections.aux(role)
 	if _aux_button != null:
-		_aux_button.text = "  " + str(aux.get("label", "—")) + "  ·  10"
+		var aux_label := Loc.field(aux, "label")
+		_aux_button.text = "  " + (aux_label if aux_label != "" else "—") + "  ·  10"
 		_aux_button.set_meta("skill", str(aux.get("skill", "")))
 
 
@@ -883,12 +888,13 @@ func _refresh_direction_detail() -> void:
 		return
 	var role := str(CHARACTERS[selected]["role"])
 	var is_aux := str(d.get("role", "")) == "aux"
-	_add_detail_label(str(d.get("label", skill)), 22, UiKit.SECTION_COLOR)
+	var title := Loc.field(d, "label")
+	_add_detail_label(title if title != "" else skill, 22, UiKit.SECTION_COLOR)
 	_add_detail_label(
-		"Вспомогательное умение · 10 очков · 60% прибавки" if is_aux
-		else "Основное умение · 20 очков",
+		Loc.t("ui.char.skill_aux") if is_aux
+		else Loc.t("ui.char.skill_main"),
 		13, Color(0.88, 0.78, 0.55))
-	_add_detail_label(str(d.get("desc", "")), 13, Color(0.82, 0.80, 0.74))
+	_add_detail_label(Loc.field(d, "desc"), 13, Color(0.82, 0.80, 0.74))
 
 	var body := int(_edit.get("body", 10))
 	var agility := int(_edit.get("agility", 10))
@@ -922,15 +928,15 @@ func _refresh_direction_detail() -> void:
 	var absorption := Player.absorption_of(body, gear_abs)
 
 	_add_detail_label("————————————————————————————————————————————", 9, Color(0.35, 0.30, 0.25))
-	_add_detail_label("Развитие: %d очков (основной 100%% + вспомогательный 60%%)"
-		% int(dev), 12, Color(0.72, 0.68, 0.58))
+	_add_detail_label(Loc.f("ui.char.points_line", [int(dev)]),
+		12, Color(0.72, 0.68, 0.58))
 
 	if role == "mage":
 		var sphere := HeroDirections.sphere_of(skill)
 		var sp := Game.spell_power_value(float(skill_points), float(mind))
 		var mana := Player.max_mana_of(spirit) \
 			+ int(dev * GameConfig.getf("skill_stats", "mana_per_point"))
-		_add_detail_label("Жизнь: %d    ·    Мана: %d" % [hp, mana],
+		_add_detail_label(Loc.f("ui.char.hp_mana", [hp, mana]),
 			15, Color(0.95, 0.90, 0.80))
 		if sphere != "":
 			var starter := SpellDB.simplest_spell_of_sphere(sphere)
@@ -939,14 +945,14 @@ func _refresh_direction_detail() -> void:
 				var coef := SpellDB.power_coef_of(starter)
 				var dmg := maxi(SpellDB.min_damage_of(starter),
 					int(round(base * coef * (1.0 + sp / 100.0))))
-				_add_detail_label("Сила магии: %d%%    ·    Стартовое: %s — %d урона, %d маны"
-					% [int(round(sp)), starter.replace("_", " "), dmg,
-						SpellDB.mana_cost(starter)], 13, Color(0.82, 0.86, 0.95))
+				_add_detail_label(Loc.f("ui.char.magic_line",
+					[int(round(sp)), starter.replace("_", " "), dmg,
+						SpellDB.mana_cost(starter)]), 13, Color(0.82, 0.86, 0.95))
 		if not is_aux:
-			_add_detail_label("С собой:", 14, Color(0.88, 0.78, 0.55))
+			_add_detail_label(Loc.t("ui.char.with_you"), 14, Color(0.88, 0.78, 0.55))
 			_add_detail_list(_starter_keys(role, skill))
 		else:
-			_add_detail_label("Стартовой книги не даёт — это запасная школа.", 12,
+			_add_detail_label(Loc.t("ui.char.no_book"), 12,
 				Color(0.70, 0.66, 0.58))
 	else:
 		var kind := str(d.get("weapon_kind", "sword"))
@@ -960,12 +966,12 @@ func _refresh_direction_detail() -> void:
 		var d_hi := Player.damage_max_of(dmax, skill_points, body)
 		var attack := Player.attack_of(agility, skill_points, int(item.get("to_hit", 0)))
 		var hit := Game.hit_chance(attack, 10)
-		_add_detail_label("Жизнь: %d    ·    Защита: %d    ·    Поглощение: %d"
-			% [hp, defense, absorption], 15, Color(0.95, 0.90, 0.80))
-		_add_detail_label("Урон %s: %d–%d    ·    Атака: %d    ·    Попадание по защите 10: %d%%"
-			% [str(item.get("name_ru", item_key)), d_lo, d_hi, attack, hit],
+		_add_detail_label(Loc.f("ui.char.hp_def_abs", [hp, defense, absorption]),
+			15, Color(0.95, 0.90, 0.80))
+		_add_detail_label(Loc.f("ui.char.weapon_line",
+			[ItemDB.display_name(item), d_lo, d_hi, attack, hit]),
 			13, Color(0.90, 0.86, 0.76))
-		_add_detail_label("Против кого:", 14, Color(0.88, 0.78, 0.55))
+		_add_detail_label(Loc.t("ui.char.against"), 14, Color(0.88, 0.78, 0.55))
 		var table := ContentRules.dict("combat.weapon_vs_type")
 		var row: Dictionary = table.get(kind, {})
 		var labels := ContentRules.dict("combat.creature_types")
@@ -975,18 +981,18 @@ func _refresh_direction_detail() -> void:
 			var hi := Game.apply_weapon_percent(d_hi, pct)
 			var mark := "+" if pct > 100 else ("−" if pct < 100 else "=")
 			_add_detail_label("%s %s: %d%%  (%d–%d)"
-				% [mark, str(labels[ctype]), pct, lo, hi], 12,
+				% [mark, Loc.pair(labels[ctype]), pct, lo, hi], 12,
 				Color(0.78, 0.88, 0.76) if pct > 100 else (
 					Color(0.95, 0.72, 0.66) if pct < 100 else Color(0.75, 0.73, 0.68)))
 		if not is_aux:
-			_add_detail_label("С собой:", 14, Color(0.88, 0.78, 0.55))
+			_add_detail_label(Loc.t("ui.char.with_you"), 14, Color(0.88, 0.78, 0.55))
 			_add_detail_list(_starter_keys(role, skill))
 		else:
-			_add_detail_label("Стартового лука нет — вспомогательный навык.", 12,
+			_add_detail_label(Loc.t("ui.char.no_bow"), 12,
 				Color(0.70, 0.66, 0.58))
 
 	var hint := _add_detail_label(
-		"Жизнь = 20 + Тело×8 + очки×0.5.  Урон = база оружия × (1 + навык/40 + Ловкость/80) … (1 + навык/40 + Тело/60).  Защита = Ловкость/2 + Тело/4 + очки×0.2.  Попадание = 70×(атака+5)/(защита+5), 5–95%.",
+		Loc.t("ui.char.formula"),
 		11, Color(0.60, 0.57, 0.50))
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
@@ -999,7 +1005,7 @@ func _refresh_editor() -> void:
 		(_stat_labels[n] as Label).text = str(_edit[n])
 		total += int(_edit[n])
 	var preset := int(_edit.get("_preset_total", total))
-	_pool_label.text = "Очки: %d" % (preset - total)
+	_pool_label.text = Loc.f("ui.char.points_left", [preset - total])
 
 func _select(idx: int) -> void:
 	if idx < 0 or idx >= CHARACTERS.size():
@@ -1030,7 +1036,7 @@ func _select(idx: int) -> void:
 		_update_card_style(_cards[i])
 		var desc: Label = _cards[i].get_node_or_null("Desc")
 		if desc:
-			desc.text = CHARACTERS[i]["desc"] if i == idx else ""
+			desc.text = Loc.t(str(CHARACTERS[i]["desc"])) if i == idx else ""
 	SoundDB.play("ui.click")  # click00 — выбор персонажа
 	# При смене пола — новое греческое имя
 	if name_input.text == "" or _name_idx >= 0:
@@ -1048,7 +1054,7 @@ func _start_game() -> void:
 	Game.hero_gender = str(c["gender"])
 	Game.hero_name = name_input.text.strip_edges()
 	if Game.hero_name == "":
-		Game.hero_name = "Герой"
+		Game.hero_name = Loc.t("ui.char.default_hero")
 	# The skills are already 20 (main) / 10 (aux) / 0 (rest) in _edit.
 	Game.hero_primary_skill = str(_edit.get("_primary", _selected_primary))
 	Game.hero_aux_skill = str(_edit.get("_aux", ""))

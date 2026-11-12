@@ -2,6 +2,7 @@
   "Fire_Arrow": {
     "name": "Fire_Arrow",
     "ru": "Огненная стрела",
+    "en": "Fire Arrow",
     "sphere": "Fire",
     "damage": 14,
     "mana_cost": 8,
@@ -31,6 +32,7 @@
   "Fire_Ball": {
     "name": "Fire_Ball",
     "ru": "Огненный шар",
+    "en": "Fireball",
     "sphere": "Fire",
     "damage": 26,
     "mana_cost": 15,
@@ -60,6 +62,7 @@
   "Wall_of_Fire": {
     "name": "Wall_of_Fire",
     "ru": "Стена огня",
+    "en": "Wall of Fire",
     "sphere": "Fire",
     "damage": 3,
     "mana_cost": 22,
@@ -93,6 +96,7 @@
   "Protection_from_Fire": {
     "name": "Protection_from_Fire",
     "ru": "Защита от огня",
+    "en": "Protection from Fire",
     "sphere": "Fire",
     "damage": 0,
     "mana_cost": 12,
@@ -129,6 +133,7 @@
   "Ice_Missile": {
     "name": "Ice_Missile",
     "ru": "Ледяная стрела",
+    "en": "Ice Missile",
     "sphere": "Water",
     "damage": 18,
     "mana_cost": 10,
@@ -158,6 +163,7 @@
   "Poison_Cloud": {
     "name": "Poison_Cloud",
     "ru": "Ядовитое облако",
+    "en": "Poison Cloud",
     "sphere": "Water",
     "damage": 8,
     "mana_cost": 18,
@@ -200,6 +206,7 @@
   "Blizzard": {
     "name": "Blizzard",
     "ru": "Метель",
+    "en": "Blizzard",
     "sphere": "Water",
     "damage": 14,
     "mana_cost": 30,
@@ -247,6 +254,7 @@
   "Protection_from_Water": {
     "name": "Protection_from_Water",
     "ru": "Защита от воды",
+    "en": "Protection from Water",
     "sphere": "Water",
     "damage": 0,
     "mana_cost": 12,
@@ -283,6 +291,7 @@
   "Acid_Stream": {
     "name": "Acid_Stream",
     "ru": "Кислотная струя",
+    "en": "Acid Stream",
     "sphere": "Water",
     "damage": 22,
     "mana_cost": 20,
@@ -319,6 +328,7 @@
   "Lightning": {
     "name": "Lightning",
     "ru": "Молния",
+    "en": "Lightning",
     "sphere": "Air",
     "damage": 30,
     "mana_cost": 20,
@@ -348,6 +358,7 @@
   "Prismatic_Spray": {
     "name": "Prismatic_Spray",
     "ru": "Призматическое сияние",
+    "en": "Prismatic Spray",
     "sphere": "Air",
     "damage": 18,
     "mana_cost": 26,
@@ -377,6 +388,7 @@
   "Invisibility": {
     "name": "Invisibility",
     "ru": "Невидимость",
+    "en": "Invisibility",
     "sphere": "Air",
     "damage": 0,
     "mana_cost": 16,
@@ -412,6 +424,7 @@
   "Protection_from_Air": {
     "name": "Protection_from_Air",
     "ru": "Защита от воздуха",
+    "en": "Protection from Air",
     "sphere": "Air",
     "damage": 0,
     "mana_cost": 12,
@@ -448,6 +461,7 @@
   "Darkness": {
     "name": "Darkness",
     "ru": "Тьма",
+    "en": "Darkness",
     "sphere": "Air",
     "damage": 0,
     "mana_cost": 14,
@@ -483,6 +497,7 @@
   "Stone_Missile": {
     "name": "Stone_Missile",
     "ru": "Каменная стрела",
+    "en": "Stone Missile",
     "sphere": "Earth",
     "damage": 24,
     "mana_cost": 14,
@@ -512,6 +527,7 @@
   "Wall_of_Earth": {
     "name": "Wall_of_Earth",
     "ru": "Стена земли",
+    "en": "Wall of Earth",
     "sphere": "Earth",
     "damage": 0,
     "mana_cost": 24,
@@ -545,6 +561,7 @@
   "Stone_Curse": {
     "name": "Stone_Curse",
     "ru": "Каменное проклятие",
+    "en": "Stone Curse",
     "sphere": "Earth",
     "damage": 0,
     "mana_cost": 28,
@@ -584,6 +601,7 @@
   "Protection_from_Earth": {
     "name": "Protection_from_Earth",
     "ru": "Защита от земли",
+    "en": "Protection from Earth",
     "sphere": "Earth",
     "damage": 0,
     "mana_cost": 12,
@@ -620,6 +638,7 @@
   "Diamond_Dust": {
     "name": "Diamond_Dust",
     "ru": "Алмазная пыль",
+    "en": "Diamond Dust",
     "sphere": "Earth",
     "damage": 20,
     "mana_cost": 24,
@@ -649,6 +668,7 @@
   "Bless": {
     "name": "Bless",
     "ru": "Благословение",
+    "en": "Bless",
     "sphere": "Astral",
     "damage": 0,
     "mana_cost": 10,
@@ -685,6 +705,7 @@
   "Haste": {
     "name": "Haste",
     "ru": "Ускорение",
+    "en": "Haste",
     "sphere": "Astral",
     "damage": 0,
     "mana_cost": 10,
@@ -720,6 +741,7 @@
   "Heal": {
     "name": "Heal",
     "ru": "Лечение",
+    "en": "Heal",
     "sphere": "Astral",
     "damage": -22,
     "mana_cost": 12,
@@ -749,6 +771,7 @@
   "Drain_Life": {
     "name": "Drain_Life",
     "ru": "Кража жизни",
+    "en": "Drain Life",
     "sphere": "Astral",
     "damage": 18,
     "mana_cost": 14,
@@ -783,6 +806,7 @@
   "Shield": {
     "name": "Shield",
     "ru": "Щит",
+    "en": "Shield",
     "sphere": "Astral",
     "damage": 0,
     "mana_cost": 16,
@@ -818,6 +842,7 @@
   "Summon": {
     "name": "Summon",
     "ru": "Призыв",
+    "en": "Summon",
     "sphere": "Astral",
     "damage": 0,
     "mana_cost": 20,
@@ -847,6 +872,7 @@
   "Animate_Dead": {
     "name": "Animate_Dead",
     "ru": "Animate Dead",
+    "en": "Animate Dead",
     "sphere": "Astral",
     "damage": 10,
     "mana_cost": 10,
@@ -881,6 +907,7 @@
   "Teleport": {
     "name": "Teleport",
     "ru": "Телепорт",
+    "en": "Teleport",
     "sphere": "Astral",
     "damage": 0,
     "mana_cost": 25,
@@ -910,6 +937,7 @@
   "Curse": {
     "name": "Curse",
     "ru": "Проклятие",
+    "en": "Curse",
     "sphere": "Astral",
     "damage": 0,
     "mana_cost": 10,
@@ -945,6 +973,7 @@
   "Slow": {
     "name": "Slow",
     "ru": "Замедление",
+    "en": "Slow",
     "sphere": "Astral",
     "damage": 0,
     "mana_cost": 10,
@@ -980,6 +1009,7 @@
   "Light": {
     "name": "Light",
     "ru": "Свет",
+    "en": "Light",
     "sphere": "Astral",
     "damage": 0,
     "mana_cost": 5,
@@ -1009,6 +1039,7 @@
   "Control_Spirit": {
     "name": "Control_Spirit",
     "ru": "Контроль духа",
+    "en": "Control Spirit",
     "sphere": "Astral",
     "damage": 0,
     "mana_cost": 18,

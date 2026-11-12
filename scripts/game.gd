@@ -198,18 +198,18 @@ static func perf_frame() -> void:
 		total += ms
 		var calls := int(perf_calls.get(key, 0))
 		var per_frame := float(calls) / float(frames)
-		lines.append("%8.2f ms  %-14s (%6.1f выз/кадр)" % [ms, key, per_frame])
+		lines.append("%8.2f ms  %-14s (%6.1f calls/frame)" % [ms, key, per_frame])
 	lines.sort()
-	print("--- PERF  кадров: %d, кадр: %.1f мс (%.1f FPS) ---" % [
+	print("--- PERF  frames: %d, frame: %.1f ms (%.1f FPS) ---" % [
 		frames, wall_ms / float(frames), 1000.0 * float(frames) / maxf(1.0, wall_ms)])
 	for l in lines:
 		print(l)
 	for ck in perf_calls:
 		if perf_usec.has(ck):
 			continue
-		print("%8s     %-14s (%6.1f выз/кадр)" % ["", ck,
+		print("%8s     %-14s (%6.1f calls/frame)" % ["", ck,
 			float(int(perf_calls[ck])) / float(frames)])
-	print("     сумма замеренных блоков: %.2f мс/кадр" % total)
+	print("     measured blocks total: %.2f ms/frame" % total)
 	perf_usec.clear()
 	perf_calls.clear()
 	perf_frames = 0
@@ -917,7 +917,7 @@ static func on_outpost_guard_died(unit: Node2D) -> void:
 			break
 	var bus2 := _world_bus_static()
 	if bus2 != null and ("state" in bus2) and bus2.state != null:
-		bus2.state.log_entry("outpost", "%s захвачен" % name)
+		bus2.state.log_entry("outpost", Loc.f("ui.outpost.log_captured", [name]))
 	# A capture grants blueprints of that faction's sets (package C+D): took the camp —
 	# learned how their armour is forged. Shops (package F) will add a second source.
 	var scrolls := CraftDB.recipe_ids_of_faction(faction)
@@ -932,8 +932,8 @@ static func on_outpost_guard_died(unit: Node2D) -> void:
 				given += 1
 	var wf = load("res://scripts/world/world_feed.gd")
 	if wf != null:
-		var tail := "" if given == 0 else ", чертежей: %d" % given
-		wf.post("world", "%s захвачен (+%d золота%s)" % [name, gold, tail])
+		var tail := "" if given == 0 else Loc.f("ui.outpost.blueprints_tail", [given])
+		wf.post("world", Loc.f("ui.outpost.feed_captured", [name, gold, tail]))
 	print("OUTPOST captured: %s (%s), +%d gold, +%d scrolls" % [name, oid, gold, given])
 
 
@@ -2102,7 +2102,7 @@ func _use_hotbar_item(item_key: String) -> void:
 		Game.hotbar.erase(_hotbar_slot_of(item_key))
 		return
 	if not is_instance_valid(player) or not player.has_item(item_key):
-		_flash_cast_error("Нет такого расходника в инвентаре.")
+		_flash_cast_error(Loc.t("ui.hud.cast.no_consumable"))
 		return
 	match str(item.get("quality", "")):
 		"Potion":
@@ -2120,9 +2120,9 @@ func _use_hotbar_item(item_key: String) -> void:
 			if ui != null and ui.has_method("_begin_scroll_targeting"):
 				ui._begin_scroll_targeting(item_key)
 			else:
-				_flash_cast_error("Выберите цель для свитка.")
+				_flash_cast_error(Loc.t("ui.hud.cast.choose_scroll_target"))
 		_:
-			_flash_cast_error("Этот предмет нельзя применить с хоткея.")
+			_flash_cast_error(Loc.t("ui.hud.cast.not_from_hotkey"))
 
 
 func _hotbar_slot_of(item_key: String) -> int:
@@ -2146,7 +2146,7 @@ func _resolve_scroll_click(world_position: Vector2) -> void:
 		if target == null:
 			target = player.get_nearest_enemy(world_position, 220.0)
 		if target == null:
-			_flash_cast_error("Нет врага под курсором — укажите противника.")
+			_flash_cast_error(Loc.t("ui.hud.cast.no_enemy"))
 			return
 	elif target_kind == "point":
 		var under := get_enemy_at_position(world_position)
@@ -2159,14 +2159,15 @@ func _resolve_scroll_click(world_position: Vector2) -> void:
 			if SpellDB.kind_of(spell) == "buff":
 				target = player
 			else:
-				_flash_cast_error("Укажите героя или союзника для этого заклинания.")
+				_flash_cast_error(Loc.t("ui.hud.cast.choose_ally"))
 				return
 
 	# Range from the database (before, it was not checked at all)
 	var max_range := SpellDB.range_of(spell)
 	if max_range > 0.0 and target_kind != "self" \
 			and player.cast_origin().distance_to(world_position) > max_range:
-		_flash_cast_error("Слишком далеко: «%s» достаёт на %d м." % [spell, int(max_range / 32.0)])
+		_flash_cast_error(Loc.f("ui.hud.cast.too_far",
+			[spell, int(max_range / 32.0)]))
 		return
 
 	# The item is spent ONLY if the effect was applied: before, remove_item
@@ -2180,7 +2181,7 @@ func _resolve_scroll_click(world_position: Vector2) -> void:
 	else:
 		applied = player.apply_scroll_to_target_point(spell, world_position, scroll_power)
 	if not applied:
-		_flash_cast_error("Заклинание не сработало — предмет не потрачен.")
+		_flash_cast_error(Loc.t("ui.hud.cast.failed"))
 		return
 	player.remove_item(str(Game.pending_scroll.get("item_key", "")))
 	Game.pending_scroll = {}
@@ -2244,8 +2245,8 @@ func _resolve_spell_click(world_position: Vector2) -> void:
 			target_position = player.global_position
 
 	if not ok:
-		var msg := "Укажите ВРАГА для «%s» (ПКМ/ESC — отмена)." % name \
-			if target_kind == "enemy" else "Укажите ГЕРОЯ или СОЮЗНИКА для «%s»." % name
+		var msg := Loc.f("ui.hud.cast.need_enemy", [name]) \
+			if target_kind == "enemy" else Loc.f("ui.hud.cast.need_ally", [name])
 		print(msg)
 		if ui != null and ui.has_method("_flash_targeting_error"):
 			ui._flash_targeting_error(msg)
@@ -2257,13 +2258,13 @@ func _resolve_spell_click(world_position: Vector2) -> void:
 	if max_range > 0.0 and target_kind != "self":
 		var origin: Vector2 = player.cast_origin()
 		if origin.distance_to(target_position) > max_range:
-			var rmsg := "Слишком далеко: «%s» достаёт на %d м." % [name, int(max_range / 32.0)]
+			var rmsg := Loc.f("ui.hud.cast.too_far", [name, int(max_range / 32.0)])
 			if ui != null and ui.has_method("_flash_targeting_error"):
 				ui._flash_targeting_error(rmsg)
 			return
 
 	if not player.cast_spell(name, target_position, target_node):
-		print("Не удалось кастовать: " + name)
+		print("cast failed: " + name)
 	if ui != null and ui.has_method("_finish_spell_targeting"):
 		ui._finish_spell_targeting()
 
@@ -3236,12 +3237,12 @@ func _save_to_slot(slot: String) -> void:
 	var err := SaveSystem.save(slot, _build_save_payload())
 	if err != "":
 		if _save_menu != null and is_instance_valid(_save_menu):
-			_save_menu.set_status(tr("Не удалось сохранить: %s") % err)
+			_save_menu.set_status(Loc.f("ui.save.status.failed", [err]))
 		else:
 			push_error("SaveSystem: " + err)
 		return
 	if _save_menu != null and is_instance_valid(_save_menu):
-		_save_menu.set_status(tr("Сохранено в слот."))
+		_save_menu.set_status(Loc.t("ui.save.status.saved"))
 		_save_menu._refresh()
 
 
@@ -3249,14 +3250,14 @@ func _load_from_slot(slot: String) -> void:
 	var res := SaveSystem.load_slot(slot)
 	var err_kind := str(res.get("error", ""))
 	if err_kind == "version":
-		_set_menu_status(tr("Сохранение сделано более новой версией игры (файл v%d, игра v%d) — загрузка отменена.")
-			% [int(res.get("file_version", 0)), SaveSystem.VERSION])
+		_set_menu_status(Loc.f("ui.save.status.version",
+			[int(res.get("file_version", 0)), SaveSystem.VERSION]))
 		return
 	if err_kind == "corrupt":
-		_set_menu_status(tr("Файл сохранения повреждён и резервной копии нет."))
+		_set_menu_status(Loc.t("ui.save.status.corrupt"))
 		return
 	if res.is_empty():
-		_set_menu_status(tr("Слот пуст."))
+		_set_menu_status(Loc.t("ui.save.status.empty"))
 		return
 	# A game-over load must release the corpse/pause/menu BEFORE _restart_scene:
 	# _set_menu_pause() refuses to unpause while player.state is dead, and the
@@ -3274,7 +3275,7 @@ func _load_from_slot(slot: String) -> void:
 func _delete_slot(slot: String) -> void:
 	SaveSystem.clear_slot(slot)
 	if _save_menu != null and is_instance_valid(_save_menu):
-		_save_menu.set_status(tr("Слот удалён."))
+		_save_menu.set_status(Loc.t("ui.save.status.deleted"))
 		_save_menu._refresh()
 
 

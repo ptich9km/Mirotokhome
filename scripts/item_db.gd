@@ -20,15 +20,15 @@ const EQUIP_SLOTS: Array[String] = [
 ## Русское название слота для подписи/тултипа панели персонажа.
 static func slot_title(slot: String) -> String:
 	match slot:
-		"weapon": return "Оружие"
-		"shield": return "Щит"
-		"head": return "Шлем"
-		"cloak": return "Плащ"
-		"body": return "Броня"
-		"hands": return "Перчатки"
-		"feet": return "Сапоги"
-		"amulet": return "Амулет"
-		"ring1", "ring2": return "Кольцо"
+		"weapon": return Loc.t("ui.slot.weapon")
+		"shield": return Loc.t("ui.slot.shield")
+		"head": return Loc.t("ui.slot.head")
+		"cloak": return Loc.t("ui.slot.cloak")
+		"body": return Loc.t("ui.slot.body")
+		"hands": return Loc.t("ui.slot.hands")
+		"feet": return Loc.t("ui.slot.feet")
+		"amulet": return Loc.t("ui.slot.amulet")
+		"ring1", "ring2": return Loc.t("ui.slot.ring")
 	return "—"
 
 static var _items: Array = []
@@ -170,6 +170,22 @@ static func find(key: String) -> Dictionary:
 ## Слот экипировки: weapon / shield / head / cloak / body / hands / feet / amulet / ring.
 ## Кольцо возвращает "ring" — конкретный слот ring1/ring2 выбирает player.equip_item().
 ## "" — предмет не экипируется или тип неизвестен.
+## The item name in the current language. Falls back to the Russian name and then
+## to the key: a record without `name_en` shows the Russian name rather than an
+## internal key, which is more readable than "sword_bronze" in a tooltip.
+## JSON `null` arrives as null and `str(null)` is "<null>", so type is checked:
+## a null field must not turn into a literal "<null>" in the UI.
+static func display_name(item: Dictionary) -> String:
+	if Loc.locale() == "en":
+		var en = item.get("name_en", "")
+		if en is String and str(en) != "":
+			return str(en)
+	var ru = item.get("name_ru", "")
+	if ru is String and str(ru) != "":
+		return str(ru)
+	return str(item.get("key", ""))
+
+
 static func slot_of(item: Dictionary) -> String:
 	var t := str(item.get("type", ""))
 	if t in type_list("weapon_types"):
@@ -318,15 +334,15 @@ static func class_block_text(item: Dictionary, hero_class: String) -> String:
 static func slot_fits_text(slot: String, hero_class: String) -> String:
 	var mage := class_of(hero_class) == CLASS_MAGE
 	match slot:
-		"weapon": return "Магический посох" if mage else "Оружие (не посох)"
-		"shield": return "Магу щит не подходит" if mage else "Щит"
-		"head": return "Тканевый головной убор или капюшон" if mage else "Металлический шлем"
-		"cloak": return "Плащ или накидка"
-		"body": return "Тканевая роба или платье" if mage else "Металлическая броня"
-		"hands": return "Тканевые или кожаные перчатки" if mage else "Металлические перчатки или наручи"
-		"feet": return "Тканевая обувь" if mage else "Ботинки и сапоги"
-		"amulet": return "Амулет (подходит обоим классам)"
-		"ring1", "ring2": return "Кольцо (подходит обоим классам)"
+		"weapon": return Loc.t("ui.slot.fits.staff" if mage else "ui.slot.fits.weapon")
+		"shield": return Loc.t("ui.slot.fits.shield_mage" if mage else "ui.slot.fits.shield")
+		"head": return Loc.t("ui.slot.fits.head_mage" if mage else "ui.slot.fits.head")
+		"cloak": return Loc.t("ui.slot.fits.cloak")
+		"body": return Loc.t("ui.slot.fits.body_mage" if mage else "ui.slot.fits.body")
+		"hands": return Loc.t("ui.slot.fits.hands_mage" if mage else "ui.slot.fits.hands")
+		"feet": return Loc.t("ui.slot.fits.feet_mage" if mage else "ui.slot.fits.feet")
+		"amulet": return Loc.t("ui.slot.fits.amulet")
+		"ring1", "ring2": return Loc.t("ui.slot.fits.ring")
 	return "—"
 
 ## --- Сломанные вещи и ресурсы крафта (мастерская, 07.10) -----------------

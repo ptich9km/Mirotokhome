@@ -52,7 +52,7 @@ func _run() -> void:
 
 func _warrior(cs) -> void:
 	_check(cs._step1_box.visible and not cs._step2_box.visible, "старт на шаге 1")
-	_check(cs._next_btn != null and cs._next_btn.text.contains("Далее"),
+	_check(cs._next_btn != null and cs._next_btn.text == Loc.t("ui.char.next"),
 		"на шаге 1 есть «Далее: развитие»")
 	_check(cs._dir_buttons.size() == 4, "у воина 4 основных направления (получено %d)"
 		% cs._dir_buttons.size())

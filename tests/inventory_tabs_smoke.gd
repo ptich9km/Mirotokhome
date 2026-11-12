@@ -85,9 +85,12 @@ func _run() -> void:
 	_check(tabs.size() == 3, "вкладок три (сейчас %d)" % tabs.size())
 	_check(pages.size() == 3, "страниц три (сейчас %d)" % pages.size())
 	if tabs.size() == 3 and pages.size() == 3:
-		_check(str((tabs[0] as Button).text) == "Склад", "первая вкладка — «Склад»")
-		_check(str((tabs[1] as Button).text) == "Отношения", "вторая — «Отношения»")
-		_check(str((tabs[2] as Button).text) == "Ремесла", "третья — «Ремесла»")
+		# The tab text comes from ui.json now, so the check compares against the
+		# localized key instead of a Russian literal: a literal would break on the
+		# language switch and would pin the wording to one locale.
+		_check(str((tabs[0] as Button).text) == Loc.t("ui.inv.tab.storage"), "первая вкладка — «Склад»")
+		_check(str((tabs[1] as Button).text) == Loc.t("ui.inv.tab.relations"), "вторая — «Отношения»")
+		_check(str((tabs[2] as Button).text) == Loc.t("ui.inv.tab.crafts"), "третья — «Ремёсла»")
 		_check((pages[0] as Control).visible and not (pages[1] as Control).visible
 			and not (pages[2] as Control).visible, "видна только страница склада")
 

@@ -1,40 +1,50 @@
 {
-	"_comment": "Character-creation directions. Numbers are NOT stored here: the screen computes them from Player statics, the starter kit from Player.starter_items. `role` is primary (20 points, 100% stat contribution) or aux (10 points, 60% contribution; never selectable as the main direction). `weapon_kind` drives the Allods weapon-vs-creature table and the starter weapon.",
+	"_comment": "Character-creation directions. Numbers are NOT stored here: the screen computes them from Player statics, the starter kit from Player.starter_items. `role` is primary (20 points, 100% stat contribution) or aux (10 points, 60% contribution; never selectable as the main direction). `weapon_kind` drives the Allods weapon-vs-creature table and the starter weapon. `label_en`/`desc_en` are the English columns: the screen picks them through Loc.field(), so a direction needs no separate localized record.",
 	"warrior": [
 		{
 			"skill": "blade",
 			"role": "primary",
 			"label": "Меч",
 			"weapon_kind": "sword",
-			"desc": "Клинок — универсальное оружие. Хорош против зверей, ровен к людям и насекомым, слабее против нежити и чудовищ."
+			"desc": "Клинок — универсальное оружие. Хорош против зверей, ровен к людям и насекомым, слабее против нежити и чудовищ.",
+			"label_en": "Sword",
+			"desc_en": "The blade is a universal weapon. Good against beasts, even against humans and insects, weaker against undead and monsters."
 		},
 		{
 			"skill": "axe",
 			"role": "primary",
 			"label": "Топор",
 			"weapon_kind": "axe",
-			"desc": "Тяжёлый рубящий удар. Силён против людей и чудовищ, слабее против нежити."
+			"desc": "Тяжёлый рубящий удар. Силён против людей и чудовищ, слабее против нежити.",
+			"label_en": "Axe",
+			"desc_en": "A heavy chopping blow. Strong against humans and monsters, weaker against undead."
 		},
 		{
 			"skill": "bludgeon",
 			"role": "primary",
 			"label": "Булава",
 			"weapon_kind": "club",
-			"desc": "Дробящее оружие. Лучшее против нежити и насекомых; люди и чудовища держат удар хуже — по ним урон ниже."
+			"desc": "Дробящее оружие. Лучшее против нежити и насекомых; люди и чудовища держат удар хуже — по ним урон ниже.",
+			"label_en": "Mace",
+			"desc_en": "A crushing weapon. The best against undead and insects; humans and monsters hold up worse, so damage against them is lower."
 		},
 		{
 			"skill": "pike",
 			"role": "primary",
 			"label": "Копьё",
 			"weapon_kind": "pike",
-			"desc": "Длинный выпад: удар достаёт дальше меча и топора. Сильнее всего против чудовищ, слабее против насекомых."
+			"desc": "Длинный выпад: удар достаёт дальше меча и топора. Сильнее всего против чудовищ, слабее против насекомых.",
+			"label_en": "Pike",
+			"desc_en": "A long lunge: the strike reaches further than a sword or an axe. Strongest against monsters, weaker against insects."
 		},
 		{
 			"skill": "shooting",
 			"role": "aux",
 			"label": "Стрельба",
 			"weapon_kind": "bow",
-			"desc": "Вспомогательное умение. Лук и меткость; даёт 60% прибавки от основной школы развития и не может быть выбран основным."
+			"desc": "Вспомогательное умение. Лук и меткость; даёт 60% прибавки от основной школы развития и не может быть выбран основным.",
+			"label_en": "Archery",
+			"desc_en": "A secondary skill. Bow and accuracy; it gives 60% of the gain of the main direction and cannot be chosen as the main one."
 		}
 	],
 	"mage": [
@@ -44,7 +54,9 @@
 			"label": "Огонь",
 			"weapon_kind": "staff",
 			"sphere": "Fire",
-			"desc": "Школа урона и площади: огненная стрела, огненный шар, стена огня."
+			"desc": "Школа урона и площади: огненная стрела, огненный шар, стена огня.",
+			"label_en": "Fire",
+			"desc_en": "The school of damage and area: fire arrow, fireball, wall of fire."
 		},
 		{
 			"skill": "water",
@@ -52,7 +64,9 @@
 			"label": "Вода",
 			"weapon_kind": "staff",
 			"sphere": "Water",
-			"desc": "Лёд и контроль: ледяная стрела, метель, заморозка."
+			"desc": "Лёд и контроль: ледяная стрела, метель, заморозка.",
+			"label_en": "Water",
+			"desc_en": "Ice and control: ice arrow, blizzard, freeze."
 		},
 		{
 			"skill": "air",
@@ -60,7 +74,9 @@
 			"label": "Воздух",
 			"weapon_kind": "staff",
 			"sphere": "Air",
-			"desc": "Молнии и скорость: молния, призматический веер, ускорение."
+			"desc": "Молнии и скорость: молния, призматический веер, ускорение.",
+			"label_en": "Air",
+			"desc_en": "Lightning and speed: lightning, prismatic fan, haste."
 		},
 		{
 			"skill": "earth",
@@ -68,7 +84,9 @@
 			"label": "Земля",
 			"weapon_kind": "staff",
 			"sphere": "Earth",
-			"desc": "Камень и стены: каменная стрела, алмазная пыль, стена земли."
+			"desc": "Камень и стены: каменная стрела, алмазная пыль, стена земли.",
+			"label_en": "Earth",
+			"desc_en": "Stone and walls: stone arrow, diamond dust, wall of earth."
 		},
 		{
 			"skill": "astral",
@@ -76,7 +94,9 @@
 			"label": "Астрал",
 			"weapon_kind": "staff",
 			"sphere": "Astral",
-			"desc": "Вспомогательная школа: лечение, щиты, телепорт. Даёт 60% прибавки от основной и не может быть выбрана основной."
+			"desc": "Вспомогательная школа: лечение, щиты, телепорт. Даёт 60% прибавки от основной и не может быть выбрана основной.",
+			"label_en": "Astral",
+			"desc_en": "A secondary school: healing, shields, teleport. It gives 60% of the gain of the main one and cannot be chosen as the main one."
 		}
 	]
 }

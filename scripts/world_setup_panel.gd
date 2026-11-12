@@ -74,7 +74,7 @@ func _build() -> void:
 
 	var title := Label.new()
 	title.theme_type_variation = &"CsTitle"
-	title.text = "МИР"
+	title.text = Loc.t("ui.world.title")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(title)
 
@@ -82,12 +82,12 @@ func _build() -> void:
 	var mode_row := HBoxContainer.new()
 	mode_row.add_theme_constant_override("separation", 10)
 	col.add_child(mode_row)
-	_add_label(mode_row, "Начало:")
+	_add_label(mode_row, Loc.t("ui.world.mode"))
 	_mode = OptionButton.new()
 	_mode.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_mode.add_item("Случайный мир", 0)
-	_mode.add_item("Мой сид", 1)
-	_mode.add_item("Готовая карта", 2)
+	_mode.add_item(Loc.t("ui.world.mode_random"), 0)
+	_mode.add_item(Loc.t("ui.world.mode_seed"), 1)
+	_mode.add_item(Loc.t("ui.world.mode_map"), 2)
 	_mode.item_selected.connect(func(_i): _apply_mode(); _refresh_summary())
 	mode_row.add_child(_mode)
 
@@ -95,7 +95,7 @@ func _build() -> void:
 	_seed_row = HBoxContainer.new()
 	_seed_row.add_theme_constant_override("separation", 10)
 	col.add_child(_seed_row)
-	_add_label(_seed_row, "Сид:")
+	_add_label(_seed_row, Loc.t("ui.world.seed"))
 	_seed_edit = LineEdit.new()
 	_seed_edit.custom_minimum_size = Vector2(260, 38)
 	_seed_edit.placeholder_text = "1 … 2147483647"
@@ -103,7 +103,7 @@ func _build() -> void:
 	_seed_edit.text_changed.connect(_on_seed_text)
 	_seed_row.add_child(_seed_edit)
 	var dice := Button.new()
-	dice.text = "🎲 Случайный"
+	dice.text = Loc.t("ui.world.dice")
 	dice.custom_minimum_size = Vector2(160, 38)
 	dice.pressed.connect(func():
 		_seed_edit.text = str(StartSetup.random_seed())
@@ -114,7 +114,7 @@ func _build() -> void:
 	var zone_row := HBoxContainer.new()
 	zone_row.add_theme_constant_override("separation", 10)
 	col.add_child(zone_row)
-	_add_label(zone_row, "Стартовая зона:")
+	_add_label(zone_row, Loc.t("ui.world.zone"))
 	_zone = OptionButton.new()
 	_zone.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for i in range(StartSetup.ZONES.size()):
@@ -131,16 +131,16 @@ func _build() -> void:
 	var map_head := HBoxContainer.new()
 	map_head.add_theme_constant_override("separation", 10)
 	_map_box.add_child(map_head)
-	_add_label(map_head, "Карты из редактора (user://maps/custom):")
+	_add_label(map_head, Loc.t("ui.world.maps_head"))
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	map_head.add_child(spacer)
 	var refresh := Button.new()
-	refresh.text = "Обновить"
+	refresh.text = Loc.t("ui.world.refresh")
 	refresh.pressed.connect(_refresh_maps)
 	map_head.add_child(refresh)
 	var edit_btn := Button.new()
-	edit_btn.text = "Открыть редактор"
+	edit_btn.text = Loc.t("ui.world.open_editor")
 	edit_btn.pressed.connect(_on_edit_requested)
 	map_head.add_child(edit_btn)
 
@@ -153,8 +153,7 @@ func _build() -> void:
 	var hint := Label.new()
 	hint.theme_type_variation = &"CsDesc"
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.text = "Карту делает редактор карт (главное меню → «Редактор карт»). " \
-		+ "Он сохраняет .alm вместе с точкой спавна, порталами и зданиями."
+	hint.text = Loc.t("ui.world.hint")
 	_map_box.add_child(hint)
 
 	_error = Label.new()
@@ -168,13 +167,13 @@ func _build() -> void:
 	buttons.add_theme_constant_override("separation", 10)
 	col.add_child(buttons)
 	var cancel := Button.new()
-	cancel.text = "Отмена"
+	cancel.text = Loc.t("ui.world.cancel")
 	cancel.custom_minimum_size = Vector2(140, 40)
 	cancel.pressed.connect(_close)
 	buttons.add_child(cancel)
 	var ok := Button.new()
 	ok.theme_type_variation = &"CsStart"
-	ok.text = "Готово"
+	ok.text = Loc.t("ui.world.ok")
 	ok.custom_minimum_size = Vector2(160, 40)
 	ok.pressed.connect(_on_ok)
 	buttons.add_child(ok)
@@ -229,9 +228,9 @@ func _refresh_maps() -> void:
 			size = " · %d×%d" % [int(m["w"]), int(m["h"])]
 		var marks := ""
 		if bool(m.get("has_spawn", false)):
-			marks += " · спавн"
+			marks += Loc.t("ui.world.mark_spawn")
 		if bool(m.get("has_portal", false)):
-			marks += " · портал"
+			marks += Loc.t("ui.world.mark_portal")
 		_maps_list.add_item("%s · %s%s%s" % [
 			str(m.get("title", "")), StartSetup.zone_label(str(m.get("zone", "start"))),
 			size, marks])
@@ -239,7 +238,7 @@ func _refresh_maps() -> void:
 			select_index = i
 	if _maps.is_empty():
 		_selected_path = ""
-		_maps_list.add_item("(пока нет карт — сделайте карту в редакторе)")
+		_maps_list.add_item(Loc.t("ui.world.no_maps"))
 		_maps_list.set_item_disabled(0, true)
 	elif select_index >= 0:
 		_maps_list.select(select_index)
@@ -261,12 +260,12 @@ func _read_fields() -> String:
 	var value := int(raw) if raw.is_valid_int() else 0
 	if data.mode == "seed":
 		if value <= 0:
-			_error.text = "Сид — целое число больше нуля."
+			_error.text = Loc.t("ui.world.err_seed")
 			return "seed"
 		data.world_seed = value
 	elif data.mode == "map":
 		if _selected_path == "":
-			_error.text = "Выберите готовую карту."
+			_error.text = Loc.t("ui.world.err_map")
 			return "map"
 		data.map_path = _selected_path
 	else:

@@ -28,6 +28,24 @@ static func get_spell(name: String) -> Dictionary:
 	ensure_loaded()
 	return _db.get(name, {})
 
+
+## The spell name in the current language: `en` when the record carries it and the
+## locale is English, otherwise `ru`, otherwise the internal name. Spells show up
+## in the magic book tooltips and in the combat log, so a Russian title in the
+## English mode is the most visible kind of leftover.
+static func display_name(name: String) -> String:
+	var spell := get_spell(name)
+	if spell.is_empty():
+		return name
+	if Loc.locale() == "en":
+		var en = spell.get("en", "")
+		if en is String and str(en) != "":
+			return str(en)
+	var ru = spell.get("ru", "")
+	if ru is String and str(ru) != "":
+		return str(ru)
+	return name
+
 ## Element book ("Book Fire") -> sphere name ("Fire"). "" if not a book.
 ## The sphere list lives in data (assets/config/content_rules.json, "spells.spheres"):
 ## a mod can add a new magic school, and scrolls/books pick it up automatically.
@@ -294,8 +312,8 @@ static func make_sphere_book(sphere: String) -> Dictionary:
 		return {}
 	return {
 		"key": "Book " + sphere,
-		"name_ru": "Книга: " + sphere,
-		"name_en": "Book",
+		"name_ru": "Книга: " + _sphere_text(sphere, "ru"),
+		"name_en": "Book: " + _sphere_text(sphere, "en"),
 		"quality": "Book",
 		"type": sphere,
 		"price": 0,
@@ -327,6 +345,13 @@ const BOOK_ICONS := {
 	"Astral": "res://assets/spells/book_astral.png",
 }
 
+## Имя сферы в конкретном языке, независимо от текущей локали: имя предмета
+## хранит оба языка одновременно, поэтому `Loc.t()` здесь не подходит.
+static func _sphere_text(sphere: String, code: String) -> String:
+	var text := Loc.text_in("ui.sphere." + sphere, code)
+	return text if text != "" else sphere
+
+
 ## Synthesize the "single-spell book" item (for the inventory and the shop counter).
 static func make_book_item(spell: String) -> Dictionary:
 	var o := get_spell(spell)
@@ -336,7 +361,7 @@ static func make_book_item(spell: String) -> Dictionary:
 	return {
 		"key": book_key_for_spell(spell),
 		"name_ru": "Книга: " + str(o.get("ru", spell)),
-		"name_en": "Book",
+		"name_en": "Book: " + str(o.get("en", spell)),
 		"quality": "Book",
 		"type": sphere,
 		"price": 50 + int(o.get("mana_cost", 0)) * 20,

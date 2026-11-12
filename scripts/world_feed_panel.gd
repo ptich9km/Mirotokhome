@@ -175,7 +175,7 @@ func _refresh() -> void:
 		var rec: Dictionary = raw as Dictionary
 		var kind := str(rec.get("kind", "world"))
 		var prefix := _kind_prefix(kind)
-		lines.append("[день %d] %s%s" % [day, prefix, str(rec.get("text", ""))])
+		lines.append(Loc.f("ui.feed.day", [day, prefix, str(rec.get("text", ""))]))
 	if lines.size() <= 1:
 		lines.append(Loc.t("ui.feed.empty"))
 	if _debug:

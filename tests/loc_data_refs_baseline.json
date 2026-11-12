@@ -1,0 +1,19 @@
+{
+	"scripts/alchemy_panel.gd": 5,
+	"scripts/character_select.gd": 2,
+	"scripts/craft_master_tab.gd": 4,
+	"scripts/craft_smith_tab.gd": 8,
+	"scripts/craft_tab.gd": 3,
+	"scripts/craft_tailor_tab.gd": 2,
+	"scripts/forge_db.gd": 1,
+	"scripts/inventory_panel.gd": 1,
+	"scripts/item_db.gd": 3,
+	"scripts/loot_icons.gd": 1,
+	"scripts/quest_db.gd": 1,
+	"scripts/quest_system.gd": 1,
+	"scripts/shop_panel.gd": 2,
+	"scripts/spell_db.gd": 3,
+	"scripts/ui.gd": 2,
+	"scripts/workshop_panel.gd": 2,
+	"scripts/world_feed_panel.gd": 2
+}

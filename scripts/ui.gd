@@ -63,8 +63,15 @@ const SPELL_COLS := 12              # columns in the book (same as the 12 grid i
 ## Icon and cooldown veil inset inside a book cell: the art nearly touches the
 ## frame, as in the reference skill panels (WoW/Lineage/AION).
 const BOOK_ICON_INSET := 2.0
-const SPHERE_RU := {"Fire": "Огонь", "Water": "Вода", "Air": "Воздух",
-	"Earth": "Земля", "Astral": "Астрал"}
+## Sphere ids (Fire/Water/...) are data keys, the visible name lives in ui.json.
+const SPHERE_KEY := {"Fire": "ui.sphere.Fire", "Water": "ui.sphere.Water",
+	"Air": "ui.sphere.Air", "Earth": "ui.sphere.Earth", "Astral": "ui.sphere.Astral"}
+
+
+static func _sphere_label(sphere_name: String) -> String:
+	if SPHERE_KEY.has(sphere_name):
+		return Loc.t(str(SPHERE_KEY[sphere_name]))
+	return sphere_name
 var spell_buttons: Array = []       # ALL cells (including the empty squares)
 var _spell_buttons_filled: Array = []  # only cells with spells (aligned with names)
 ## "Book is empty" hint: the warrior's book is scrolls from the inventory, the
@@ -272,9 +279,11 @@ func _book_cell_icon(b: Button, icon_path: String) -> TextureRect:
 ## not learned — a dimmed frame with a hint of what is taught here.
 func _make_spell_cell(name: String, icon: String, known: bool) -> void:
 	var spell := SpellDB.get_spell(name)
-	var title := str(spell.get("ru", name))
+	# Name through the helper: reading `.ru` directly kept the book Russian in the
+	# English mode, and no scanner can see it - the field name "ru" is ASCII.
+	var title := SpellDB.display_name(name)
 	var sphere_name := SpellDB.sphere_of(name)
-	var sphere := str(SPHERE_RU.get(sphere_name, sphere_name))
+	var sphere := _sphere_label(sphere_name)
 	var charges := player.spell_charges(name)
 	var mana := SpellDB.mana_cost(name)
 	var sphere_color: Color = UiKit.SPHERE_COLORS.get(sphere_name, Color(0.5, 0.5, 0.5))
@@ -289,7 +298,7 @@ func _make_spell_cell(name: String, icon: String, known: bool) -> void:
 		style.set_border_width_all(1)
 		style.set_corner_radius_all(UiTheme.RADIUS_SLOT)
 		cell.add_theme_stylebox_override("panel", style)
-		cell.tooltip_text = "%s\nСфера: %s\n(не выучено — выучите Книгой Магии)" % [title, sphere]
+		cell.tooltip_text = Loc.f("ui.magic.cell_locked", [title, sphere])
 		spell_grid.add_child(cell)
 		spell_buttons.append(cell)
 		return
@@ -393,34 +402,36 @@ func _set_cooldown_visual(b: Button, left: float, total: float) -> void:
 ## it was impossible to understand what the spell does and how far it reaches.
 func _spell_tooltip(spell_name: String, title: String, sphere: String, charges: int, mana: int) -> String:
 	var spell := SpellDB.get_spell(spell_name)
-	var lines: Array = [title, "Сфера: " + sphere]
+	var lines: Array = [title, Loc.f("ui.magic.sphere_line", [sphere])]
 	if charges > 0:
-		lines.append("Зарядов: %d" % charges)
+		lines.append(Loc.f("ui.magic.charges", [charges]))
 	elif player.has_mana:
-		lines.append("Мана: %d" % mana)
+		lines.append(Loc.f("ui.magic.mana", [mana]))
 
 	# Damage or healing including the hero's spell power
 	var base := int(spell.get("damage", 0))
 	if base > 0:
-		lines.append("Урон: %d" % Game.spell_damage(player, spell_name, SpellDB.sphere_of(spell_name), base))
+		lines.append(Loc.f("ui.magic.damage",
+			[Game.spell_damage(player, spell_name, SpellDB.sphere_of(spell_name), base)]))
 	elif base < 0:
-		lines.append("Лечение: %d" % Game.spell_damage(player, spell_name, SpellDB.sphere_of(spell_name), -base))
+		lines.append(Loc.f("ui.magic.heal",
+			[Game.spell_damage(player, spell_name, SpellDB.sphere_of(spell_name), -base)]))
 
 	var area := float(spell.get("area", 0))
 	if area > 0.0:
-		lines.append("Радиус: %.1f м" % (area / 32.0))
+		lines.append(Loc.f("ui.magic.radius", [area / 32.0]))
 	var rng_range := float(spell.get("range", 0))
 	if rng_range > 0.0:
-		lines.append("Дальность: %.0f м" % (rng_range / 32.0))
+		lines.append(Loc.f("ui.magic.range", [rng_range / 32.0]))
 	var cd_total := Game.spell_cooldown(player, spell_name)
 	if cd_total > 0.0:
-		lines.append("Кулдаун: %.1f с" % cd_total)
+		lines.append(Loc.f("ui.magic.cooldown", [cd_total]))
 	if SpellDB.cast_time_of(spell_name) > 0.0:
-		lines.append("Подготовка: %.2f с" % SpellDB.cast_time_of(spell_name))
+		lines.append(Loc.f("ui.magic.cast_time", [SpellDB.cast_time_of(spell_name)]))
 
 	var eff := SpellDB.effects_of(spell_name)
 	if not eff.is_empty():
-		lines.append("Эффекты: " + ", ".join(_effect_labels(eff)))
+		lines.append(Loc.f("ui.magic.effects", [", ".join(_effect_labels(eff))]))
 	return "\n".join(lines)
 
 
@@ -430,19 +441,22 @@ func _effect_labels(effects: Array) -> Array:
 	for e in effects:
 		var m := str((e as Dictionary).get("type", ""))
 		var dur := float((e as Dictionary).get("duration", 0.0))
-		var suffix := " (%.0f с)" % dur if dur > 0.0 else ""
+		var suffix := Loc.f("ui.magic.seconds", [dur]) if dur > 0.0 else ""
 		match m:
-			"shield": out.append("щит %d%s" % [int((e as Dictionary).get("amount", 0)), suffix])
-			"resist": out.append("сопротивление %s +%d%s" % [str((e as Dictionary).get("sphere", "")), int((e as Dictionary).get("amount", 0)), suffix])
-			"bless": out.append("благословение%s" % suffix)
-			"haste": out.append("ускорение x%.2f%s" % [float((e as Dictionary).get("mult", 1.0)), suffix])
-			"slow": out.append("замедление x%.2f%s" % [float((e as Dictionary).get("mult", 1.0)), suffix])
-			"curse": out.append("проклятие%s" % suffix)
-			"invisibility": out.append("невидимость%s" % suffix)
-			"vision": out.append("ослепление%s" % suffix)
-			"vampirism": out.append("вампиризм %d%%" % int(float((e as Dictionary).get("ratio", 0.0)) * 100.0))
-			"dot": out.append("яд %d/с%s" % [int((e as Dictionary).get("dps", 0)), suffix])
-			"raise": out.append("поднимает труп")
+			"shield": out.append(Loc.f("ui.effect.shield", [int((e as Dictionary).get("amount", 0)), suffix]))
+			"resist": out.append(Loc.f("ui.effect.resist", [
+				_sphere_label(str((e as Dictionary).get("sphere", ""))),
+				int((e as Dictionary).get("amount", 0)), suffix]))
+			"bless": out.append(Loc.f("ui.effect.bless", [suffix]))
+			"haste": out.append(Loc.f("ui.effect.haste", [float((e as Dictionary).get("mult", 1.0)), suffix]))
+			"slow": out.append(Loc.f("ui.effect.slow", [float((e as Dictionary).get("mult", 1.0)), suffix]))
+			"curse": out.append(Loc.f("ui.effect.curse", [suffix]))
+			"invisibility": out.append(Loc.f("ui.effect.invisibility", [suffix]))
+			"vision": out.append(Loc.f("ui.effect.blind", [suffix]))
+			"vampirism": out.append(Loc.f("ui.effect.vampirism",
+				[int(float((e as Dictionary).get("ratio", 0.0)) * 100.0)]))
+			"dot": out.append(Loc.f("ui.effect.poison", [int((e as Dictionary).get("dps", 0)), suffix]))
+			"raise": out.append(Loc.t("ui.effect.raise"))
 			_: out.append(m)
 	return out
 
@@ -482,7 +496,7 @@ func _toggle_auto_spell(name: String) -> void:
 func _mark_auto_spell_cell(b: Button, name: String) -> void:
 	if not is_instance_valid(b):
 		return
-	var title := str(SpellDB.get_spell(name).get("ru", name))
+	var title := SpellDB.display_name(name)
 	var st := StyleBoxFlat.new()
 	st.bg_color = UiTheme.SLOT_BG
 	st.set_border_width_all(2)
@@ -495,7 +509,7 @@ func _mark_auto_spell_cell(b: Button, name: String) -> void:
 	if badge == null:
 		badge = Label.new()
 		badge.name = "AutoBadge"
-		badge.text = "АВТО"
+		badge.text = Loc.t("ui.magic.auto_badge")
 		badge.add_theme_font_size_override("font_size", UiTheme.FONT_MICRO)
 		badge.add_theme_color_override("font_color", UiTheme.ACCENT)
 		badge.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
@@ -506,7 +520,7 @@ func _mark_auto_spell_cell(b: Button, name: String) -> void:
 		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(badge)
 	badge.visible = true
-	b.tooltip_text = "%s\nАВТО-КАСТ: ЛКМ — прицел, ПКМ — снять авто" % title
+	b.tooltip_text = Loc.f("ui.magic.auto_tip", [title])
 
 
 func _clear_auto_spell_mark(b: Button) -> void:
@@ -600,8 +614,7 @@ func _make_scroll_cell(item_key: String, item: Dictionary, count: int) -> void:
 		CraftVFX.apply_elven(ic, item)
 	_add_cooldown_veil(b)
 
-	b.tooltip_text = "%s\nОсталось: %d\nЛКМ — применить · ПКМ — автокаст на себя · Ctrl+1..9 — хоткей" % [
-		str(item.get("name_ru", item_key)), count]
+	b.tooltip_text = Loc.f("ui.magic.item_tip", [ItemDB.display_name(item), count])
 
 	var cnt := Label.new()
 	cnt.text = str(count)
@@ -674,7 +687,7 @@ func _toggle_auto_scroll(item_key: String) -> void:
 		return
 	var kind := SpellDB.kind_of(spell)
 	if kind != "heal" and kind != "buff" and kind != "self":
-		_flash_targeting_error("Автокаст — только на себя: боевой свиток так не работает.")
+		_flash_targeting_error(Loc.t("ui.magic.auto_self_only"))
 		return
 	Game.auto_scroll_item = item_key
 	call_deferred("refresh_spell_book")
@@ -688,34 +701,34 @@ func _refresh_auto_status() -> void:
 		return
 	var parts: Array = []
 	if Game.auto_spell != "":
-		parts.append("каст: %s" % Game.auto_spell)
+		parts.append(Loc.f("ui.auto.cast", [SpellDB.display_name(Game.auto_spell)]))
 	if Game.auto_scroll_item != "":
 		var it := ItemDB.find(Game.auto_scroll_item)
-		parts.append("свиток: %s" % str(it.get("name_ru", Game.auto_scroll_item)))
-	parts.append("авто: %s · %s" % [_tier_name(Game.auto_buff_tier),
-		_target_name(Game.auto_targets)])
-	lab.text = "Авто-волшебство: " + " · ".join(parts)
+		parts.append(Loc.f("ui.auto.scroll", [ItemDB.display_name(it)]))
+	parts.append(Loc.f("ui.auto.buffs", [_tier_name(Game.auto_buff_tier),
+		_target_name(Game.auto_targets)]))
+	lab.text = Loc.f("ui.auto.label", [" · ".join(parts)])
 
 
 ## Level and target names for the label and the settings window.
 static func _tier_name(tier: String) -> String:
 	match tier:
 		"medium":
-			return "Среднее"
+			return Loc.t("ui.auto.tier_medium")
 		"max":
-			return "Максимальное"
+			return Loc.t("ui.auto.tier_max")
 		_:
-			return "Базовое"
+			return Loc.t("ui.auto.tier_basic")
 
 
 static func _target_name(target: String) -> String:
 	match target:
 		"self":
-			return "только я"
+			return Loc.t("ui.auto.target_self")
 		"party_neutral":
-			return "я, группа и нейтраллы"
+			return Loc.t("ui.auto.target_self_all")
 		_:
-			return "я и моя группа"
+			return Loc.t("ui.auto.target_party")
 
 # --- Targeting (a MAGE's scroll or a book spell) ---
 # The targeting cursor is drawn by scripts/cursor_layer.gd (the cast variant) based
@@ -750,7 +763,7 @@ func _quick_cast(spell: String) -> void:
 	if Game.is_paused:
 		return
 	if not is_instance_valid(player) or not player.can_cast(spell):
-		print("Быстрый вызов недоступен: " + spell)
+		print("quick cast unavailable: " + spell)
 		return
 	_begin_spell_targeting(spell)
 
@@ -759,8 +772,8 @@ func _quick_cast(spell: String) -> void:
 func _notify_hotbar_assigned(slot: int, spell: String) -> void:
 	refresh_spell_book()
 	if _scroll_hint != null and is_instance_valid(_scroll_hint):
-		_scroll_hint.text = "«%s» назначена на клавишу %d (жмите %d для прицеливания)" % [
-			str(SpellDB.get_spell(spell).get("ru", spell)), slot + 1, slot + 1]
+		_scroll_hint.text = Loc.f("ui.hotbar.bound_scroll",
+			[SpellDB.display_name(spell), slot + 1, slot + 1])
 		_scroll_hint.visible = true
 
 ## Target selection error (the spell stays active): we show it on
@@ -770,9 +783,8 @@ func _notify_item_assigned(slot: int, item_key: String) -> void:
 	if _scroll_hint == null or not is_instance_valid(_scroll_hint):
 		return
 	var item := ItemDB.find(item_key)
-	var title := str(item.get("name_ru", item_key))
-	_scroll_hint.text = "<%s> быстрая клавиша %d (нажмите %d для применения)" % [
-		title, slot + 1, slot + 1]
+	_scroll_hint.text = Loc.f("ui.hotbar.bound_item",
+		[ItemDB.display_name(item), slot + 1, slot + 1])
 	_scroll_hint.visible = true
 
 
@@ -844,15 +856,14 @@ func _update_targeting_hint(spell: String, on: bool) -> void:
 	var dir_text := ""
 	match target_kind:
 		"enemy":
-			dir_text = "ВРАГА"
+			dir_text = Loc.t("ui.target.enemy")
 		"point":
-			dir_text = "ВРАГА ИЛИ ТОЧКУ"
+			dir_text = Loc.t("ui.target.enemy_or_point")
 		"self":
-			dir_text = "СЕБЯ"
+			dir_text = Loc.t("ui.target.self")
 		_:
-			dir_text = "СЕБЯ ИЛИ СОЮЗНИКА"
-	_scroll_hint.text = ("Примените «%s» на %s (ПКМ/ESC — отмена; Ctrl+1..9 — быстрая клавиша)"
-		% [str(SpellDB.get_spell(spell).get("ru", spell)), dir_text])
+			dir_text = Loc.t("ui.target.self_or_ally")
+	_scroll_hint.text = Loc.f("ui.target.apply", [SpellDB.display_name(spell), dir_text])
 
 func _apply_hud_theme() -> void:
 	var theme := UiTheme.app_theme()
@@ -906,20 +917,21 @@ func _setup_action_buttons():
 	inv_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inv_btn.focus_mode = Control.FOCUS_ALL
 	inv_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	inv_btn.tooltip_text = "Инвентарь (I)"
-	_apply_cmd_icon(inv_btn, "inventory", "Инв")
+	inv_btn.tooltip_text = Loc.t("ui.hud.inventory_tip")
+	_apply_cmd_icon(inv_btn, "inventory", Loc.t("ui.hud.inventory_short"))
 	inv_btn.pressed.connect(open_inventory_panel)
 	hud_cmd_row.add_child(inv_btn)
 
 	var cmd_tips := [
-		"Следовать за героем и бить врагов рядом (отряд тоже)",
-		"Атаковать ближайшего врага вокруг героя (отряд тоже)",
-		"Охранять место: бить в радиусе поста, не убегать (отряд тоже)",
-		"Стоять на месте и только отвечать на удар (отряд тоже)",
+		Loc.t("ui.order.follow"),
+		Loc.t("ui.order.attack"),
+		Loc.t("ui.order.guard"),
+		Loc.t("ui.order.stop"),
 	]
 	# Short labels are ONLY a fallback if the PNG is missing: the button is
 	# 32 px, a full label does not fit into it. The tooltip keeps the meaning.
-	var cmd_short := ["Сл", "Ат", "Ох", "Ст"]
+	var cmd_short := [Loc.t("ui.order.short_follow"), Loc.t("ui.order.short_attack"),
+		Loc.t("ui.order.short_guard"), Loc.t("ui.order.short_stop")]
 	var cmd_modes := ["follow", "attack", "guard", "stop"]
 	var cmd_icons := ["follow", "attack", "guard", "stop"]
 	for i in range(cmd_tips.size()):
@@ -1047,7 +1059,7 @@ func _show_slot_card(cell: Control, slot: String) -> void:
 	if _slot_card == null:
 		_slot_card = _ensure_card("slot")
 	var lines: Array = _item_card_lines(it)
-	lines.append("Слот: %s (клик — снять)" % ItemDB.slot_title(slot))
+	lines.append(Loc.f("ui.tip.slot_worn", [ItemDB.slot_title(slot)]))
 	var icon_path := str(it.get("icon", ""))
 	var qcolor := UiKit.quality_color(str(it.get("quality", "")))
 	UiKit.show_hover_card(_slot_card, lines, cell.global_position, _world_bounds(),
@@ -1146,13 +1158,13 @@ func _unit_tooltip_full(target: Array) -> Array:
 		hp = int(e.hp_max)
 	var cur := int(e.current_hp) if "current_hp" in e else hp
 	if hp > 0:
-		lines.append(tr("Здоровье: %d/%d") % [cur, hp])
+		lines.append(Loc.f("ui.card.health", [cur, hp]))
 	if e.has_method("get_attack"):
-		lines.append(tr("Атака: %d") % int(e.call("get_attack")))
+		lines.append(Loc.f("ui.card.attack", [int(e.call("get_attack"))]))
 	if e.has_method("get_defense"):
-		lines.append(tr("Броня: %d") % int(e.call("get_defense")))
+		lines.append(Loc.f("ui.card.armour", [int(e.call("get_defense"))]))
 	if e.has_method("get_absorption"):
-		lines.append(tr("Поглощение: %d") % int(e.call("get_absorption")))
+		lines.append(Loc.f("ui.card.absorption", [int(e.call("get_absorption"))]))
 	var set_name := str(e.anim_set) if "anim_set" in e else ""
 	if set_name != "":
 		var res: Array[String] = []
@@ -1165,7 +1177,7 @@ func _unit_tooltip_full(target: Array) -> Array:
 			if r != 0:
 				res.append("%s %d" % [sphere, r])
 		if not res.is_empty():
-			lines.append(tr("Сопротивление: ") + ", ".join(res))
+			lines.append(Loc.f("ui.card.resist", [", ".join(res)]))
 	return lines
 
 
@@ -1229,19 +1241,19 @@ func _unit_tooltip_lines(e: Node2D) -> Array:
 		name = str(set_data.get("desc", ""))
 	if name == "":
 		name = set_name.get_slice("/", 1) if "/" in set_name else set_name
-	lines.append(name if name != "" else "Существо")
-	lines.append(tr("Фракция: %s") % _faction_of_set(set_name))
+	lines.append(name if name != "" else Loc.t("ui.card.creature"))
+	lines.append(Loc.f("ui.card.faction", [_faction_of_set(set_name)]))
 	return lines
 func _building_tooltip_lines(h: Dictionary) -> Array:
 	var lines: Array = []
 	var sid := int(h.get("type_id", -1))
 	var name := StructureDB.display_name_by_id(sid) if sid >= 0 else str(h.get("picture", ""))
-	lines.append(name if name != "" else "Здание")
-	lines.append("Здание")
+	lines.append(name if name != "" else Loc.t("ui.card.building"))
+	lines.append(Loc.t("ui.card.building"))
 	return lines
 
 func _loot_tooltip_lines(lb: LootDrop) -> Array:
-	var lines: Array = ["Добыча"]
+	var lines: Array = [Loc.t("ui.card.loot")]
 	var gold := 0
 	var names: Array[String] = []
 	for it in lb.items:
@@ -1252,11 +1264,11 @@ func _loot_tooltip_lines(lb: LootDrop) -> Array:
 				var k := str(it.get("key", ""))
 				names.append(str(ItemDB.find(k).get("name_ru", k)))
 	if gold > 0:
-		lines.append("Золото: %d" % gold)
+		lines.append(Loc.f("ui.card.gold", [gold]))
 	if not names.is_empty():
-		lines.append("Предметы: %s" % ", ".join(names))
+		lines.append(Loc.f("ui.card.items", [", ".join(names)]))
 	if gold <= 0 and names.is_empty():
-		lines.append("Пусто")
+		lines.append(Loc.t("ui.card.empty"))
 	return lines
 
 ## Faction by the unit's animation set (see §8.2 of AGENTS.md).
@@ -1272,18 +1284,18 @@ func _faction_of_set(set_name: String) -> String:
 		var label := str(Lore.faction(city_race).get("label", ""))
 		return label if label != "" else city_race
 	if set_name.begins_with("ork_mage"):
-		return "Орды Огня"
+		return Loc.t("ui.faction_name.ork")
 	if set_name.begins_with("rig/"):
-		return "Герой"
+		return Loc.t("ui.faction_name.hero")
 	for k in ["orc", "goblin", "troll", "ogre"]:
 		if k in set_name:
-			return "Орды Огня"
+			return Loc.t("ui.faction_name.ork")
 	for k in ["skeleton", "zombie", "necromant", "ghost"]:
 		if k in set_name:
-			return "Пожинатели"
+			return Loc.t("ui.faction_name.necro")
 	if "druid" in set_name:
-		return "Круг Друидов"
-	return "Серые"
+		return Loc.t("ui.faction_name.druid")
+	return Loc.t("ui.faction_name.grey")
 
 func _setup_minimap():
 	# Guard against a repeated call: before, setup_ui called this twice
@@ -1544,36 +1556,36 @@ func update_ui(p: Player, delta: float = 0.0):
 
 	# Debug coordinates: hero position, cursor, cell, tile and walkability.
 	if show_coords:
-		var lines := "КООРДИНАТЫ\n"
-		lines += "Герой: %d, %d px\n" % [int(p.global_position.x), int(p.global_position.y)]
+		var lines := "COORDS\n"
+		lines += "Hero: %d, %d px\n" % [int(p.global_position.x), int(p.global_position.y)]
 		var mouse := get_viewport().get_mouse_position()
 		var world := p.get_global_mouse_position() if p.has_method("get_global_mouse_position") else Vector2.ZERO
-		lines += "Мышь: %d, %d px\n" % [int(mouse.x), int(mouse.y)]
+		lines += "Mouse: %d, %d px\n" % [int(mouse.x), int(mouse.y)]
 		if alm_map:
 			var ts: int = alm_map.tile_size
 			var ts_f := float(ts)
 			var tc := Vector2i(floori(p.global_position.x / ts_f), floori(p.global_position.y / ts_f))
 			var mc := Vector2i(floori(world.x / ts_f), floori(world.y / ts_f))
-			lines += "Клетка героя: %d, %d\n" % [tc.x, tc.y]
-			lines += "Клетка мыши: %d, %d\n" % [mc.x, mc.y]
+			lines += "Hero cell: %d, %d\n" % [tc.x, tc.y]
+			lines += "Mouse cell: %d, %d\n" % [mc.x, mc.y]
 			var walk_h: bool = alm_map.is_walkable_world(p.global_position)
-			lines += "Проход героя: %s\n" % ("да" if walk_h else "НЕТ")
+			lines += "Hero walkable: %s\n" % ("yes" if walk_h else "NO")
 			var walk_m: bool = alm_map.is_walkable_world(world)
-			lines += "Проход мыши: %s\n" % ("да" if walk_m else "НЕТ")
+			lines += "Mouse walkable: %s\n" % ("yes" if walk_m else "NO")
 			if mc.x >= 0 and mc.y >= 0 and mc.x < alm_map.map_width and mc.y < alm_map.map_height:
 				var t: int = alm_map.cell_type_at(mc.x, mc.y)
 				# Mountains and water are IMPASSABLE since 05.10 (WalkTable.walkable), before
 				# "passable, slow" stood here — the debug tooltip lied.
-				var names := ["Трава (tile1)", "Горы (tile2 — непроходимо)",
-					"Вода (tile3 — непроходимо)", "Дорога (tile4)"]
-				lines += "Тайл мыши: %s\n" % (names[t] if t >= 0 and t < names.size() else str(t))
+				var names := ["Grass (tile1)", "Mountains (tile2 - impassable)",
+					"Water (tile3 - impassable)", "Road (tile4)"]
+				lines += "Mouse tile: %s\n" % (names[t] if t >= 0 and t < names.size() else str(t))
 				if not walk_m and alm_map.has_method("blocked_reason"):
 					var reason: String = alm_map.call("blocked_reason", mc)
 					if reason != "":
-						lines += "Занято: %s\n" % reason
+						lines += "Occupied: %s\n" % reason
 				if alm_map.has_method("flag_at_world"):
 					var fl: int = alm_map.flag_at_world(world)
-					lines += "Флаг: %d (0 зем/1 холм/2 вода/3 выс/4 барьер)\n" % fl
+					lines += "Flag: %d (0 ground/1 hill/2 water/3 heights/4 barrier)\n" % fl
 		coords_label.text = lines
 
 	# Highlighting book buttons: available/not enough mana or charges
@@ -1616,7 +1628,7 @@ func _process(_delta):
 func _process_impl(_delta):
 	if Game.is_paused:
 		pause_label.visible = true
-		pause_label.text = "ТАКТИЧЕСКАЯ ПАУЗА"
+		pause_label.text = Loc.t("ui.hud.pause")
 	else:
 		pause_label.visible = false
 

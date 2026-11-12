@@ -17,10 +17,9 @@ const SUFFIX := ".meta.json"
 const VERSION := 1
 
 const ZONES := ["start", "mid", "hard", "faction"]
-const ZONE_LABELS := {
-	"start": "Старт", "mid": "Средние земли",
-	"hard": "Тяжёлые земли", "faction": "Владения фракций",
-}
+# Zone names are not duplicated here: StartSetup.zone_label() owns them and reads
+# ui.zone.* from ui.json. This file used to carry a second copy of the Russian
+# labels, which is how two sources of the same text drift apart.
 
 
 static func ensure_dir() -> void:

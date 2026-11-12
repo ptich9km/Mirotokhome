@@ -550,10 +550,15 @@ static func add_hover_card_styles(theme: Theme) -> void:
 ## Shared text of an item hover card. `class_block` is the class-restriction
 ## line ("✖ …") that only the inventory shows; the world UI passes "".
 static func item_card_lines(item: Dictionary, class_block: String = "") -> Array:
-	var lines: Array = [str(item.get("name_ru", item.get("key", "Предмет")))]
+	var lines: Array = [ItemDB.display_name(item)]
 	var sub: Array[String] = []
+	# JSON `null` reaches GDScript as null, and str(null) is "<null>": potions and
+	# books carry `material: null`, which put "<null>" right under the item name.
 	for f in ["quality", "material", "type"]:
-		var v := str(item.get(f, ""))
+		var raw = item.get(f, "")
+		if not (raw is String):
+			continue
+		var v := str(raw)
 		if v != "" and v != "None":
 			sub.append(v)
 	if not sub.is_empty():
@@ -562,23 +567,23 @@ static func item_card_lines(item: Dictionary, class_block: String = "") -> Array
 	var dmin := int(item.get("damage_min", 0))
 	var dmax := int(item.get("damage_max", 0))
 	if dmin > 0 or dmax > 0:
-		stats.append("Урон %d–%d" % [dmin, dmax])
+		stats.append(Loc.f("ui.tip.damage", [dmin, dmax]))
 	var th := int(item.get("to_hit", 0))
 	if th != 0:
-		stats.append("Атака +%d" % th)
+		stats.append(Loc.f("ui.tip.to_hit", [th]))
 	var df := int(item.get("defence", 0))
 	if df > 0:
-		stats.append("Защита %d" % df)
+		stats.append(Loc.f("ui.tip.defense", [df]))
 	var ab := int(item.get("absorption", 0))
 	if ab > 0:
-		stats.append("Поглощение %d" % ab)
+		stats.append(Loc.f("ui.tip.absorption", [ab]))
 	var mc := int(item.get("magcap", 0))
 	if mc > 0:
-		stats.append("Магия %d" % mc)
+		stats.append(Loc.f("ui.tip.magic", [mc]))
 	if not stats.is_empty():
 		lines.append(" · ".join(stats))
-	lines.append("Вес %.1f · Цена %d" % [
-		float(item.get("weight", 0.0)), int(item.get("price", 0))])
+	lines.append(Loc.f("ui.tip.weight_price", [
+		float(item.get("weight", 0.0)), int(item.get("price", 0))]))
 	if class_block != "":
 		lines.append("✖ " + class_block)
 	return lines

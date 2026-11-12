@@ -266,7 +266,7 @@ func _build_ui() -> void:
 	var title := Label.new()
 	title.name = "Title"
 	title.theme_type_variation = &"InvTitle"
-	title.text = tr("ИНВЕНТАРЬ")
+	title.text = Loc.t("ui.inv.title")
 	title.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	header.add_child(title)
 	_build_view_tabs(header)
@@ -281,18 +281,18 @@ func _build_ui() -> void:
 	_gold_coin.custom_minimum_size = Vector2(GOLD_COIN_SIZE, GOLD_COIN_SIZE)
 	_gold_coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_gold_coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_gold_coin.tooltip_text = tr("Золото")
+	_gold_coin.tooltip_text = Loc.t("ui.inv.gold")
 	_gold_coin.texture = QuestIcons.coin_frame(_gold_frame)
 	header.add_child(_gold_coin)
 	_gold_label = Label.new()
 	_gold_label.name = "Gold"
 	_gold_label.theme_type_variation = &"InvGoldLabel"
 	_gold_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_gold_label.tooltip_text = tr("Золото")
+	_gold_label.tooltip_text = Loc.t("ui.inv.gold")
 	header.add_child(_gold_label)
 	var close_btn := Button.new()
 	close_btn.name = "Close"
-	close_btn.text = tr("Закрыть")
+	close_btn.text = Loc.t("ui.btn.close")
 	close_btn.theme_type_variation = &"InvClose"
 	close_btn.custom_minimum_size = Vector2(120, 32)
 	close_btn.pressed.connect(close)
@@ -362,7 +362,7 @@ func _build_ui() -> void:
 	top.add_child(stats_col)
 	var stats_title := Label.new()
 	stats_title.theme_type_variation = &"InvSection"
-	stats_title.text = tr("ХАРАКТЕРИСТИКИ")
+	stats_title.text = Loc.t("ui.inv.stats_title")
 	stats_col.add_child(stats_title)
 	var stats_panel := PanelContainer.new()
 	stats_panel.theme_type_variation = &"InvSectionPanel"
@@ -406,11 +406,11 @@ func _build_ui() -> void:
 ## Вкладки видов: склад, отношения, ремесла. Живут в шапке (height budget).
 func _build_view_tabs(header: HBoxContainer) -> void:
 	_view_group = ButtonGroup.new()
-	var names := ["Склад", "Отношения", "Ремесла"]
+	var names := ["ui.inv.tab.storage", "ui.inv.tab.relations", "ui.inv.tab.crafts"]
 	for i in range(names.size()):
 		var b := Button.new()
 		b.name = "ViewTab%d" % i
-		b.text = tr(names[i])
+		b.text = Loc.t(names[i])
 		b.theme_type_variation = &"InvTab"
 		b.toggle_mode = true
 		b.button_group = _view_group
@@ -433,10 +433,10 @@ func _make_page(page_name: String) -> VBoxContainer:
 	var title := Label.new()
 	title.theme_type_variation = &"InvPageTitle"
 	if page_name == "RelationsPage":
-		title.text = tr("ОТНОШЕНИЯ")
+		title.text = Loc.t("ui.inv.relations_title")
 		_relations_box = VBoxContainer.new()
 	elif page_name == "CraftsPage":
-		title.text = tr("РЕМЁСЛА")
+		title.text = Loc.t("ui.inv.crafts_title")
 		_crafts_box = VBoxContainer.new()
 	else:
 		_relations_box = VBoxContainer.new()
@@ -488,14 +488,14 @@ func _rep_status(value: int) -> String:
 	var t2 := GameConfig.geti("reputation", "tier_2")
 	var t3 := GameConfig.geti("reputation", "tier_3")
 	if value < 0:
-		return tr("вражда")
+		return Loc.t("ui.inv.rel.war")
 	if value < t1:
-		return tr("нейтрально")
+		return Loc.t("ui.inv.rel.neutral")
 	if value < t2:
-		return tr("дружелюбно")
+		return Loc.t("ui.inv.rel.friendly")
 	if value < t3:
-		return tr("доверие")
-	return tr("союз")
+		return Loc.t("ui.inv.rel.trust")
+	return Loc.t("ui.inv.rel.ally")
 
 
 ## Что репутация открывает — числа берутся из того же [reputation], что и гейты.
@@ -518,9 +518,8 @@ func _rep_unlocks(value: int) -> String:
 		discount = GameConfig.geti("reputation", "discount_2")
 	if value >= t3:
 		discount = GameConfig.geti("reputation", "discount_3")
-	var elven_mark := tr("да") if value >= elven else tr("нет")
-	return tr("Наёмники %d/4 · эльфийские свитки: %s · скидка %d%%") \
-		% [merc, elven_mark, discount]
+	var elven_mark := Loc.t("ui.inv.rel.yes") if value >= elven else Loc.t("ui.inv.rel.no")
+	return Loc.f("ui.inv.rel.summary", [merc, elven_mark, discount])
 
 
 func _add_row(box: VBoxContainer, label_text: String, value_text: String,
@@ -562,25 +561,25 @@ func _refresh_relations() -> void:
 	var st = _bus_state()
 	var title := Label.new()
 	title.theme_type_variation = &"InvSection"
-	title.text = tr("ВАШЕ ОТНОШЕНИЕ")
+	title.text = Loc.t("ui.inv.rel.mine_title")
 	_relations_box.add_child(title)
 	for race in FACTION_ORDER:
 		var value := Game.hero_reputation(str(race))
 		var label := Lore.faction_label(str(race))
-		var mine := tr(" · ваша фракция") if Lore.hero_race_to_faction(Game.hero_race) == str(race) else ""
+		var mine := Loc.t("ui.inv.rel.mine_suffix") if Lore.hero_race_to_faction(Game.hero_race) == str(race) else ""
 		_add_row(_relations_box, label + mine,
 			"%d · %s" % [value, _rep_status(value)], _rep_unlocks(value))
 	var note := Label.new()
 	note.theme_type_variation = &"InvRowNote"
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = tr("Репутация растёт за задания главы города и открывает наёмников, эльфийские свитки и скидку.")
+	note.text = Loc.t("ui.inv.rel.note")
 	_relations_box.add_child(note)
 	if st == null:
 		return
 	# Отношения фракций между собой (SIM): пары без повторов, значение — к -100..100.
 	var title2 := Label.new()
 	title2.theme_type_variation = &"InvSection"
-	title2.text = tr("ФРАКЦИИ МЕЖДУ СОБОЙ")
+	title2.text = Loc.t("ui.inv.rel.between_title")
 	_relations_box.add_child(title2)
 	var names := {}
 	for fid in st.factions:
@@ -613,16 +612,16 @@ func _refresh_relations() -> void:
 	if pairs == 0:
 		var none := Label.new()
 		none.theme_type_variation = &"InvRowNote"
-		none.text = tr("Фракции пока не выясняли отношений.")
+		none.text = Loc.t("ui.inv.rel.none")
 		_relations_box.add_child(none)
 
 
 ## --- Вкладка «Ремёсла» --------------------------------------------------------
 const CRAFT_ROWS := [
-	{"key": "smithing", "label": "Кузнец"},
-	{"key": "tailoring", "label": "Портной"},
-	{"key": "mastering", "label": "Мастер"},
-	{"key": "alchemy", "label": "Алхимия"},
+	{"key": "smithing", "label": "ui.inv.craft.smith"},
+	{"key": "tailoring", "label": "ui.inv.craft.tailor"},
+	{"key": "mastering", "label": "ui.inv.craft.master"},
+	{"key": "alchemy", "label": "ui.inv.craft.alchemy"},
 ]
 
 func _refresh_crafts() -> void:
@@ -631,7 +630,7 @@ func _refresh_crafts() -> void:
 	_clear_box(_crafts_box)
 	var title := Label.new()
 	title.theme_type_variation = &"InvSection"
-	title.text = tr("ВАШИ НАВЫКИ")
+	title.text = Loc.t("ui.inv.skills_title")
 	_crafts_box.add_child(title)
 	for entry in CRAFT_ROWS:
 		var key := str(entry["key"])
@@ -645,18 +644,18 @@ func _refresh_crafts() -> void:
 		var percent := 0
 		if next_exp > base_exp:
 			percent = clampi(int(round(100.0 * float(exp_now - base_exp) / float(next_exp - base_exp))), 0, 100)
-		_add_row(_crafts_box, tr(str(entry["label"])),
-			tr("ур. %d") % level,
-			tr("до следующего уровня: %d%% (%d/%d опыта)") % [percent, exp_now - base_exp, next_exp - base_exp])
+		_add_row(_crafts_box, Loc.t(str(entry["label"])),
+			Loc.f("ui.inv.skills.level", [level]),
+			Loc.f("ui.inv.skills.next", [percent, exp_now - base_exp, next_exp - base_exp]))
 	var note := Label.new()
 	note.theme_type_variation = &"InvRowNote"
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = tr("Навык растёт от переработки и крафта; рецепты — свитки в складе.")
+	note.text = Loc.t("ui.inv.skills.note")
 	_crafts_box.add_child(note)
 	# Рецепты в складе по ремеслу: weapon/armor — кузнец, clothes — портной.
 	var title2 := Label.new()
 	title2.theme_type_variation = &"InvSection"
-	title2.text = tr("РЕЦЕПТЫ В СКЛАДЕ")
+	title2.text = Loc.t("ui.inv.skills.recipes")
 	_crafts_box.add_child(title2)
 	var counts := {}
 	var names := {}
@@ -670,17 +669,17 @@ func _refresh_crafts() -> void:
 			counts[kind] = int(counts.get(kind, 0)) + 1
 			if not names.has(kind):
 				names[kind] = []
-			(names[kind] as Array).append(str(item.get("name_ru", raw_key)))
+			(names[kind] as Array).append(ItemDB.display_name(item))
 	for entry in CRAFT_ROWS:
 		var key := str(entry["key"])
 		if key == "alchemy":
 			continue
 		var n := int(counts.get(key, 0))
-		var list := ", ".join(PackedStringArray(names.get(key, []))) if n > 0 else tr("нет")
-		_add_row(_crafts_box, tr(str(entry["label"])), "%d" % n, list if n > 0 else "")
+		var list := ", ".join(PackedStringArray(names.get(key, []))) if n > 0 else Loc.t("ui.inv.skills.no")
+		_add_row(_crafts_box, Loc.t(str(entry["label"])), "%d" % n, list if n > 0 else "")
 	var alchemy := _alchemy_recipe_count()
-	_add_row(_crafts_box, tr("Алхимия"), "%d" % alchemy,
-		tr("базовые рецепты травника известны сразу"))
+	_add_row(_crafts_box, Loc.t("ui.inv.craft.alchemy"), "%d" % alchemy,
+		Loc.t("ui.inv.skills.start_known"))
 
 
 func _alchemy_recipe_count() -> int:
@@ -857,56 +856,56 @@ func _setup_stats_area() -> void:
 	# (жалоба игрока 23.10). Ширина 2 ячейки, потому что значения длинные
 	# («120 / 120»), а цвет уже отделяет их от нейтральных атрибутов.
 	_stats_grid(_stats_box, [
-		["Жизнь:", "hp", _HP_COLOR],
-		["Мана:", "mp", _MP_COLOR],
+		[Loc.t("ui.stat.hp"), "hp", _HP_COLOR],
+		[Loc.t("ui.stat.mp"), "mp", _MP_COLOR],
 	], 2)
 
-	_section_header(tr("АТРИБУТЫ"))
+	_section_header(Loc.t("ui.inv.section.attrs"))
 	_stats_grid(_stats_box, [
-		["Сила:", "body", _VALUE_COLOR],
-		["Ловкость:", "agility", _VALUE_COLOR],
-		["Разум:", "mind", _VALUE_COLOR],
-		["Дух:", "spirit", _VALUE_COLOR],
+		[Loc.t("ui.stat.body"), "body", _VALUE_COLOR],
+		[Loc.t("ui.stat.agility"), "agility", _VALUE_COLOR],
+		[Loc.t("ui.stat.mind"), "mind", _VALUE_COLOR],
+		[Loc.t("ui.stat.spirit"), "spirit", _VALUE_COLOR],
 	])
 
-	_section_header(tr("БОЙ"))
+	_section_header(Loc.t("ui.inv.section.combat"))
 	_stats_grid(_stats_box, [
-		["Урон:", "damage", _VALUE_COLOR],
-		["Броня:", "absorption", _VALUE_COLOR],
-		["Атака:", "attack", _VALUE_COLOR],
-		["Защита:", "defense", _VALUE_COLOR],
+		[Loc.t("ui.stat.damage"), "damage", _VALUE_COLOR],
+		[Loc.t("ui.stat.absorption"), "absorption", _VALUE_COLOR],
+		[Loc.t("ui.stat.attack"), "attack", _VALUE_COLOR],
+		[Loc.t("ui.stat.defense"), "defense", _VALUE_COLOR],
 	])
 
-	_section_header(tr("НАВЫКИ"))
+	_section_header(Loc.t("ui.inv.section.skills"))
 	if Game.hero_class == "mage":
 		_stats_grid(_stats_box, [
-			["Магия огня:", "mage_fire", _VALUE_COLOR],
-			["Сопр. огню:", "fire", _RESIST_FIRE],
-			["Магия воды:", "mage_water", _VALUE_COLOR],
-			["Сопр. воде:", "water", _RESIST_WATER],
-			["Магия воздуха:", "mage_air", _VALUE_COLOR],
-			["Сопр. воздуху:", "air", _RESIST_AIR],
-			["Магия земли:", "mage_earth", _VALUE_COLOR],
-			["Сопр. земле:", "earth", _RESIST_EARTH],
-			["Магия астрала:", "mage_astral", _VALUE_COLOR],
-			["Сопр. астралу:", "astral", _RESIST_ASTRAL],
+			[Loc.t("ui.stat.mage_fire"), "mage_fire", _VALUE_COLOR],
+			[Loc.t("ui.stat.res_fire"), "fire", _RESIST_FIRE],
+			[Loc.t("ui.stat.mage_water"), "mage_water", _VALUE_COLOR],
+			[Loc.t("ui.stat.res_water"), "water", _RESIST_WATER],
+			[Loc.t("ui.stat.mage_air"), "mage_air", _VALUE_COLOR],
+			[Loc.t("ui.stat.res_air"), "air", _RESIST_AIR],
+			[Loc.t("ui.stat.mage_earth"), "mage_earth", _VALUE_COLOR],
+			[Loc.t("ui.stat.res_earth"), "earth", _RESIST_EARTH],
+			[Loc.t("ui.stat.mage_astral"), "mage_astral", _VALUE_COLOR],
+			[Loc.t("ui.stat.res_astral"), "astral", _RESIST_ASTRAL],
 		])
 	else:
 		_stats_grid(_stats_box, [
-			["Меч:", "blade", _VALUE_COLOR],
-			["Топор:", "axe", _VALUE_COLOR],
-			["Дубина:", "bludgeon", _VALUE_COLOR],
-			["Копьё:", "pike", _VALUE_COLOR],
-			["Стрельба:", "shooting", _VALUE_COLOR],
+			[Loc.t("ui.stat.blade"), "blade", _VALUE_COLOR],
+			[Loc.t("ui.stat.axe"), "axe", _VALUE_COLOR],
+			[Loc.t("ui.stat.bludgeon"), "bludgeon", _VALUE_COLOR],
+			[Loc.t("ui.stat.pike"), "pike", _VALUE_COLOR],
+			[Loc.t("ui.stat.shooting"), "shooting", _VALUE_COLOR],
 		])
 
-	_section_header(tr("ПРОЧЕЕ"))
+	_section_header(Loc.t("ui.inv.section.other"))
 	_stats_grid(_stats_box, [
-		["Нагрузка:", "load", _VALUE_COLOR],
-		["Опыт:", "exp", _VALUE_COLOR],
-		["Обзор:", "sight", _VALUE_COLOR],
-		["Скорость:", "speed", _VALUE_COLOR],
-		["Щит:", "shield", _ACCENT_COLOR],
+		[Loc.t("ui.stat.load"), "load", _VALUE_COLOR],
+		[Loc.t("ui.stat.exp"), "exp", _VALUE_COLOR],
+		[Loc.t("ui.stat.sight"), "sight", _VALUE_COLOR],
+		[Loc.t("ui.stat.speed"), "speed", _VALUE_COLOR],
+		[Loc.t("ui.stat.shield"), "shield", _ACCENT_COLOR],
 	])
 
 	# Ремёсла. Навыки крафта НЕ покупаются в школе - они растут только от
@@ -916,19 +915,21 @@ func _setup_stats_area() -> void:
 	# Четыре строки, а не по одной на вкладку мастерской: мастер по
 	# улучшениям - третья вкладка следующего пакета, но его навык уже
 	# существует в player.gd, и пустая строка была бы враньём.
-	_section_header(tr("РЕМЁСЛА"))
+	_section_header(Loc.t("ui.inv.section.crafts"))
 	_stats_grid(_stats_box, [
-		["Кузнец:", "smithing", _VALUE_COLOR],
-		["Портной:", "tailoring", _VALUE_COLOR],
-		["Алхимик:", "alchemy", _VALUE_COLOR],
-		["Мастер:", "mastering", _VALUE_COLOR],
+		[Loc.t("ui.stat.smithing"), "smithing", _VALUE_COLOR],
+		[Loc.t("ui.stat.tailoring"), "tailoring", _VALUE_COLOR],
+		[Loc.t("ui.stat.alchemy"), "alchemy", _VALUE_COLOR],
+		[Loc.t("ui.stat.mastering"), "mastering", _VALUE_COLOR],
 	])
 	if _shield_label == null and _stats_box != null:
-		# Страховка: строка щита обязана существовать после сборки сетки.
+		# Safety net: the shield row must exist after the grid is built. Selected by
+		# the stable stat key, not by the label text: the text is translated now, and
+		# a text match would silently stop finding the row in any other language.
 		for c in _stats_box.get_children():
 			if c is HBoxContainer:
 				for lab in (c as HBoxContainer).get_children():
-					if lab is Label and str((lab as Label).text) == "Щит:":
+					if lab is Label and str((lab as Label).get_meta("stat_key", "")) == "shield":
 						var sib := (c as HBoxContainer).get_children()
 						if sib.size() >= 2 and sib[1] is Label:
 							_shield_label = sib[1] as Label
@@ -983,6 +984,7 @@ func _stat_grid_pair(grid: GridContainer, label: String, key: String, color: Col
 
 	var ll := Label.new()
 	ll.text = label
+	ll.set_meta("stat_key", key)
 	ll.custom_minimum_size = Vector2(84, 0)
 	ll.theme_type_variation = &"InvStatLabel"
 	ll.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1056,7 +1058,7 @@ func _refresh_stats() -> void:
 		var sh_abs := StatusEffects.shield_armor_absorption(p)
 		var sh_t := StatusEffects.shield_armor_time(p)
 		if sh_def > 0 or sh_abs > 0:
-			_shield_label.text = "+%d/%d · %.0f с" % [sh_def, sh_abs, sh_t]
+			_shield_label.text = Loc.f("ui.stat.shield_value", [sh_def, sh_abs, sh_t])
 		else:
 			_shield_label.text = "—"
 
@@ -1071,7 +1073,7 @@ func _set_stat(key: String, value: String) -> void:
 func _build_inventory_area(parent: VBoxContainer) -> void:
 	var inv_title := Label.new()
 	inv_title.theme_type_variation = &"InvSection"
-	inv_title.text = tr("СКЛАД")
+	inv_title.text = Loc.t("ui.inv.storage_title")
 	parent.add_child(inv_title)
 
 	var scroll := ScrollContainer.new()
@@ -1138,7 +1140,7 @@ func _refresh_inventory_grid() -> void:
 
 	if _inventory_slots.is_empty():
 		var lab := Label.new()
-		lab.text = tr("Склад пуст")
+		lab.text = Loc.t("ui.inv.empty")
 		lab.add_theme_font_size_override("font_size", UiTheme.FONT_SUBHEAD)
 		lab.add_theme_color_override("font_color", UiTheme.TEXT_MUTED)
 		_inventory_grid.add_child(lab)
@@ -1261,8 +1263,8 @@ func _on_item_clicked(item: Dictionary, is_double: bool = false) -> void:
 			_refresh_equipment()
 			inventory_changed.emit()
 		else:
-			var why := "Книга уже изучена" if player.has_mana \
-				else "Книги магии читают только маги"
+			var why := Loc.t("ui.inv.book_learned") if player.has_mana \
+				else Loc.t("ui.inv.book_mage_only")
 			_flash_equip_error(why)
 		return
 	if quality in ["Scroll", "SuperScroll"]:
@@ -1295,9 +1297,9 @@ func _on_item_clicked(item: Dictionary, is_double: bool = false) -> void:
 			_refresh_inventory_grid()
 			inventory_changed.emit()
 		elif CraftDB.is_rare_recipe_id(recipe_id):
-			_flash_equip_error("Редкий рецепт расходуется при ковке")
+			_flash_equip_error(Loc.t("ui.inv.recipe_spent"))
 		else:
-			_flash_equip_error("Этот рецепт уже изучен")
+			_flash_equip_error(Loc.t("ui.inv.recipe_learned"))
 		return
 	if quality == "Potion":
 		if player.use_potion(item_key):
@@ -1310,7 +1312,7 @@ func _on_item_clicked(item: Dictionary, is_double: bool = false) -> void:
 	if slot == "shield" and player.two_handed:
 		var dish := ItemDB.find(str(player.equipped.get("weapon", "")))
 		var dish_name := str(dish.get("name_ru", ""))
-		_flash_equip_error("Нужна свободная рука: снимите %s." % dish_name)
+		_flash_equip_error(Loc.f("ui.inv.need_free_hand", [dish_name]))
 		return
 	if player.equip_item(item):
 		_set_slot_highlight("")
@@ -1419,7 +1421,7 @@ func _show_slot_card(cell: Control, slot: String) -> void:
 	if key == "":
 		# Empty slot: the card tells what kind of gear goes here for this class.
 		var hint: Array = [ItemDB.slot_title(slot),
-			"Сюда одевается: " + ItemDB.slot_fits_text(slot, Game.hero_class)]
+			Loc.f("ui.tip.slot_empty", [ItemDB.slot_fits_text(slot, Game.hero_class)])]
 		UiKit.show_hover_card(_hover_card, hint, _hover_at(cell), _hover_bounds())
 		return
 	var it := ItemDB.find(key)
@@ -1427,7 +1429,7 @@ func _show_slot_card(cell: Control, slot: String) -> void:
 		_hide_slot_card()
 		return
 	var lines: Array = _item_card_lines(it)
-	lines.append("Слот: %s (клик — снять)" % ItemDB.slot_title(slot))
+	lines.append(Loc.f("ui.tip.slot_worn", [ItemDB.slot_title(slot)]))
 	var icon_path := str(it.get("icon", ""))
 	var qcolor := UiKit.quality_color(str(it.get("quality", "")))
 	UiKit.show_hover_card(_hover_card, lines, _hover_at(cell), _hover_bounds(),

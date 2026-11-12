@@ -18,9 +18,11 @@ extends RefCounted
 
 const MODES := ["random", "seed", "map"]
 const ZONES := ["start", "mid", "hard", "faction"]
-const ZONE_LABELS := {
-	"start": "Старт", "mid": "Средние земли",
-	"hard": "Тяжёлые земли", "faction": "Владения фракций",
+## Zone names live in ui.json (`ui.zone.*`), one place for the panel, the button
+## label and MapMeta: they used to be duplicated as a dictionary in two files.
+const ZONE_KEYS := {
+	"start": "ui.zone.start", "mid": "ui.zone.mid",
+	"hard": "ui.zone.hard", "faction": "ui.zone.faction",
 }
 
 var mode := "random"
@@ -41,7 +43,9 @@ static func random_seed() -> int:
 
 
 static func zone_label(z: String) -> String:
-	return str(ZONE_LABELS.get(z, z))
+	if ZONE_KEYS.has(z):
+		return Loc.t(str(ZONE_KEYS[z]))
+	return z
 
 
 ## Сид-идентификатор карты: стабилен между запусками и машинами.
@@ -72,11 +76,11 @@ func normalize() -> void:
 func summary() -> String:
 	normalize()
 	if mode == "map":
-		var title := map_path.get_file().get_basename() if map_path != "" else "не выбрана"
-		return "карта «%s» · %s" % [title, zone_label(zone)]
+		var title := map_path.get_file().get_basename() if map_path != "" else Loc.t("ui.world.not_chosen")
+		return Loc.f("ui.world.summary_map", [title, zone_label(zone)])
 	if mode == "random":
-		return "случайный · %s" % zone_label(zone)
-	return "сид %d · %s" % [world_seed, zone_label(zone)]
+		return Loc.f("ui.world.summary_random", [zone_label(zone)])
+	return Loc.f("ui.world.summary_seed", [world_seed, zone_label(zone)])
 
 
 ## Применить к игре ДО смены сцены. Пустая строка — успех, иначе текст ошибки.
@@ -85,7 +89,7 @@ func apply() -> String:
 	var wm: GDScript = load("res://scripts/world/world_map.gd")
 	if mode == "map":
 		if map_path == "" or not FileAccess.file_exists(map_path):
-			return "Карта не найдена: %s" % map_path
+			return Loc.f("ui.world.map_missing", [map_path])
 		var meta := MapMeta.read(map_path)
 		var sector := str(meta.get("sector", ""))
 		if sector == "" or not wm.has(sector):

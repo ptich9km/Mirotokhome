@@ -85,10 +85,10 @@
 	{
 		"key": "races",
 		"value": [
-			{"id": "human", "label": "Человек", "two_styles": true},
-			{"id": "necro", "label": "Нежить"},
-			{"id": "druid", "label": "Друид"},
-			{"id": "ork", "label": "Орк"}
+			{"id": "human", "label": "Человек", "label_en": "Human", "two_styles": true},
+			{"id": "necro", "label": "Нежить", "label_en": "Undead"},
+			{"id": "druid", "label": "Друид", "label_en": "Druid"},
+			{"id": "ork", "label": "Орк", "label_en": "Orc"}
 		]
 	},
 	{
@@ -130,11 +130,11 @@
 	{
 		"key": "combat.creature_types",
 		"value": {
-			"human": "люди",
-			"undead": "нежить",
-			"beast": "звери",
-			"insect": "насекомые",
-			"monster": "чудовища"
+			"human": {"ru": "люди", "en": "humans"},
+			"undead": {"ru": "нежить", "en": "undead"},
+			"beast": {"ru": "звери", "en": "beasts"},
+			"insect": {"ru": "насекомые", "en": "insects"},
+			"monster": {"ru": "чудовища", "en": "monsters"}
 		}
 	}
 ]
