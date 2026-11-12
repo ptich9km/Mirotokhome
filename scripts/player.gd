@@ -1795,14 +1795,15 @@ func _play_sphere_sound(sphere: String) -> void:
 		"Astral": SoundDB.play("magic.heal")
 
 ## The mage's active sphere (for a staff strike/the sphere panel): the sphere of the starting book,
-## otherwise the first already learned one. Fallback — Fire (at the start there is always a sphere book).
+## otherwise the first sphere of a learned spell. Fallback — Fire.
 func _active_sphere() -> String:
 	if Game.hero_start_book != "":
 		var b := SpellDB.sphere_of_book(Game.hero_start_book)
 		if b != "":
 			return b
-	for sp in ["Fire", "Water", "Air", "Earth", "Astral"]:
-		if sphere_books.get(sp, false):
+	for name in known_spells:
+		var sp := SpellDB.sphere_of(name)
+		if sp != "":
 			return sp
 	return "Fire"
 
@@ -2418,32 +2419,25 @@ func _damage_area_at(pos: Vector2, radius: float, dmg: int, sphere: String = "")
 			targets.append(enemy)
 	Game.deal_damage_area(targets, dmg, "magic", sphere, self)
 
-## Learn a magic book (mage only, forever): an element book opens the whole
-## sphere ("Book Fire"), a single-spell book — only that spell ("Book Fire Arrow").
-## The book is spent (leaves the inventory). true — if something was learned.
+## Learn a magic book (mage only, forever): ONE book teaches exactly ONE spell.
+##
+## An element book ("Book Fire") is the same deal: it teaches the simplest spell
+## of that school, not the whole school. The old rule "a school book opens every
+## spell of the sphere" was removed by the player's decision (13.11): four spells
+## for the price of one quest relic is not a reward, it is a free upgrade. The book
+## is spent (leaves the inventory). true — if something was learned.
 func learn_book(item_name: String) -> bool:
+	if ItemDB.is_quest_item(ItemDB.find(item_name)):
+		return false   # a quest parcel is carried, not read
 	if not has_mana:
 		return false   # a warrior cannot read magic books
-	var sphere := SpellDB.sphere_of_book(item_name)
-	var gained: Array = []
-	if sphere != "":
-		sphere_books[sphere] = true
-		for spell in SpellDB.spells_of_sphere(sphere):
-			if not known_spells.has(spell):
-				known_spells[spell] = {"charges": -1}
-				gained.append(spell)
-		if gained.is_empty():
-			return false   # the whole sphere is already learned — we do not spend the book
-		print("Изучена книга стихии %s: +%d заклинаний" % [sphere, gained.size()])
-	else:
-		var spell := SpellDB.spell_of_book(item_name)
-		if spell == "":
-			return false
-		if known_spells.has(spell) and spell_charges(spell) == -1:
-			return false   # already learned forever — we do not spend the book
-		known_spells[spell] = {"charges": -1}
-		gained.append(spell)
-		print("Выучено заклинание из книги: %s" % spell)
+	var spell := SpellDB.spell_of_book(item_name)
+	if spell == "":
+		return false
+	if known_spells.has(spell) and spell_charges(spell) == -1:
+		return false   # already learned forever — we do not spend the book
+	known_spells[spell] = {"charges": -1}
+	print("Learned a spell from a book: %s" % spell)
 	remove_item(item_name)
 	return true
 

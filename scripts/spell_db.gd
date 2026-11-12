@@ -292,13 +292,24 @@ static func _resolve_spell(literal: String) -> String:
 			_by_lower[str(name).to_lower()] = name
 	return str(_by_lower.get(str(literal).to_lower(), ""))
 
-## Spell from a single-spell book key ("Book Fire Arrow" -> "Fire_Arrow").
-## "" — if it is not a spell book (element books are handled separately).
+## Spell a book teaches ("Book Fire Arrow" -> "Fire_Arrow").
+##
+## An element book ("Book Fire") is not a school unlock: it teaches the simplest
+## spell of that school, exactly like a single-spell book does. Returns "" when
+## the key is not a book of a known spell.
 static func spell_of_book(item_key: String) -> String:
 	var n := str(item_key).to_lower().trim_prefix("book ").strip_edges()
-	if n in ["fire", "water", "air", "earth", "astral"]:
-		return ""   # element book — opens the whole sphere
+	if n in _spheres_lower():
+		return simplest_spell_of_sphere(str(n).capitalize())
 	return _resolve_spell(n.replace(" ", "_"))
+
+
+## Lowercased school ids from the content rules (a mod may add its own).
+static func _spheres_lower() -> Array:
+	var out: Array = []
+	for sphere in ContentRules.list("spells.spheres"):
+		out.append(str(sphere).to_lower())
+	return out
 
 ## Item key of a single-spell book ("Fire_Arrow" -> "Book Fire Arrow").
 static func book_key_for_spell(spell: String) -> String:

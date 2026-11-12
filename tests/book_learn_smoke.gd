@@ -180,7 +180,9 @@ func _starter_book() -> void:
 	_check(not _hero.learn_book(key), "повторное изучение без книги не проходит")
 
 
-## 2. Sphere books: open the whole sphere, spent once.
+## 2. Element books ("Book Fire"): ONE book = ONE spell. The old rule "a school
+##    book opens the whole sphere" was removed by the player's decision (13.11):
+##    four spells for one quest relic is a free upgrade, not a reward.
 func _sphere_books() -> void:
 	for sphere: String in ContentRules.list("spells.spheres"):
 		var key := "Book " + sphere
@@ -188,20 +190,26 @@ func _sphere_books() -> void:
 		_check(str(item.get("quality", "")) == "Book", "книга стихии %s есть (%s)" % [sphere, key])
 		_check(SpellDB.sphere_of_book(key) == sphere, "%s -> sphere_of_book = %s" % [key, sphere])
 
+		var simplest := SpellDB.simplest_spell_of_sphere(sphere)
+		_check(simplest != "", "у стихии %s есть простейшее заклинание" % sphere)
+		_check(SpellDB.spell_of_book(key) == simplest,
+			"%s учит ОДНО заклинание (%s)" % [key, simplest])
+
 		_hero.known_spells.clear()
 		_hero.sphere_books.clear()
 		_hero.inventory = [key]
-		var spells := SpellDB.spells_of_sphere(sphere)
-		_check(not spells.is_empty(), "у стихии %s есть заклинания" % sphere)
 		var ok := _hero.learn_book(key)
 		_check(ok, "%s учится" % key)
-		_check(bool(_hero.sphere_books.get(sphere, false)), "%s открывает сферу" % key)
-		var missing := 0
-		for s in spells:
-			if not _hero.known_spells.has(s):
-				missing += 1
-		_check(missing == 0, "%s даёт все %d заклинаний стихии (не хватает %d)"
-			% [key, spells.size(), missing])
+		_check(_hero.known_spells.has(simplest), "%s выучила '%s'" % [key, simplest])
+		_check(not bool(_hero.sphere_books.get(sphere, false)),
+			"%s НЕ отмечает сферу выученной" % key)
+		var extra := 0
+		for s in SpellDB.spells_of_sphere(sphere):
+			if s != simplest and _hero.known_spells.has(s):
+				extra += 1
+		_check(extra == 0, "%s не выдаёт остальные заклинания стихии (лишних %d)"
+			% [key, extra])
+		_check(not _hero.inventory.has(key), "%s израсходована" % key)
 
 
 ## 3. Every spell has a working book: build -> find -> parse -> learn.
