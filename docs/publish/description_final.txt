@@ -1,6 +1,6 @@
 Mirotokhome is a procedurally generated sandbox RPG with tactical combat, inspired by the classic Allods II: the same idea of a living map, rebuilt from scratch with procedural generation.
 
-IMPORTANT: the game interface is in Russian. An English translation is in progress.
+IMPORTANT: the interface is in English by default. A full Russian translation (interface, items, dialogue, voice-over) is switchable in the main menu and the choice is remembered.
 
 WHAT'S IN THE GAME
 
@@ -23,7 +23,7 @@ NOT IN YET (honestly)
 • Story campaign — sandbox and procedural quests only.
 • Multiplayer.
 • Polished balance: numbers change after every play session.
-• Full English interface — in progress, see the note at the top.
+• Full English interface is in and on by default; switch to Russian in the main menu.
 
 This is an alpha published to find bugs and learn what people want to play. If something breaks, tell me what you did and what happened — that is enough.
 

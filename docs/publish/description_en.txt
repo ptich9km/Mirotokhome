@@ -12,7 +12,7 @@ inspired by the classic Allods II.
 • Mod support: drop a folder with mod.json into mods/, add a spell school,
   an item or a monster — data only, no engine changes.
 
-NOT IN YET: story campaign, multiplayer, final balance, full English UI.
+NOT IN YET: story campaign, multiplayer, final balance.
 
 This is an alpha published for bug reports. Tell me what you did and what broke.
 
