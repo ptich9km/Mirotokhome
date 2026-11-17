@@ -955,7 +955,10 @@ static func _flash_unit(unit: Node2D, color: Color, seconds: float) -> void:
 	_restore_flash(anim, id)
 
 
-static func _restore_flash(anim: Node, id: int) -> void:
+## `anim` is deliberately untyped: the flash timer can outlive the unit, and a
+## freed object passed into a typed `Node` parameter raises a type error BEFORE
+## the body runs, so `is_instance_valid` inside never gets a chance (18.11).
+static func _restore_flash(anim, id: int) -> void:
 	var base: Color = _flash_base.get(id, Color.WHITE)
 	_flash_base.erase(id)
 	_flash_seq.erase(id)
