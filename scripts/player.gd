@@ -2143,25 +2143,10 @@ func _fire_spell_projectile(name: String, sphere: String, dmg: int, area: float,
 		create_spell_projectile(name, cast_origin(), to, final_dmg, 0.0)
 
 ## Create a projectile with phase animation from the projectile folder.
+## The launch itself is shared with mercenary mages (SpellCasting): a second copy
+## of it would drift from this one.
 func create_spell_projectile(name: String, from: Vector2, to: Vector2, damage: int, area: float) -> void:
-	var scene := preload("res://scenes/projectile.tscn")
-	if scene == null:
-		return
-	var p: Projectile = scene.instantiate()
-	p.start_pos = from
-	p.target_pos = to
-	p.damage = damage
-	p.projectile_owner = self
-	p.spell_name = name
-	p.spell_area = area
-	p.speed = SpellDB.projectile_speed_of(name)
-	# Before, the projectile was added to get_tree().root and survived a scene change
-	# (restart/portal), holding a reference to a freed hero.
-	var scene_root := get_tree().current_scene
-	if scene_root != null:
-		scene_root.add_child(p)
-	else:
-		get_tree().root.add_child(p)
+	SpellCasting.launch_projectile(self, name, from, to, damage, area)
 
 ## Heal the selected target (the hero by default): HP, but not above the maximum.
 ## The amount = spell base * power_coef * (1 + spell_power/100) —
@@ -2208,33 +2193,17 @@ func _cast_chain_spell(spell_name: String, spell: Dictionary, sphere: String,
 		dmg: int, area: float, target_position: Vector2,
 		power_override: float = -1.0) -> void:
 	var origin := cast_origin()
-	# Spell range is the only reach limit. Before, it was not
-	# read from the database at all, and a click 260 px away hit enemies there, no matter how
-	# far from the mage they stood: the lightning flew across half the map.
-	var reach := SpellDB.range_of(spell_name)
-	var targets: Array = _chain_targets(target_position, maxf(area, GameConfig.getf("magic", "chain_radius")),
-		origin, reach)
+	# Damage through the shared Game.spell_damage: spell power, mind and skill must
+	# affect "radiance" the same as projectiles.
+	var final_dmg := Game.spell_damage(self, spell_name, sphere, dmg, power_override)
+	var targets: Array = SpellCasting.cast_chain(self, spell_name, target_position,
+		origin, final_dmg, area)
 	if targets.is_empty():
 		# Nobody in reach — we strike the aim point so the cast is not wasted
 		# for nothing.
 		_fire_spell_projectile(spell_name, sphere, dmg, area, target_position,
 			power_override)
 		return
-	# Damage through the shared Game.spell_damage: spell power, mind and skill must
-	# affect "radiance" the same as projectiles. Before, the raw
-	# dmg from the database was passed here, and prismatic radiance was the only spell
-	# that completely ignored the mage's progression.
-	var final_dmg := Game.spell_damage(self, spell_name, sphere, dmg, power_override)
-	# Each target gets its own rainbow colour, otherwise all beams came out in the sphere colour.
-	var color_index := 0
-	for t in targets:
-		if not is_instance_valid(t):
-			continue
-		Game.deal_damage(t, final_dmg, "magic", sphere, self)
-		SpellVFX.chain_arc(origin, t.global_position, sphere,
-			SpellVFX.rainbow_color(color_index))
-		SpellVFX.hit_flash(t)
-		color_index += 1
 	_apply_spell_experience(sphere)
 
 
@@ -2248,34 +2217,11 @@ func _cast_chain_spell(spell_name: String, spell: Dictionary, sphere: String,
 ##   * radius (fan) — the size of the flash around the aim, that is the aim still
 ##     picks who to hit first. Without sorting by aim, in a fight with a crowd
 ##     the target would be picked at random.
+##
+## The search lives in SpellCasting: a mercenary mage casts the same radiance.
 func _chain_targets(aim: Vector2, radius: float, origin: Vector2,
 		reach: float) -> Array:
-	var found: Array = []
-	for e in Game.enemies:
-		if e == null or not is_instance_valid(e):
-			continue
-		# Node.get() in Godot 4 takes ONE argument, so the
-		# corpse state is checked through "a field on the node", not get("state", "").
-		if "state" in e and str(e.get("state")) in ["dying", "decay", "corpse"]:
-			continue
-		if Game.fog != null and Game.fog.blocks_process(e.global_position):
-			continue
-		var pos := (e as Node2D).global_position
-		if reach > 0.0 and origin.distance_to(pos) > reach:
-			continue
-		if pos.distance_to(aim) > radius:
-			continue
-		found.append(e)
-	# We sort by distance to the aim point so the beams fan out from the target.
-	found.sort_custom(func(a: Node2D, b: Node2D) -> bool:
-		return a.global_position.distance_squared_to(aim) \
-			< b.global_position.distance_squared_to(aim))
-	var out: Array = []
-	for e in found:
-		if out.size() >= GameConfig.geti("magic", "chain_max_targets"):
-			break
-		out.append(e)
-	return out
+	return SpellCasting.chain_targets(aim, radius, origin, reach)
 
 
 ## Wall (Wall of Fire / Wall of Earth). In the original they are DIFFERENT
@@ -2286,20 +2232,11 @@ func _chain_targets(aim: Vector2, radius: float, origin: Vector2,
 func _create_wall(target_position: Vector2, spell_name: String, sphere: String,
 		power_override: float = -1.0) -> void:
 	var spell := SpellDB.get_spell(spell_name)
-	var mode := str(spell.get("wall_mode", "damage"))
-	var life := float(spell.get("wall_life", 6.0))
-	var cells := _zone_cells(spell, Vector2i(6, 2))
-	# Wall orientation: PERPENDICULAR to the cast direction. Looking left or
-	# right — the wall stands vertically (2×6), looking up/down — it lies
-	# horizontally (6×2). Player 28.10: "the magic should stand vertically".
-	var aim := target_position - cast_origin()
-	if absf(aim.x) >= absf(aim.y):
-		cells = Vector2i(2, 6)
 	var dmg := 0
-	if mode != "block":
+	if str(spell.get("wall_mode", "damage")) != "block":
 		dmg = Game.spell_damage(self, spell_name, sphere, int(spell.get("damage", 0)),
 			power_override)
-	SpellVFX.spawn_wall(target_position, sphere, self, life, mode, cells, dmg)
+	SpellCasting.cast_wall(self, spell_name, sphere, target_position, cast_origin(), dmg)
 
 
 ## A zone with a duration: blizzard and poison cloud. Before it was a single
@@ -2308,27 +2245,19 @@ func _create_wall(target_position: Vector2, spell_name: String, sphere: String,
 func _create_zone(target_position: Vector2, spell_name: String, sphere: String,
 		power_override: float = -1.0) -> void:
 	var spell := SpellDB.get_spell(spell_name)
-	var style := str(spell.get("zone_style", "cloud"))
-	var life := float(spell.get("zone_life", 4.0))
-	var cells := _zone_cells(spell, Vector2i(3, 3))
 	var dmg := Game.spell_damage(self, spell_name, sphere, int(spell.get("damage", 0)),
 		power_override)
-	SpellVFX.spawn_zone(target_position, style, sphere, self, life, cells, dmg, 0.5)
-	# The zone deals damage and effects (slow, poison) to everyone standing in it.
-	StatusEffects.apply_area(target_position, _zone_radius(cells), spell, self)
+	SpellCasting.cast_zone(self, spell_name, sphere, target_position, dmg)
 
 
 ## The zone size in cells from the database; if the field is missing, the default value.
 func _zone_cells(spell: Dictionary, fallback: Vector2i) -> Vector2i:
-	var raw: Variant = spell.get("zone_cells", null)
-	if raw is Array and (raw as Array).size() >= 2:
-		return Vector2i(maxi(1, int((raw as Array)[0])), maxi(1, int((raw as Array)[1])))
-	return fallback
+	return SpellCasting.zone_cells(spell, fallback)
 
 
 ## The zone radius in pixels — half its diagonal, for area effects.
 func _zone_radius(cells: Vector2i) -> float:
-	return Vector2(cells.x * 32, cells.y * 32).length() * 0.5
+	return SpellCasting.zone_radius(cells)
 
 
 ## Animate_Dead: raise the nearest corpse as an ally for lifespan seconds.
