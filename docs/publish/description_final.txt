@@ -8,7 +8,8 @@ WHAT'S IN THE GAME
 • 12-sector astral map: travel between islands through portals at the map edge.
 • Warrior or mage: four combat directions plus a secondary one, own spellbook.
 • Tactical pause: the whole world stops and orders are given while paused.
-• Party: mercenaries with orders (follow, guard, attack, hold).
+• Party: mercenaries with orders (follow, guard, attack, hold) and a role each — a mage fights with the staff, casts or heals, an archer shoots from a distance, a warrior swings.
+• Archers in every race's tavern: a real flying arrow with physical damage that obeys "weapon vs creature type".
 • Combat: one damage formula for everything — elements, shields, resistances and "weapon vs creature type": a mace hits undead for 125% and humans for 75%.
 • 10 grey monster species in 5 tiers, from "Fierce Wolf" to "Wolf Lord".
 • Forge and workshop: an item goes +1…+7, a failure rolls back one step but the item survives.
