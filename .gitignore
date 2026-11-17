@@ -84,6 +84,11 @@ import/broken_overlay/
 import/*.png
 import/**/*.png
 
+# Review artifacts (contact sheets, model probes): one stable place for
+# "open this and look", rebuilt by the dev tools, never loaded by the game.
+# `.gdignore` inside keeps Godot from importing them at all.
+import/review/
+
 # Контакт-листы курсора и диагностика нарезки (tests/extract_cursor_frames.py,
 # tests/gen_cursor_strip.py) — выход dev-инструмента, пересоздаётся одной командой.
 assets/ui/cursor/*_contact_sheet*.png

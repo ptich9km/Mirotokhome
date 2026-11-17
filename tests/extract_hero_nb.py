@@ -41,10 +41,37 @@ SRC = REPO / "import" / "Player"
 SETS = {
     "nb5": ("war_men", "war men"),
     "nb6": ("war_women", "war women"),
+    # Mercenary pilots (14.11): the same 12-frame contract, laid out under
+    # assets/units/merc/<race>_<class>/ (--dest merc) so the inn pool can point
+    # at them without touching the player's own hero sets.
+    "mhw": ("human_warrior", "merc human warrior"),
+    "mhm": ("human_mage", "merc human mage"),
+    "mow": ("orc_warrior", "merc orc warrior"),
+    "mom": ("orc_mage", "merc orc mage"),
+    "mdw": ("druid_warrior", "merc druid warrior"),
+    "mdm": ("druid_mage", "merc druid mage"),
+    "muw": ("undead_warrior", "merc undead warrior"),
+    "mum": ("undead_mage", "merc undead mage"),
+    # Elite tier (15.11): the same characters with the added gear described in
+    # gen_hero_strip.TIER_ELITE, laid out as the t1 tier of the same set.
+    "mhwe": ("human_warrior/t1", "merc human warrior elite"),
+    "mhme": ("human_mage/t1", "merc human mage elite"),
+    "mowe": ("orc_warrior/t1", "merc orc warrior elite"),
+    "mome": ("orc_mage/t1", "merc orc mage elite"),
+    "mdwe": ("druid_warrior/t1", "merc druid warrior elite"),
+    "mdme": ("druid_mage/t1", "merc druid mage elite"),
+    "muwe": ("undead_warrior/t1", "merc undead warrior elite"),
+    "mume": ("undead_mage/t1", "merc undead mage elite"),
+    # Archer (17.11): a ranged mercenary drawn on gemini-3.1-flash-lite-image.
+    # The 4-panel "attack" strip is the bow shot (draw → release), so the same
+    # 12-frame contract holds: idle + 4 walk + 3 shoot + 4 dying.
+    "mha": ("human_archer/t0", "merc human archer"),
+    "moa": ("orc_archer/t0", "merc orc archer"),
+    "mda": ("druid_archer/t0", "merc druid archer"),
+    "mua": ("undead_archer/t0", "merc undead archer"),
     # Путник (11.11): мирный НПЦ из события «спасти путника». Тот же контракт
     # 12 кадров, но кладётся не в hero/, а в npc/ (--dest npc).
-    "tv1": ("traveler_m", "traveler men"),
-    # Нежить (Пожинатели) и друиды (Круг Друидов), 20.10 — тот же контракт.
+    "tv1": ("traveler_m", "traveler men"),    # Нежить (Пожинатели) и друиды (Круг Друидов), 20.10 — тот же контракт.
     "un1": ("undead_men", "undead men"),
     "dr1": ("druid_men", "druid men"),
     # Женские версии тех же рас, 20.10 — тот же контракт.
@@ -66,6 +93,9 @@ SETS = {
 }
 
 OUT_W, OUT_H, FEET_Y, TARGET_H = 64, 64, 62, 54
+## Kind prefix of the set description: the inn shows `desc` as the mercenary name,
+## so a mercenary set must not be described as a hero.
+_KIND = {"hero": "Hero", "npc": "NPC", "merc": "Mercenary"}
 MAX_W = 60        # предел по ширине: та же полоса, что по вертикали (низ 62)
 TOL = 45          # заливка фона от краёв
 STRONG = 120      # порог «настоящей» фигуры против призрака
@@ -350,6 +380,26 @@ def figures_of(path, expect):
     return out
 
 
+def body_height(alpha):
+    """Height of the SOLID part of a figure, ignoring thin protrusions.
+
+    A staff held upright above the head is only a few pixels wide, but it is
+    part of the content bounding box, so it used to drive the common scale of a
+    whole block: on 14.11 a vertical staff reaching the top of the strip made
+    the mage attack frames 30 percent smaller than the idle frames. Rows whose
+    ink is narrower than a quarter of the widest row are not body.
+    """
+    if alpha.size == 0:
+        return 0
+    widths = (alpha > 0.5).sum(axis=1)
+    if widths.max() <= 0:
+        return 0
+    keep = np.where(widths >= 0.25 * widths.max())[0]
+    if keep.size == 0:
+        return 0
+    return int(keep[-1] - keep[0] + 1)
+
+
 def fit(rgb, alpha, scale):
     h, w = alpha.shape
     nw, nh = max(1, int(round(w * scale))), max(1, int(round(h * scale)))
@@ -604,10 +654,10 @@ def main():
         # орка самая высокая фигура стоящая (54 px), а самая широкая — лежащая
         # (63 px на холсте 64), и по высоте она не влезала: кадр выходил
         # срезанным по краям. Раньше считался только TARGET_H (15.10).
-        max_h = max(al.shape[0] for _, al in figs)
+        max_h = max(body_height(al) for _, al in figs)
         max_w = max(al.shape[1] for _, al in figs)
         scale = min(TARGET_H / max_h, MAX_W / max_w)
-        print(f"{name}: max h={max_h} w={max_w} scale={scale:.4f}")
+        print(f"{name}: body h={max_h} w={max_w} scale={scale:.4f}")
         for k, (rgb, al) in enumerate(figs):
             cell = fit(rgb, al, scale)
             # Последний кадр смерти обязан продолжать то же падение, что и
@@ -682,13 +732,13 @@ def main():
         # frames — ВСЕГО в наборе (idle1+move4+attack3+dying4 = 12), а не
         # число записанных в этом прогоне. При --only блок один, и раньше
         # сюда попадало 4 — набор в базе объявлял бы 4 кадра (15.10 ночь).
-        "desc": f"Hero: {out_label}, 4-panel strips (stand — Gemini 3.1 Flash, "
-                "walk/attack/die — mai-image-2.6-flash), three-quarter east "
-                "view + mirror, idle1+move4+attack3+dying4",
+        "desc": f"{_KIND.get(args.dest, 'Unit')}: {out_label}, 4-panel strips "
+                "(stand — Gemini 3.1 Flash, walk/attack/die — mai-image-2.6-flash), "
+                "three-quarter east view + mirror, idle1+move4+attack3+dying4",
         # Порядок ключей - как в остальных 11 наборах репозитория (folder,
         # frames, prefix). Нарезчик писал frames перед folder, и любая пересборка
         # набора давала ложный diff из одной перестановки строк.
-        "folder": f"hero/{out_folder}",
+        "folder": f"{args.dest}/{out_folder}",
         "frames": 12, "prefix": "sprites",
         "dirs": 1, "idle_phases": 1, "move": 4, "move_begin": 0,
         "attack": 3, "dying": 4, "decay": 0, "cast": 0, "idle": 0,

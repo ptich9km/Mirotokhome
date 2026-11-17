@@ -86,6 +86,20 @@ VIEW_F = ("THREE-QUARTER VIEW: the whole body is turned about 30 degrees towards
           "clearly reads as facing RIGHT: the face, the chest and the toes point to "
           "the right and NOT towards the viewer.")
 
+# 14.11: gemini-nano-banana-2.1 started answering the three-quarter VIEW above
+# with a flat, symmetrical FRONT view (measured on the first pilot strip of the
+# mercenary sets: both pauldrons mirrored, nose straight at the camera, and the
+# walk cycle of the very same seed came out three-quarter as intended). A front
+# view is unusable: the units are mirrored at runtime, so the idle frame has to
+# carry the same angle as the walk frames. The lock below spells out what the
+# angle looks like instead of naming it.
+VIEW_LOCK = """VIEW LOCK - the figure is NEVER drawn facing the camera:
+- the nose, the beard and the toes of both boots point to the LEFT edge of the image;
+- the head is turned to the LEFT, so the back of the head sits on the right;
+- one shoulder is clearly CLOSER to the camera than the other: the two shoulder
+  pads are NOT mirror images and the chest plate is seen at an angle;
+- a symmetrical, flat, front-facing pose is a REJECTED frame."""
+
 # Телосложение. Отдельным блоком, потому что слово «lean» в описании персонажа
 # модель понимает буквально и рисует именно жердь — это была первая причина
 # тонкой фигуры, ракурс её только усиливал.
@@ -232,6 +246,25 @@ PROPORTIONS_O = """BODY PROPORTIONS - this matters as much as the pose, the figu
 # инцидент hm1); генерация — только с одобрения игрока, по 1 попытке.
 # Полная памятка: .kodik/memories/hero-strip-generation-standard.md.
 
+# --- Тир наёмника (15.11) -----------------------------------------------------
+# Тир в этом проекте — не перекраска, а лестница снаряжения: у городских наборов
+# t0..t3 это кожа → кираса → кираса+шлем → полный доспех. Перекраска наёмников
+# не годится: замер показал, что у воинов доминирует кожа и лицо (тон 10° = 49 %
+# у человека, ткань всего 29 %), и «тирная» перекраска красила бы кожу.
+# Поэтому у наёмников два звания: base (уже нарисован) и elite — тот же персонаж
+# в том же стиле, отличается ТОЛЬКО добавленным снаряжением. Абзац дописывается
+# к описанию персонажа и ничего другого не трогает (правило игрока: базу модель
+# и так держит с трудом).
+TIER_ELITE = {
+    "warrior": """ELITE GEAR - the ONLY difference from the fighter described above:
+he also wears a plain steel helmet with an open face, a straight nose guard and
+small cheek guards, so his face and beard are still visible, and steel plates
+strapped over both shins above the boots.""",
+    "mage": """ELITE GEAR - the ONLY difference from the mage described above:
+the robe has a narrow band of gold trim along the hem and around both cuffs, and
+a plain round metal clasp closes the collar at the neck.""",
+}
+
 def _mage_robe(color):
     return (f"ONE single full-length plain {color} MAGE ROBE instead of armor, "
             "hanging loose ALL THE WAY DOWN TO THE GROUND, the hem resting on the "
@@ -332,8 +365,11 @@ below - which cannot be cut into a 4-frame animation at all.)
 
 SIZE IS LAW TOO - DO THE ARITHMETIC BEFORE YOU DRAW:
 All four figures have to stand next to each other in ONE row, so each one may
-take at most ONE QUARTER of the image width. Keep every figure at most 22
-percent of the image WIDTH and at most 60 percent of the image HEIGHT.
+take at most ONE QUARTER of the image width. Keep every figure at most 18
+percent of the image WIDTH and at most 45 percent of the image HEIGHT: the
+figures must read as SMALL, each one sitting in a large field of pure magenta.
+(Measured 14.11 on gemini-nano-banana-2.1: at the old limits the model drew
+figures ~60 percent tall, and a wide dying pose reached into the next panel.)
 If the creature is naturally WIDER than it is tall - a spectre, a cloud, a
 smoke column, anything spreading sideways - you must draw it MUCH smaller, so
 that four of them still fit side by side. A figure drawn too wide does not
@@ -343,7 +379,7 @@ which the game cannot cut apart.
 LAYOUT RULES:
 - exactly 4 separate figures in a single horizontal row, evenly spaced
 - one horizontal row only, all four on ONE ground line, none above another
-- empty gaps of pure background between the figures, at least 80 pixels from
+- empty gaps of pure background between the figures, at least 120 pixels from
   the right edge of one figure to the left edge of the next one; nothing of any
   kind may pass through those gaps
 - every figure the same size, full body, nothing cropped
@@ -378,7 +414,8 @@ Panel 1: standing upright, both arms flung wide open to the sides.
 Panel 2: his knees buckle, he drops downwards, the torso already tilted, one hand
 reaching for the ground.
 Panel 3: he has fallen over onto the ground, the body turned down onto its side,
-torso already low and nearly horizontal, one arm stretched out.
+torso already low and nearly horizontal, the arms folded in tight against the
+chest and NOT stretched out towards the neighbouring panel.
 Panel 4: LYING ON THE GROUND ON HIS BACK, face and chest pointing up, but the body
 is drawn TILTED AND COMPACT: knees slightly bent, arms relaxed on the ground, the
 whole fallen figure fits inside its own quarter of the image width. Do NOT draw
@@ -431,34 +468,26 @@ wide bands of empty background remain between every pair of neighbouring panels.
 # staff raise/lower, nothing else. Player correction: the staff is NOT cocked
 # back behind the head and NOT swung overhead — just lifted up and lowered.
 ANIMS4_MAGE = {
-    "attack": """A SLOW STAFF LIFT: raising the staff straight up in FRONT of the
-body and then lowering it back down, 4 panels left to right in one row.
-Panel 1: standing still, the staff held vertically at the side, one hand gripping
-it at waist height, staff tip pointing up.
-Panel 2: the same single hand has lifted the staff a little way up, the staff now
-held vertically in front of the body at about chest height. The OTHER hand is
-NOT holding a second staff - there is only ONE staff in the whole image and it
-is gripped by ONLY ONE hand in every panel. The body posture in this panel is
-exactly the same upright relaxed stance as in panel 1 - the spine is NOT
-stretched, NOT elongated, NOT straightened upward, the figure does NOT grow
-taller, legs stay bent and relaxed the same way.
-Panel 3: the hand has lifted the staff straight up in front of the body, the arm
-extended upward but still IN FRONT of the figure, the staff vertical beside the
-shoulder, NOT behind the head, NOT cocked back, NOT swung sideways.
-Panel 4: the hand has lowered the staff back down to the starting position at the
-side, exactly like panel 1.
-This is ONLY a calm vertical lift-and-lower motion of one arm holding the staff.
-Nothing else moves: feet stay planted in the same place, body stays upright, no
-punch, no throw, no lunge, no swing, no spin. The staff is NOT thrown or dropped.
-The staff is NEVER held behind the head or behind the back.
-SAME HAND IS LAW: the staff is held in the SAME single hand in ALL FOUR panels.
-The hand NEVER switches, NEVER swaps from left to right or right to left between
-panels. One hand holds the staff from the first panel to the last.
+    "attack": """A CALM CASTING GESTURE, 4 panels left to right in one row.
+The staff NEVER moves: it stays planted vertically at his side, gripped by the
+same single hand at waist height, in ALL FOUR panels, exactly as in the idle
+stance. Only the OTHER arm moves, and only a little:
+Panel 1: standing still, the free arm hanging relaxed at his side, hand open.
+Panel 2: the free arm has risen in front of the chest, the elbow bent, the open
+palm at chest height, fingers pointing forward.
+Panel 3: the free arm has risen a little more, the open palm now at shoulder
+height, still in front of the body and close to it, as if releasing a spell.
+Panel 4: the free arm has come back down to the starting position, like panel 1.
+The raised hand NEVER goes above the top of the head and NEVER reaches out to the
+side or towards the neighbouring panel: it stays close to the chest.
+The figure is the SAME size in all four panels - the body is NOT drawn smaller or
+larger between the panels; only the free arm changes position.
+Nothing else moves: feet stay planted in the same place, the staff stays vertical
+and in the same hand, the body stays upright, no punch, no throw, no lunge, no
+swing, no spin, no second staff.
 SPACING: all four figures stay in their own equal quarters of the image width, so
 wide bands of empty background remain between every pair of neighbouring panels.
-The raised arm and staff stay within the width of the figure's own shoulders and
-do NOT touch or overlap the neighbouring figure. All four figures stand on ONE
-ground line in ONE horizontal row.""",
+All four figures stand on ONE ground line in ONE horizontal row.""",
 }
 
 LAYOUT = """PURPOSE, read this first: you are drawing ONE SPRITESHEET STRIP FOR A 2D VIDEO
@@ -786,6 +815,10 @@ def main():
                     default="warrior",
                     help="класс героя: mage — мантия до земли (21.10), traveler — "
                          "мирный путник в гражданской одежде без оружия (11.11)")
+    ap.add_argument("--tier", choices=("base", "elite"), default="base",
+                    help="звание бойца: base — как нарисован, elite — тот же "
+                         "персонаж плюс шлем/наголенники (воин) или золотая "
+                         "окантовка (маг), см. TIER_ELITE")
     args = ap.parse_args()
 
     # Норма толщины зависит от пола. Калибровка 20.10 по ОДОБРЕННЫМ игроком
@@ -889,7 +922,11 @@ def main():
     # раскладка. Телосложение и ракурс стоят ДО описания позы, потому что
     # «SIDE VIEW» в конце промта перебивал «lean» в начале: узкий ракурс
     # побеждал при слове «broad» (замер 14.10: 0.24 ширины к высоте).
-    prompt = (f"{character}\n\n{proportions}\n\n{view}\n\n{pose}\n\n{layout}")
+    if args.tier == "elite":
+        # Appended, not merged: the base paragraph stays byte-identical, so an
+        # elite set cannot drift away from its own base set.
+        character = f"{character}\n\n{TIER_ELITE[args.hero_class]}"
+    prompt = (f"{character}\n\n{proportions}\n\n{view}\n\n{VIEW_LOCK}\n\n{pose}\n\n{layout}")
     default_tag = {"human": {"m": "nb5", "f": "nb6"},
                    "orc": {"m": "oc1", "f": "oc2"},
                    "undead": {"m": "un1", "f": "un2"},
