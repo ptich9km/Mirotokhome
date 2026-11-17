@@ -3,14 +3,41 @@ class_name Mercenary
 ## Tavern mercenary: follows the hero, attacks enemies (Game.enemies),
 ## does not level up and wears no armor (as in the original). Death removes it from the squad.
 
-@export var anim_set: String = "ork_mage_a52/t1"
+@export var anim_set: String = "merc/human_warrior/t0"
 @export var max_hp: int = 70
 @export var damage: int = 6
 @export var move_speed: float = 90.0
 @export var spirit: int = 5                # base magic resistance
+## Weapon kind for the Allods table (`` | sword | axe | club | pike | bow).
+## An archer fills it in `_ready`: the arrow damage then goes through the same
+## `Game.weapon_kind_of` path as a hero's bow.
+@export var weapon: String = ""
+
+## --- Role (16.11): the order says WHERE to go, the role says WHAT to do ------
+## A mercenary mage that walks into melee is the reported problem: he is hired
+## for magic, not for the staff. The role is per mercenary and lives next to the
+## squad orders (HUD Follow/Attack/Guard/Stop), which stay global.
+const ROLE_MELEE := "melee"    # warrior default: the old swing, unchanged
+const ROLE_RANGED := "ranged"  # archer: shoot from the distance
+const ROLE_STAFF := "staff"    # mage: swing the staff in close combat
+const ROLE_SPELL := "spell"    # mage: keep the distance and cast the chosen spell
+const ROLE_HEAL := "heal"      # mage: stay with the party and heal the wounded
+const MAGE_ROLES := [ROLE_STAFF, ROLE_SPELL, ROLE_HEAL]
+const WARRIOR_ROLES := [ROLE_MELEE]
+const ARCHER_ROLES := [ROLE_RANGED]
+
+## "" — the class default: a mage casts, a warrior swings.
+@export var role: String = ""
+## The chosen spell of the "spell" role ("" — the first unlocked one).
+@export var spell: String = ""
 
 var current_hp: int
 var attack_cooldown: float = 0.0
+var _cast_cd := 0.0
+var _heal_cd := 0.0
+var _shield_cd := 0.0
+var _cast_anim := 0.0                # >0 — the cast gesture is playing
+
 var _impact_timer := -1.0            # countdown to the hit frame (swing); <0 = no hit in flight
 var _pending_target: Node2D = null   # target of the current swing (damage on the hit frame)
 var state: String = "idle"      # idle | dying | decay | corpse
@@ -61,6 +88,8 @@ func _exit_tree() -> void:
 
 func _ready() -> void:
 	add_to_group("mercenary")
+	if weapon == "" and is_archer():
+		weapon = "bow"
 	Game.configure_unit_body(self)
 	# A hireling is never a wall for its owner (Diablo 2: pets and hirelings do not
 	# block the player). Without this the hero physically cannot walk towards a
@@ -77,6 +106,8 @@ func _physics_process(delta: float) -> void:
 	if Game.is_paused or _anim == null:
 		return
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
+	_cast_cd = maxf(0.0, _cast_cd - delta)
+	_heal_cd = maxf(0.0, _heal_cd - delta)
 	if lifespan > 0.0:
 		_lifetime += delta
 		if _lifetime >= lifespan:
@@ -113,31 +144,39 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_sync_order()
-	var target := _order_target()
-	# Hit frame: damage is applied on contact, not at the start of the swing
-	if _impact_timer >= 0.0:
-		_impact_timer -= delta
-		move_and_slide()
-		if _impact_timer < 0.0:
-			_impact_timer = -1.0
-			if is_instance_valid(_pending_target) and Game.enemies.has(_pending_target) \
-					and not Game.is_miss(self, _pending_target):
-				Game.deal_damage(_pending_target, damage, "physical", "", self)
-			_pending_target = null
-		return
-	if target != null:
-		# Combat distance is the gap between BODIES (the same measure as for the hero and enemies),
-		# otherwise the mercenary would swing at the air from half a step away.
-		if Game.units_range(self, target) > Game.attack_reach(self):
-			_move_toward(target.global_position, delta)
+	# Role actions (mage cast / heal) own the frame: they decide the approach
+	# distance themselves, so the melee block below must not steal the target.
+	if not _tick_role(delta):
+		var target := _order_target()
+		# Hit frame: damage is applied on contact, not at the start of the swing
+		if _impact_timer >= 0.0:
+			_impact_timer -= delta
+			move_and_slide()
+			if _impact_timer < 0.0:
+				_impact_timer = -1.0
+				if is_instance_valid(_pending_target) and Game.enemies.has(_pending_target) \
+						and not Game.is_miss(self, _pending_target):
+					Game.deal_damage(_pending_target, damage, "physical", "", self)
+				_pending_target = null
+			return
+		if target != null:
+			# Combat distance is the gap between BODIES (the same measure as for the hero and enemies),
+			# otherwise the mercenary would swing at the air from half a step away.
+			if Game.units_range(self, target) > Game.attack_reach(self):
+				_move_toward(target.global_position, delta)
+			else:
+				velocity = Vector2.ZERO
+				_attack(target)
 		else:
-			velocity = Vector2.ZERO
-			_attack(target)
-	else:
-		_hold_position(delta)
+			_hold_position(delta)
 
 	move_and_slide()
-	if velocity.length_squared() > 1.0:
+	if _cast_anim > 0.0 and velocity.length_squared() <= 1.0:
+		# The cast gesture: the mage raises the staff instead of swinging it.
+		_cast_anim -= delta
+		_anim.play(UnitAnim.Anim.ATTACK)
+		_anim.advance(delta)
+	elif velocity.length_squared() > 1.0:
 		_anim.play(UnitAnim.Anim.MOVE)
 		_anim.set_direction_vec(velocity)
 		_anim.advance(delta)
@@ -251,6 +290,360 @@ func _attack(target: Node2D) -> void:
 	# Swing: damage and sound on the hit frame (_impact_timer is processed in _physics_process)
 	_pending_target = target
 	_impact_timer = UnitDB.attack_delay(anim_set)
+
+
+## --- Roles -------------------------------------------------------------------
+## The class default: a mage casts from the distance, a warrior swings.
+func is_mage() -> bool:
+	return anim_set.contains("mage")
+
+
+## An archer shoots: the `*_archer` sets have a bow drawn in their hands, and
+## `attack` frames are the shot, so the melee swing would look like a man
+## beating an enemy with a bow.
+func is_archer() -> bool:
+	return anim_set.contains("archer")
+
+
+## The role in force. A warrior has no choice: only the swing is drawn for him,
+## so a stored "spell" role on a warrior set is ignored instead of shown as broken.
+func role_name() -> String:
+	if is_mage():
+		if role in MAGE_ROLES:
+			return role
+		return ROLE_SPELL
+	if is_archer():
+		return ROLE_RANGED
+	return ROLE_MELEE
+
+
+## Roles this set can play — the party panel draws exactly these buttons.
+func available_roles() -> Array:
+	if is_mage():
+		return MAGE_ROLES
+	if is_archer():
+		return ARCHER_ROLES
+	return WARRIOR_ROLES
+
+
+## Set the role from the UI/save. Returns false for a role this class cannot play.
+func set_role(value: String) -> bool:
+	var allowed := available_roles()
+	if value == "":
+		role = ""
+		return true
+	if not (value in allowed):
+		return false
+	role = value
+	if is_mage():
+		_spell_fallback()
+	return true
+
+
+## The face of the city the mercenary came from ("humans"/"ork"/"druid"/"necro"),
+## read from the set name. `MapGenerator.race_of_set` only understands the city
+## sets (`city_<race>_...`), so a mercenary folder is parsed here.
+const SET_RACES := {"human": "humans", "orc": "ork", "druid": "druid", "undead": "necro"}
+
+
+func race_id() -> String:
+	var folder := anim_set.get_slice("/", 1)
+	if folder == "":
+		folder = anim_set
+	var key := folder.get_slice("_", 0)
+	return str(SET_RACES.get(key, ""))
+
+
+## Reputation tier in the hero's faction: the same thresholds the tavern uses.
+func rep_tier() -> int:
+	var rep := Game.hero_reputation(race_id())
+	var t := 0
+	if rep >= GameConfig.geti("reputation", "tier_1"):
+		t = 1
+	if rep >= GameConfig.geti("reputation", "tier_2"):
+		t = 2
+	if rep >= GameConfig.geti("reputation", "tier_3"):
+		t = 3
+	return t
+
+
+## Spells of the race that are already unlocked by reputation, weakest first.
+## "Light" mages cast the first element spell, "elite" ones add the school's
+## heavy spell (blizzard / prismatic spray / stone curse / wall of fire).
+func spell_options() -> Array:
+	var tables := ContentRules.dict("merc.spells")
+	var own: Array = tables.get(race_id(), [])
+	var out: Array = []
+	var tier := rep_tier()
+	for raw in own:
+		if not (raw is Dictionary):
+			continue
+		var rec: Dictionary = raw
+		if int(rec.get("tier", 0)) > tier:
+			continue
+		var name := str(rec.get("spell", ""))
+		if name == "" or not SpellCasting.is_unit_castable(name):
+			continue
+		out.append({"spell": name, "tier": int(rec.get("tier", 0))})
+	return out
+
+
+## The spell actually cast now: the chosen one when it is still unlocked,
+## otherwise the first unlocked spell.
+func active_spell() -> String:
+	var opts := spell_options()
+	if opts.is_empty():
+		return ""
+	if spell != "":
+		for o in opts:
+			if str((o as Dictionary).get("spell", "")) == spell:
+				return spell
+	return str((opts[0] as Dictionary).get("spell", ""))
+
+
+## Drop a stored spell that is no longer offered (no reputation, data changed).
+func _spell_fallback() -> void:
+	if spell == "":
+		return
+	for o in spell_options():
+		if str((o as Dictionary).get("spell", "")) == spell:
+			return
+	spell = ""
+
+
+## Magic power for `Game.spell_damage`: the database damage belongs to a hero,
+## the mercenary's own `damage` is his scale. 0 % would keep the raw spell
+## numbers (a 6-damage hireling hitting for 14), so the power is negative and
+## puts the first spell exactly at the mercenary's own hit.
+func magic_power() -> float:
+	var ref := SpellDB.damage(ContentRules.str_value("merc.magic.ref_spell", "Fire_Arrow"))
+	if ref <= 0:
+		ref = 14
+	return (float(damage) / float(ref) - 1.0) * 100.0
+
+
+## Damage of a cast. `Game.spell_damage` treats a NEGATIVE power as "no override"
+## and falls back to the caster's own mind/skill (a mercenary has none, so 0),
+## which is why the formula is applied here directly: same numbers, but the
+## mercenary's negative power really shrinks the database damage.
+func magic_damage(spell_name: String) -> int:
+	var base := SpellDB.damage(spell_name)
+	if base <= 0:
+		return 0
+	var coef := SpellDB.power_coef_of(spell_name)
+	var raw := float(base) * coef * (1.0 + magic_power() / 100.0)
+	return maxi(SpellDB.min_damage_of(spell_name), int(round(raw)))
+
+
+## Where the spell leaves the body: the chest, not the feet.
+func cast_origin() -> Vector2:
+	return global_position + Vector2(0.0, -Game.unit_visual_height(self) * 0.6)
+
+
+## Frames the role owns. Returns true when the frame was consumed, so the melee
+## block of `_physics_process` must not run.
+func _tick_role(delta: float) -> bool:
+	_tick_shield(delta)
+	if is_archer():
+		return _tick_ranged(delta)
+	if not is_mage():
+		return false
+	match role_name():
+		ROLE_SPELL:
+			return _tick_spell(delta)
+		ROLE_HEAL:
+			return _tick_heal(delta)
+	return false
+
+
+## Archer: keep the bow range, loose an arrow when the enemy is inside it.
+func _tick_ranged(delta: float) -> bool:
+	var target := _order_target()
+	if target == null:
+		_hold_position(delta)
+		return true
+	var cfg := ContentRules.dict("merc.ranged")
+	var keep := float(cfg.get("keep", 220.0))
+	if Game.units_range(self, target) > keep:
+		_move_toward(target.global_position, delta)
+	else:
+		velocity = velocity.move_toward(Vector2.ZERO, 1800.0 * delta)
+		_shoot(target)
+	return true
+
+
+## The arrow itself flies as a node: damage lands on arrival, not at the shot,
+## so a target that steps behind a wall of bodies is not hit instantly.
+func _shoot(target: Node2D) -> void:
+	if attack_cooldown > 0.0 or not is_instance_valid(target) or not Game.enemies.has(target):
+		return
+	var cfg := ContentRules.dict("merc.ranged")
+	var arrow := ArrowShot.new()
+	arrow.from_pos = cast_origin()
+	arrow.to_pos = target.global_position
+	arrow.target = target
+	arrow.shooter = self
+	arrow.damage = damage
+	arrow.speed = float(cfg.get("arrow_speed", 520.0))
+	var scene_root := get_tree().current_scene if is_inside_tree() else null
+	if scene_root != null:
+		scene_root.add_child(arrow)
+	else:
+		add_child(arrow)
+	attack_cooldown = GameConfig.getf("combat", "attack_cooldown")
+	_cast_anim = 0.45
+	SoundDB.play("combat.bow")
+
+
+## Caster: keep the spell range, cast when the enemy is inside it.
+func _tick_spell(delta: float) -> bool:
+	var sp := active_spell()
+	if sp == "":
+		return false
+	var target := _order_target()
+	if target == null:
+		_hold_position(delta)
+		return true
+	var ratio := float(ContentRules.dict("merc.magic").get("range_ratio", 0.8))
+	var keep := maxf(48.0, SpellDB.range_of(sp) * ratio)
+	if Game.units_range(self, target) > keep:
+		_move_toward(target.global_position, delta)
+	else:
+		velocity = velocity.move_toward(Vector2.ZERO, 1800.0 * delta)
+		_cast_at(target, sp)
+	return true
+
+
+## Healer: never chases an enemy, stays near the party and heals the wounded.
+func _tick_heal(delta: float) -> bool:
+	var patient := _wounded_ally()
+	if patient == null:
+		_hold_position(delta)
+		return true
+	var reach := _heal_range()
+	if global_position.distance_to(patient.global_position) > reach * 0.85:
+		_move_toward(patient.global_position, delta)
+	else:
+		velocity = velocity.move_toward(Vector2.ZERO, 1800.0 * delta)
+		_heal_patient(patient)
+	return true
+
+
+func _heal_range() -> float:
+	return float(ContentRules.dict("merc.heal").get("range", 200.0))
+
+
+func _heal_patient(patient: Node2D) -> void:
+	if _heal_cd > 0.0 or not is_instance_valid(patient):
+		return
+	if not patient.has_method("heal_amount"):
+		return
+	var max_life := int(patient.get("max_hp"))
+	if max_life <= 0:
+		return
+	var percent := float(ContentRules.dict("merc.heal").get("percent", 0.08))
+	var amount := maxi(1, int(round(float(max_life) * percent)))
+	if int(patient.call("heal_amount", amount)) <= 0:
+		return
+	SpellAura.heal_cross(patient)
+	SoundDB.play("magic.heal")
+	_cast_anim = 0.5
+	_heal_cd = float(ContentRules.dict("merc.heal").get("cooldown", 2.5))
+
+
+## The most wounded ally in reach: the hero, the party and the mage himself.
+## Enemies are never in this list — a healer that healed a monster would be worse
+## than no healer at all.
+func _wounded_ally() -> Node2D:
+	var threshold := GameConfig.getf("magic", "auto_heal_ratio")
+	if threshold <= 0.0:
+		threshold = 0.45
+	var leash := maxf(_heal_range() * 2.0, 320.0)
+	var best: Node2D = null
+	var worst := threshold
+	var units: Array = [self]
+	if is_instance_valid(Game.hero):
+		units.append(Game.hero)
+	for m in Game.party:
+		if is_instance_valid(m) and m != self:
+			units.append(m)
+	for raw in units:
+		var u: Node2D = raw as Node2D
+		if u == null or not is_instance_valid(u):
+			continue
+		if "state" in u and str(u.get("state")) in ["dying", "decay", "corpse"]:
+			continue
+		if not ("current_hp" in u) or not ("max_hp" in u):
+			continue
+		var max_life := int(u.get("max_hp"))
+		if max_life <= 0:
+			continue
+		var ratio := float(int(u.get("current_hp"))) / float(max_life)
+		if ratio >= worst:
+			continue
+		if u != self and global_position.distance_to(u.global_position) > leash:
+			continue
+		worst = ratio
+		best = u
+	return best
+
+
+## Mages shield themselves: the Allods behaviour the player asked to keep.
+## Absorb-shield (not hero armour): a mercenary lives on `shield_reduce`.
+func _tick_shield(delta: float) -> void:
+	if not is_mage():
+		return
+	_shield_cd = maxf(0.0, _shield_cd - delta)
+	if _shield_cd > 0.0:
+		return
+	var cfg := ContentRules.dict("merc.magic")
+	if _nearest_enemy(float(cfg.get("shield_alarm_radius", 320.0))) == null:
+		return
+	if int(get_meta("shield_strength", 0)) > 0 and float(get_meta("shield_time", 0.0)) > 0.0:
+		return
+	var spell_name := str(cfg.get("shield", "Shield"))
+	var spell := SpellDB.get_spell(spell_name)
+	if spell.is_empty():
+		return
+	StatusEffects.apply_spell(self, spell, self)
+	SpellVFX.aura_ring(self, "Astral", "buff")
+	SoundDB.play("magic.shield")
+	_shield_cd = float(cfg.get("shield_cooldown", 14.0))
+
+
+## One cast at a target. The spell kind decides the effect: the same dispatcher
+## shape the hero uses, but without hero-only branches (teleport, summon, raise).
+func _cast_at(target: Node2D, spell_name: String) -> void:
+	if _cast_cd > 0.0 or not is_instance_valid(target) or not Game.enemies.has(target):
+		return
+	var spell := SpellDB.get_spell(spell_name)
+	if spell.is_empty():
+		return
+	var sphere := SpellDB.sphere_of(spell_name)
+	var kind := str(spell.get("kind", "attack"))
+	var dmg := magic_damage(spell_name)
+	var origin := cast_origin()
+	var aim: Vector2 = target.global_position
+	match kind:
+		"attack", "area":
+			if str(spell.get("projectile", "")) == "chain":
+				SpellCasting.cast_chain(self, spell_name, aim, origin, dmg,
+					float(spell.get("area", 0)))
+			elif str(spell.get("zone_style", "")) != "":
+				SpellCasting.cast_zone(self, spell_name, sphere, aim, dmg)
+			else:
+				SpellCasting.launch_projectile(self, spell_name, origin, aim, dmg,
+					float(spell.get("area", 0)))
+		"debuff":
+			StatusEffects.apply_spell(target, spell, self)
+			SpellVFX.aura_ring(target, sphere, "debuff")
+		"wall":
+			SpellCasting.cast_wall(self, spell_name, sphere, aim, origin, dmg)
+		_:
+			return
+	_cast_cd = maxf(0.6, SpellDB.cooldown_of(spell_name))
+	_cast_anim = 0.5
+	SoundDB.play(SpellDB.sound_of(spell_name))
 
 func take_damage(dmg: int, _attacker: Node2D) -> int:
 	# A dead mercenary takes no damage

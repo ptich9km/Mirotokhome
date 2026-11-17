@@ -115,7 +115,50 @@
 	},
 	{
 		"key": "inn.candidates",
-		"value": ["ork_mage_a52/t0", "ork_mage_a52/t1", "ork_mage_a52/t2", "ork_mage_a52/t3"]
+		"value": ["merc/human_warrior/t0", "merc/orc_warrior/t0", "merc/druid_mage/t0", "merc/undead_warrior/t0"]
+	},
+	{
+		"key": "inn.candidates.humans",
+		"value": ["merc/human_warrior/t0", "merc/human_archer/t0", "merc/human_mage/t0", "merc/human_mage/t1"]
+	},
+	{
+		"key": "inn.candidates.ork",
+		"value": ["merc/orc_warrior/t0", "merc/orc_archer/t0", "merc/orc_mage/t0", "merc/orc_warrior/t1", "merc/orc_mage/t1"]
+	},
+	{
+		"key": "inn.candidates.druid",
+		"value": ["merc/druid_warrior/t0", "merc/druid_archer/t0", "merc/druid_mage/t0", "merc/druid_warrior/t1"]
+	},
+	{
+		"key": "inn.candidates.necro",
+		"value": ["merc/undead_warrior/t0", "merc/undead_archer/t0", "merc/undead_mage/t0", "merc/undead_warrior/t1", "merc/undead_mage/t1"]
+	},
+	{
+		"key": "merc.spells",
+		"value": {
+			"humans": [{"spell": "Fire_Arrow", "tier": 0}, {"spell": "Fire_Ball", "tier": 2}, {"spell": "Prismatic_Spray", "tier": 3}],
+			"ork": [{"spell": "Fire_Arrow", "tier": 0}, {"spell": "Stone_Curse", "tier": 2}],
+			"druid": [{"spell": "Lightning", "tier": 0}, {"spell": "Blizzard", "tier": 2}],
+			"necro": [{"spell": "Ice_Missile", "tier": 0}, {"spell": "Prismatic_Spray", "tier": 2}]
+		}
+	},
+	{
+		"key": "merc.magic",
+		"value": {
+			"ref_spell": "Fire_Arrow",
+			"range_ratio": 0.8,
+			"shield": "Shield",
+			"shield_alarm_radius": 320.0,
+			"shield_cooldown": 14.0
+		}
+	},
+	{
+		"key": "merc.heal",
+		"value": {"percent": 0.08, "cooldown": 2.5, "range": 200.0}
+	},
+	{
+		"key": "merc.ranged",
+		"value": {"keep": 220.0, "arrow_speed": 520.0}
 	},
 	{
 		"key": "combat.weapon_vs_type",

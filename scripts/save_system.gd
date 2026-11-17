@@ -692,6 +692,10 @@ static func _party_snapshot() -> Array:
 			"damage": int(m.get("damage")),
 			"spirit": int(m.get("spirit")),
 			"speed": float(m.get("move_speed")),
+			# Role is a choice of the player, not a scene detail: it must survive
+			# the save together with the chosen spell.
+			"role": str(m.get("role")),
+			"spell": str(m.get("spell")),
 			"x": unit.global_position.x,
 			"y": unit.global_position.y,
 		})
@@ -720,6 +724,10 @@ static func _party_saved(v: Variant) -> Array:
 			"damage": maxi(0, int(rec.get("damage", 6))),
 			"spirit": maxi(0, int(rec.get("spirit", 5))),
 			"speed": maxf(10.0, float(rec.get("speed", 90.0))),
+			# An unknown role is dropped by `Mercenary.set_role` on restore, so a
+			# save from an older version just keeps the class default.
+			"role": str(rec.get("role", "")),
+			"spell": str(rec.get("spell", "")),
 			"x": float(rec.get("x", 0.0)),
 			"y": float(rec.get("y", 0.0)),
 		})

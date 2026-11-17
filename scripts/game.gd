@@ -1284,6 +1284,8 @@ func _restore_pending_party() -> void:
 		mercenary.damage = maxi(0, int(rec.get("damage", mercenary.damage)))
 		mercenary.spirit = maxi(0, int(rec.get("spirit", mercenary.spirit)))
 		mercenary.move_speed = maxf(10.0, float(rec.get("speed", mercenary.move_speed)))
+		mercenary.set_role(str(rec.get("role", "")))
+		mercenary.spell = str(rec.get("spell", ""))
 		add_child(mercenary)
 		var saved_pos := Vector2(float(rec.get("x", 0.0)), float(rec.get("y", 0.0)))
 		var on_land := false

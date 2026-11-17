@@ -44,8 +44,12 @@ var _view_index := 0
 var _page_inventory: VBoxContainer = null
 var _page_relations: VBoxContainer = null
 var _page_crafts: VBoxContainer = null
+var _page_party: VBoxContainer = null
 var _relations_box: VBoxContainer = null
 var _crafts_box: VBoxContainer = null
+## Squad tab (17.11): roles of the mercenaries. The panel is the only place a
+## single mercenary can be addressed — the HUD order buttons are global.
+var _party_box: VBoxContainer = null
 var _gold_coin: TextureRect = null
 var _gold_frame := 0
 var _gold_anim_t := 0.0
@@ -314,7 +318,9 @@ func _build_ui() -> void:
 	holder.add_child(_page_relations)
 	_page_crafts = _make_page("CraftsPage")
 	holder.add_child(_page_crafts)
-	_view_pages = [_page_inventory, _page_relations, _page_crafts]
+	_page_party = _make_page("PartyPage")
+	holder.add_child(_page_party)
+	_view_pages = [_page_inventory, _page_relations, _page_crafts, _page_party]
 	_set_view(0)
 
 	# Верх: кукла (имя сверху) СЛЕВА | статы расширены вправо.
@@ -403,10 +409,11 @@ func _build_ui() -> void:
 	_refresh()
 
 
-## Вкладки видов: склад, отношения, ремесла. Живут в шапке (height budget).
+## Вкладки видов: склад, отношения, ремёсла, отряд. Живут в шапке (height budget).
 func _build_view_tabs(header: HBoxContainer) -> void:
 	_view_group = ButtonGroup.new()
-	var names := ["ui.inv.tab.storage", "ui.inv.tab.relations", "ui.inv.tab.crafts"]
+	var names := ["ui.inv.tab.storage", "ui.inv.tab.relations", "ui.inv.tab.crafts",
+		"ui.inv.tab.party"]
 	for i in range(names.size()):
 		var b := Button.new()
 		b.name = "ViewTab%d" % i
@@ -438,6 +445,9 @@ func _make_page(page_name: String) -> VBoxContainer:
 	elif page_name == "CraftsPage":
 		title.text = Loc.t("ui.inv.crafts_title")
 		_crafts_box = VBoxContainer.new()
+	elif page_name == "PartyPage":
+		title.text = Loc.t("ui.inv.party_title")
+		_party_box = VBoxContainer.new()
 	else:
 		_relations_box = VBoxContainer.new()
 	page.add_child(title)
@@ -449,6 +459,8 @@ func _make_page(page_name: String) -> VBoxContainer:
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	page.add_child(scroll)
 	var box := _relations_box if page_name == "RelationsPage" else _crafts_box
+	if page_name == "PartyPage":
+		box = _party_box
 	if box == null:
 		box = VBoxContainer.new()
 	box.name = "Rows"
@@ -470,6 +482,103 @@ func _set_view(index: int) -> void:
 		_refresh_relations()
 	elif _view_index == 2:
 		_refresh_crafts()
+	elif _view_index == 3:
+		_refresh_party()
+
+
+## --- Отряд tab (17.11) ---------------------------------------------------------
+## The role is the only per-mercenary setting in the game: the HUD order buttons
+## (follow / attack / guard / stop) stay global for the hero and the squad.
+## Mage: staff / the chosen spell / healing. Archer: bow. Warrior: melee.
+func _refresh_party() -> void:
+	if _party_box == null:
+		return
+	_clear_box(_party_box)
+	var title := Label.new()
+	title.theme_type_variation = &"InvSection"
+	title.text = Loc.t("ui.inv.party.section")
+	_party_box.add_child(title)
+	if Game.party.is_empty():
+		var none := Label.new()
+		none.theme_type_variation = &"InvRowNote"
+		none.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		none.text = Loc.t("ui.inv.party.empty")
+		_party_box.add_child(none)
+		return
+	for raw in Game.party:
+		var m: Mercenary = raw as Mercenary
+		if m == null or not is_instance_valid(m):
+			continue
+		_party_box.add_child(_party_row(m))
+	var note := Label.new()
+	note.theme_type_variation = &"InvRowNote"
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.text = Loc.t("ui.inv.party.note")
+	_party_box.add_child(note)
+
+
+## One squad row: name + HP, the role buttons, and the spell picker for a mage.
+func _party_row(m: Mercenary) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", UiTheme.SPACE_2)
+	var name_label := Label.new()
+	name_label.theme_type_variation = &"InvRowLabel"
+	name_label.custom_minimum_size = Vector2(210, 0)
+	name_label.text = UnitDB.display_name(m.anim_set)
+	row.add_child(name_label)
+	var hp := Label.new()
+	hp.theme_type_variation = &"InvRowValue"
+	hp.custom_minimum_size = Vector2(110, 0)
+	hp.text = Loc.f("ui.inv.party.hp", [m.current_hp, m.max_hp])
+	row.add_child(hp)
+	var roles := m.available_roles()
+	var group := ButtonGroup.new()
+	var active := m.role_name()
+	for role in roles:
+		var b := Button.new()
+		b.theme_type_variation = &"InvTab"
+		b.toggle_mode = true
+		b.button_group = group
+		b.button_pressed = str(role) == active
+		b.custom_minimum_size = Vector2(0, 26)
+		b.focus_mode = Control.FOCUS_ALL
+		b.text = Loc.t("ui.role.%s" % str(role))
+		b.tooltip_text = Loc.t("ui.role.%s.tip" % str(role))
+		b.pressed.connect(func() -> void:
+			m.set_role(str(role))
+			_refresh_party())
+		row.add_child(b)
+	if m.is_mage():
+		row.add_child(_spell_picker(m))
+	return row
+
+
+## The spell picker of a mage. Only spells unlocked by reputation are listed:
+## the base element always, the "elite" ones from tier 2-3 (merc.spells rules).
+func _spell_picker(m: Mercenary) -> Control:
+	var opts := m.spell_options()
+	if opts.is_empty():
+		var none := Label.new()
+		none.theme_type_variation = &"InvRowNote"
+		none.text = Loc.t("ui.inv.party.no_spell")
+		return none
+	var pick := OptionButton.new()
+	pick.custom_minimum_size = Vector2(240, 0)
+	pick.focus_mode = Control.FOCUS_ALL
+	var current := m.active_spell()
+	var active_index := 0
+	for i in range(opts.size()):
+		var entry: Dictionary = opts[i]
+		var spell_name := str(entry.get("spell", ""))
+		pick.add_item(SpellDB.display_name(spell_name))
+		if spell_name == current:
+			active_index = i
+	pick.selected = active_index
+	pick.item_selected.connect(func(index: int) -> void:
+		if index >= 0 and index < opts.size():
+			m.spell = str((opts[index] as Dictionary).get("spell", ""))
+			_refresh_party())
+	return pick
 
 
 ## --- Вкладка «Отношения» ------------------------------------------------------

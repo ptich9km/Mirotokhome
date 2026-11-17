@@ -7,7 +7,23 @@ const MAX_PARTY := 4
 ## Mercenary candidates by tier (weaker -> stronger). Data, not a constant:
 ## a mod can add its own set to the inn (`inn.candidates` in
 ## assets/config/content_rules.json).
+##
+## 14.11: the pool is per city race, because the old single pool handed out four
+## static orc mages in a town of humans. The city race id is the one used by
+## CITY_POPULATION ("humans"/"ork"/"druid"/"necro"); `inn.candidates` stays the
+## fallback for a map without a city, and for any race that has no pool yet.
+##
+## The pool is ordered weakest -> strongest: `_generate_candidates` shows its
+## first `tier + 1` entries, so the position in the pool is the reputation gate.
+## 15.11: every entry is `merc/<race>_<class>/t<tier>`; the t1 grade is the same
+## character with added gear (helmet + shin plates for a warrior, gold trim for a
+## mage). Two sets have no t1 yet (see tests/add_merc_sets_db.py), so the human
+## and druid pools are one entry shorter.
 func _candidate_sets() -> Array:
+	if _race != "":
+		var own: Array = ContentRules.list("inn.candidates.%s" % _race)
+		if not own.is_empty():
+			return own
 	return ContentRules.list("inn.candidates")
 
 ## Dialogue lines live in `assets/locale/ui.json` so the subtitle follows the UI

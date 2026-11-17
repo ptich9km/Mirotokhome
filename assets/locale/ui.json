@@ -1447,5 +1447,22 @@
   "ui.sim.hero_default": {"ru": "Герой", "en": "Hero"},
   "ui.feed.rescue": {"ru": "Путник спасён: +%d золота", "en": "Traveller saved: +%d gold"},
   "ui.inv.quest_only": {"ru": "Квестовый предмет: его нельзя прочитать, надеть или продать — только отнести по заданию.", "en": "Quest item: it cannot be read, worn or sold - only carried to its quest giver."},
-  "ui.quality.quest": {"ru": "Квестовый предмет", "en": "Quest item"}
+  "ui.quality.quest": {"ru": "Квестовый предмет", "en": "Quest item"},
+  "ui.inv.tab.party": {"ru": "Отряд", "en": "Party"},
+  "ui.inv.party_title": {"ru": "Отряд", "en": "Party"},
+  "ui.inv.party.section": {"ru": "Наёмники", "en": "Mercenaries"},
+  "ui.inv.party.empty": {"ru": "Наёмников нет. Нанятые в таверне появятся здесь.", "en": "No mercenaries yet. Ones hired at an inn appear here."},
+  "ui.inv.party.hp": {"ru": "Жизнь %d / %d", "en": "HP %d / %d"},
+  "ui.inv.party.note": {"ru": "Роль решает, что делает наёмник. Кнопки приказов внизу экрана по-прежнему говорят только, куда идти.", "en": "The role decides what a mercenary does. The order buttons at the bottom of the screen still say only where to go."},
+  "ui.inv.party.no_spell": {"ru": "Заклинаний нет", "en": "No spells"},
+  "ui.role.melee": {"ru": "Ближний бой", "en": "Melee"},
+  "ui.role.melee.tip": {"ru": "Подходит вплотную и бьёт", "en": "Walks up close and swings"},
+  "ui.role.ranged": {"ru": "Лук", "en": "Bow"},
+  "ui.role.ranged.tip": {"ru": "Держит дистанцию и стреляет стрелами", "en": "Keeps the distance and shoots arrows"},
+  "ui.role.staff": {"ru": "Посох", "en": "Staff"},
+  "ui.role.staff.tip": {"ru": "Бьёт посохом в ближнем бою", "en": "Fights with the staff at close range"},
+  "ui.role.spell": {"ru": "Магия", "en": "Magic"},
+  "ui.role.spell.tip": {"ru": "Держит дистанцию и бьёт выбранным заклинанием", "en": "Keeps the distance and casts the chosen spell"},
+  "ui.role.heal": {"ru": "Лечение", "en": "Healing"},
+  "ui.role.heal.tip": {"ru": "Не бросается в бой: лечит героя и отряд", "en": "Does not rush into battle: heals the hero and the party"}
 }

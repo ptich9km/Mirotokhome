@@ -79,20 +79,23 @@ func _run() -> void:
 		_report()
 		return
 
-	print("-- три вкладки --")
+	print("-- четыре вкладки --")
 	var tabs: Array = inv.get("_view_tabs")
 	var pages: Array = inv.get("_view_pages")
-	_check(tabs.size() == 3, "вкладок три (сейчас %d)" % tabs.size())
-	_check(pages.size() == 3, "страниц три (сейчас %d)" % pages.size())
-	if tabs.size() == 3 and pages.size() == 3:
+	# 17.11: the squad tab (mercenary roles) joined storage / relations / crafts.
+	_check(tabs.size() == 4, "вкладок четыре (сейчас %d)" % tabs.size())
+	_check(pages.size() == 4, "страниц четыре (сейчас %d)" % pages.size())
+	if tabs.size() == 4 and pages.size() == 4:
 		# The tab text comes from ui.json now, so the check compares against the
 		# localized key instead of a Russian literal: a literal would break on the
 		# language switch and would pin the wording to one locale.
 		_check(str((tabs[0] as Button).text) == Loc.t("ui.inv.tab.storage"), "первая вкладка — «Склад»")
 		_check(str((tabs[1] as Button).text) == Loc.t("ui.inv.tab.relations"), "вторая — «Отношения»")
 		_check(str((tabs[2] as Button).text) == Loc.t("ui.inv.tab.crafts"), "третья — «Ремёсла»")
+		_check(str((tabs[3] as Button).text) == Loc.t("ui.inv.tab.party"), "четвёртая — «Отряд»")
 		_check((pages[0] as Control).visible and not (pages[1] as Control).visible
-			and not (pages[2] as Control).visible, "видна только страница склада")
+			and not (pages[2] as Control).visible and not (pages[3] as Control).visible,
+			"видна только страница склада")
 
 	print("-- склад не сломан --")
 	var page_inv: Control = pages[0] if pages.size() > 0 else null

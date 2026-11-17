@@ -99,6 +99,12 @@ func _run() -> void:
 	_check(t1 < t2 and t2 < t3, "пороги растут: %d < %d < %d" % [t1, t2, t3])
 
 	var cases := [[0, 0], [t1, 1], [t2, 2], [t3, 3]]
+	var pool: Array = ContentRules.list("inn.candidates.%s" % RACE)
+	## 15.11: the pool is a per-race gear ladder and its length is not fixed any
+	## more (humans have three grades, orcs four). The rule is "reputation opens
+	## one more candidate, never more than the pool holds", so the expectation is
+	## capped by the pool instead of the old hard-coded four.
+	_check(pool.size() >= 3, "пул %s не короче трёх ступеней (%d)" % [RACE, pool.size()])
 	var costs: Array[int] = []
 	for c in cases:
 		_set_rep(int(c[0]))
@@ -107,9 +113,10 @@ func _run() -> void:
 		var cands: Array = inn.get("_candidates")
 		_check(tier == int(c[1]), "репутация %d -> тир %d (сейчас %d)"
 			% [int(c[0]), int(c[1]), tier])
-		_check(cands.size() == int(c[1]) + 1,
+		var expect := mini(int(c[1]) + 1, pool.size())
+		_check(cands.size() == expect,
 			"тир %d: кандидатов %d (ожидалось %d)"
-				% [tier, cands.size(), int(c[1]) + 1])
+				% [tier, cands.size(), expect])
 		costs.append(int(cands[0].get("cost", 0)))
 		inn.free()
 	_check(costs[0] < costs[3], "цена найма растёт с тиром (%d -> %d)"
