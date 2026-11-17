@@ -87,7 +87,7 @@ func _run() -> void:
 	await create_timer(0.2).timeout
 	_check(MusicDB.current_index() == 1, "MusicDB: next_track() дал трек 1")
 	_check(MusicDB.current_file() == "town_rest_1.ogg", "MusicDB: второй файл — town_rest_1")
-	MusicDB.stop(0.1)
+	MusicDB.stop()
 	await create_timer(0.2).timeout
 
 	if _fails.is_empty():

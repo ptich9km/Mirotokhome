@@ -26,6 +26,9 @@ static var _loaded := false
 static var _root: Node = null
 static var _players: Array = []
 static var _timer: Timer = null
+## The running crossfade. Kept as a single reference so a new track can cancel
+## the previous fade instead of leaving two tweens on the same property.
+static var _fade: Tween = null
 static var _active := 0
 static var _index := -1
 static var _current_file := ""
@@ -90,23 +93,25 @@ static func next_track() -> bool:
 	return _advance(_crossfade)
 
 ## Плавно остановить музыку и сбросить очередь.
-static func stop(fade: float = 1.5) -> void:
+## Stop the queue immediately and silence every player.
+##
+## The fade-out that used to live here is gone on purpose: a tween on the same
+## `volume_db` could outlive the stop and then stop the NEXT track that had just
+## started fading in. Two tracks at once on one bus was the measured symptom, so
+## the stop is now a hard stop for all players.
+static func stop() -> void:
 	if _timer != null:
 		_timer.stop()
-	if _players.is_empty():
-		_started = false
-		_index = -1
-		_current_file = ""
-		return
-	var p := _players[_active] as AudioStreamPlayer
+	if _fade != null and _fade.is_valid():
+		_fade.kill()
+		_fade = null
 	_started = false
 	_index = -1
 	_current_file = ""
-	if not p.playing:
-		return
-	var tw := p.create_tween()
-	tw.tween_property(p, "volume_db", -60.0, fade)
-	tw.tween_callback(p.stop)
+	for raw in _players:
+		var player := raw as AudioStreamPlayer
+		if player != null and player.playing:
+			player.stop()
 
 static func _advance(fade_in: float) -> bool:
 	if _playlist.is_empty():
@@ -131,12 +136,20 @@ static func _play_index(i: int, fade_in: float) -> bool:
 	next.bus = _bus_name
 	next.volume_db = -45.0
 	next.play()
-	var tw := next.create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(next, "volume_db", _gain_db, fade_in)
-	if old.playing:
-		tw.tween_property(old, "volume_db", -45.0, fade_in)
-		tw.chain().tween_callback(old.stop)
+	# A previous fade must not survive: two live tweens fight over `volume_db`,
+	# and a stale one stops the track that is currently fading IN (measured).
+	if _fade != null and _fade.is_valid():
+		_fade.kill()
+	_fade = next.create_tween()
+	_fade.set_parallel(true)
+	_fade.tween_property(next, "volume_db", _gain_db, fade_in)
+	# The old player is faded and stopped UNCONDITIONALLY. Asking `old.playing`
+	# was wrong: while the tree is paused the property reads false, so the old
+	# track was neither faded nor stopped and came back at full volume after the
+	# unpause, playing on top of the new one for the rest of the session.
+	# The crossfade lands in a pause by design (the TrackTimer is ALWAYS).
+	_fade.tween_property(old, "volume_db", -45.0, fade_in)
+	_fade.chain().tween_callback(old.stop)
 	_active = 1 - _active
 	_index = i
 	_current_file = rel
@@ -171,6 +184,11 @@ static func _ensure_nodes() -> bool:
 	SoundDB.ensure_buses()
 	_root = Node.new()
 	_root.name = "MusicBus"
+	# The queue and the track players ignore the pause: the TrackTimer was always
+	# running during a pause, so a crossfade could start while the tree was frozen.
+	# Then `playing` read false on the old player, its fade-out never ran, and the
+	# old track came back at full volume on top of the new one (measured 18.11).
+	_root.process_mode = Node.PROCESS_MODE_ALWAYS
 	_root.tree_exiting.connect(_on_root_exiting)
 	tree.root.add_child(_root)
 	_players.clear()
@@ -198,6 +216,7 @@ static func _on_root_exiting() -> void:
 	if _timer != null:
 		_timer.stop()
 	_timer = null
+	_fade = null
 	_players.clear()
 	_root = null
 	_index = -1
