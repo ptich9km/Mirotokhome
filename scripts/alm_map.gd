@@ -1178,6 +1178,12 @@ func blocked_reason(cell: Vector2i) -> String:
 		if file_n == WalkTable.MOUNTAIN_FILE:
 			return "горы (tile2) — непроходимы"
 		return "непроходимая текстура (tile%d-%02d)" % [file_n, variant]
+	# "Allow passage" (editor marking, and the undergrowth cells the generator
+	# writes): the obstacle is there but units walk through it, so nothing blocks.
+	# Without this line `blocked_reason` contradicted `is_walkable_world` on every
+	# undergrowth cell.
+	if _allowwalk.has(cell):
+		return ""
 	if _obstacles.size() > i and _obstacles[i] > 0:
 		return "дерево/камень"
 	if _structure_blocks_cell(cell):
