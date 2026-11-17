@@ -3,15 +3,23 @@
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File tests/run_all.ps1
 #   powershell -File tests/run_all.ps1 -Godot "C:\Games\Godot_v4.7.2-stable_win64_console.exe"
+#   powershell -File tests/run_all.ps1 -TestTimeoutSec 300
 #
 # The script checks the parse first, then runs every tests/*_smoke.gd. A test
 # passes when its output contains "RESULT: OK" or the runtime smoke marker.
 # The process exit code is not used: Godot returns 1 on leaked resources even
 # when the checks passed.
+#
+# Every Godot run is hard-capped by -TestTimeoutSec. A hanging test must not hang
+# the whole run (a broken script can leave the process spinning forever), so the
+# child is started with Start-Process and killed on timeout; such a test counts
+# as failed and the run continues.
 
 param(
 	[string]$Godot = "",
-	[string]$Filter = "*_smoke.gd"
+	[string]$Filter = "*_smoke.gd",
+	[int]$TestTimeoutSec = 240,
+	[int]$ParseTimeoutSec = 300
 )
 
 $ErrorActionPreference = "Continue"
@@ -34,11 +42,40 @@ if ($Godot -eq "" -or -not (Test-Path $Godot)) {
 	throw "Godot console executable not found. Pass -Godot <path>."
 }
 
+# Run Godot with a hard timeout; returns @{ text = output; timed_out = bool }.
+function Invoke-GodotCapped {
+	param(
+		[string]$Exe,
+		[string[]]$Arguments,
+		[int]$TimeoutSec,
+		[string]$Tag
+	)
+	$logOut = Join-Path $env:TEMP ("godot_" + $Tag + ".out.log")
+	$logErr = Join-Path $env:TEMP ("godot_" + $Tag + ".err.log")
+	if (Test-Path $logOut) { Remove-Item $logOut -Force }
+	if (Test-Path $logErr) { Remove-Item $logErr -Force }
+	$proc = Start-Process -FilePath $Exe -ArgumentList $Arguments -NoNewWindow -PassThru `
+		-RedirectStandardOutput $logOut -RedirectStandardError $logErr
+	$finished = $proc.WaitForExit($TimeoutSec * 1000)
+	if (-not $finished) {
+		try { $proc.Kill($true) } catch {}
+		return @{ text = ""; timed_out = $true }
+	}
+	$lines = @()
+	try { $lines += Get-Content $logOut } catch {}
+	try { $lines += Get-Content $logErr } catch {}
+	return @{ text = ($lines | Out-String); timed_out = $false }
+}
+
 Push-Location $root
 try {
 	Write-Host "== parse =="
-	$parse = & $Godot --headless --path . --quit 2>&1
-	$parseErrors = $parse | Select-String "SCRIPT ERROR|Parse Error"
+	$parse = Invoke-GodotCapped -Exe $Godot -Arguments @("--headless", "--path", ".", "--quit") `
+		-TimeoutSec $ParseTimeoutSec -Tag "parse"
+	if ($parse.timed_out) {
+		throw ("parse timed out after " + $ParseTimeoutSec + " s")
+	}
+	$parseErrors = $parse.text -split "`r?`n" | Select-String "SCRIPT ERROR|Parse Error"
 	if ($parseErrors) {
 		$parseErrors | ForEach-Object { Write-Host $_ }
 		throw "parse failed"
@@ -54,8 +91,15 @@ try {
 	$passed = 0
 	foreach ($test in $tests) {
 		$name = $test.BaseName
-		$out = & $Godot --headless --path . --script ("res://tests/" + $name + ".gd") 2>&1
-		$text = ($out | Out-String)
+		$run = Invoke-GodotCapped -Exe $Godot `
+			-Arguments @("--headless", "--path", ".", "--script", ("res://tests/" + $name + ".gd")) `
+			-TimeoutSec $TestTimeoutSec -Tag $name
+		if ($run.timed_out) {
+			$failed += $name
+			Write-Host ("  TIMEOUT " + $name + " (> " + $TestTimeoutSec + " s), process killed")
+			continue
+		}
+		$text = $run.text
 		$ok = $text.Contains("RESULT: OK") -or $text.Contains("RESULT: PASS") `
 			-or $text.Contains("0 fails") -or $text.Contains("SMOKE:")
 		if ($ok) {
@@ -64,7 +108,7 @@ try {
 		} else {
 			$failed += $name
 			Write-Host ("  FAIL " + $name)
-			$out | Select-Object -Last 8 | ForEach-Object { Write-Host ("       " + $_) }
+			($text -split "`r?`n") | Select-Object -Last 8 | ForEach-Object { Write-Host ("       " + $_) }
 		}
 	}
 
