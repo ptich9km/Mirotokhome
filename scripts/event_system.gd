@@ -25,6 +25,18 @@ const GROUP_GAP_CELLS := 4        # клетки между центрами г�
 ## Traveler set: the rescued NPC. Built by tests/gen_hero_strip.py --class
 ## traveler and cut by extract_hero_nb.py --tag tv1 --dest npc.
 const VICTIM_SET := "npc/traveler_m"
+## Caravan cart: a static prop standing next to the merchant (prop_cart, 64x56,
+## drawn by tests/extract_seedream_props.py from an AI sheet, 19.11).
+const CART_TEXTURE := "res://assets/map-objects/prop_cart/sprites-001.png"
+## Which metal the cart carries, by zone: a starter caravan pays in bronze, a
+## hard-zone one in steel. Picked with plain index arithmetic — GameConfig has no
+## string getter, and a JSON list would be a fourth place to keep in sync.
+const CARAVAN_METALS := {
+	"start": ["bronze", "iron"],
+	"mid": ["iron", "steel"],
+	"hard": ["steel", "gold"],
+	"faction": ["steel", "gold"],
+}
 ## The world feed is a RefCounted helper script, not an autoload (see game.gd).
 const WORLD_FEED := preload("res://scripts/world/world_feed.gd")
 
@@ -107,7 +119,13 @@ func _check_map_changed() -> void:
 		int(map.get("map_width")), int(map.get("map_height"))]
 	if key == _map_key:
 		return
+	var first_sight := _map_key == ""
 	_map_key = key
+	if first_sight:
+		# The very first _process: the key is only being learned, nothing to reset.
+		# Without this guard anything spawned before that frame (a test, an event
+		# restored from a save) was silently wiped by the "map changed" path.
+		return
 	for ev in _events:
 		_free_event_units(ev)
 	_events.clear()
@@ -132,7 +150,132 @@ func _try_spawn_event() -> int:
 	var cell := _event_cell(map)
 	if cell.x < 0:
 		return 0
+	# Weighted choice between the kinds. Rescue keeps the majority: it is the
+	# oldest event, the other two add danger and variety.
+	var ambush_w := maxi(0, GameConfig.geti("events", "ambush_weight"))
+	var caravan_w := maxi(0, GameConfig.geti("events", "caravan_weight"))
+	var rescue_w := maxi(1, GameConfig.geti("events", "rescue_weight"))
+	var roll := randi() % (rescue_w + ambush_w + caravan_w)
+	if roll < ambush_w:
+		return spawn_ambush_at(cell)
+	if roll < ambush_w + caravan_w:
+		return spawn_caravan_at(cell)
 	return spawn_rescue_at(cell)
+
+
+## Засада: стая Серых появляется в стороне от героя, без жертвы и без награды —
+## платят сами Серые (лут и опыт), событие нужно ради внезапного боя и маркера.
+## Возвращает id события или 0.
+func spawn_ambush_at(cell: Vector2i, set_override: String = "") -> int:
+	var map: Node = get_tree().get_first_node_in_group("alm_map")
+	if map == null or cell.x < 0:
+		return 0
+	var pool: Array = MapGenerator.gray_pool_for_zone(Game.map_zone)
+	if pool.is_empty() and not UnitDB.has(set_override):
+		return 0
+	var set_name := str(pool[randi() % pool.size()])
+	if set_override != "" and UnitDB.has(set_override):
+		set_name = set_override
+	var ttl := randf_range(GameConfig.getf("events", "ttl_seconds_min"),
+		GameConfig.getf("events", "ttl_seconds_max"))
+	var ev := {
+		"id": _next_event_id, "kind": "ambush",
+		"cell_x": cell.x, "cell_y": cell.y,
+		"ttl_left": ttl,
+		# tag_b stays empty: an ambush has no second side, and an empty foe_group
+		# makes the pack behave like ordinary Greys that go for the hero.
+		"tag_a": "ev%d_mob" % _next_event_id, "tag_b": "", "tag_v": "",
+		"set_a": set_name, "set_b": "",
+		"members_a": [], "members_b": [], "members_v": [],
+	}
+	_next_event_id += 1
+	var count := randi_range(
+		maxi(1, GameConfig.geti("events", "ambush_members_min")),
+		maxi(1, GameConfig.geti("events", "ambush_members_max")))
+	_spawn_group(map, ev, "a", set_name, cell, 0, "", count)
+	if (ev["members_a"] as Array).is_empty():
+		_free_event_units(ev)
+		return 0
+	_events.append(ev)
+	_attach_marker(ev, ttl, MinimapMarkers.Kind.BATTLE)
+	print("EVENT: ambush of %d Grey at (%d,%d), %.0f s" % [
+		(ev["members_a"] as Array).size(), cell.x, cell.y, ttl])
+	return int(ev["id"])
+
+
+## Караван: торговец с тележкой слитков, на него нападает стая Серых. Спас —
+## доля груза (2–5 слитков по зоне) и уход торговца в город; не успел — груз
+## пропал вместе с ним. Тележка — статичный проп события, а не объект карты:
+## её нет в клетках `.alm`, иначе она осталась бы на карте после события.
+func spawn_caravan_at(cell: Vector2i) -> int:
+	var map: Node = get_tree().get_first_node_in_group("alm_map")
+	if map == null or cell.x < 0:
+		return 0
+	var pool: Array = MapGenerator.gray_pool_for_zone(Game.map_zone)
+	if pool.is_empty():
+		return 0
+	var set_name := str(pool[randi() % pool.size()])
+	var victim_cell := cell + Vector2i(1, 0)
+	if not _cell_free(map, victim_cell):
+		victim_cell = cell
+	var ttl := randf_range(GameConfig.getf("events", "ttl_seconds_min"),
+		GameConfig.getf("events", "ttl_seconds_max"))
+	var ev := {
+		"id": _next_event_id, "kind": "caravan",
+		"cell_x": cell.x, "cell_y": cell.y,
+		"ttl_left": ttl,
+		"tag_a": "ev%d_mob" % _next_event_id,
+		"tag_v": "ev%d_victim" % _next_event_id,
+		"set_a": set_name, "set_b": "",
+		"members_a": [], "members_b": [], "members_v": [],
+		"victim": null, "cart": null,
+	}
+	_next_event_id += 1
+	_spawn_victim(map, ev, victim_cell)
+	if ev["victim"] == null:
+		return 0
+	_spawn_cart(map, ev, victim_cell + Vector2i(-1, 1))
+	_spawn_group(map, ev, "a", set_name, cell, 0, str(ev["tag_v"]))
+	if (ev["members_a"] as Array).is_empty():
+		_free_event_units(ev)
+		return 0
+	_events.append(ev)
+	_attach_marker(ev, ttl, MinimapMarkers.Kind.BATTLE)
+	print("EVENT: caravan under attack by %d Grey at (%d,%d), %.0f s" % [
+		(ev["members_a"] as Array).size(), cell.x, cell.y, ttl])
+	return int(ev["id"])
+
+
+## Тележка каравана: спрайт, привязанный низом к клетке. Живёт только пока идёт
+## событие — убирается в _free_event_units и в конце события.
+func _spawn_cart(map: Node, ev: Dictionary, cell: Vector2i) -> void:
+	var tex := load(CART_TEXTURE) as Texture2D
+	if tex == null:
+		return
+	var host := get_parent()
+	if host == null:
+		host = get_tree().current_scene
+	if host == null:
+		return
+	var tile := int(map.get("tile_size"))
+	var spr := Sprite2D.new()
+	spr.name = "EventCart"
+	spr.texture = tex
+	spr.centered = false
+	# z 0 keeps it above the terrain mesh (-1) and level with units; the cart is
+	# spawned with the event, so it is drawn before the actors standing on it.
+	spr.z_index = 0
+	var bottom := Vector2(float((cell.x + 0.5) * tile), float((cell.y + 1) * tile))
+	spr.position = bottom - Vector2(tex.get_width() * 0.5, tex.get_height())
+	host.add_child(spr)
+	ev["cart"] = spr
+
+
+func _free_cart(ev: Dictionary) -> void:
+	var cart = ev.get("cart")
+	if cart != null and is_instance_valid(cart):
+		cart.queue_free()
+	ev["cart"] = null
 
 
 ## Заспавнить «спасти путника» в заданной клетке. Возвращает id события или 0.
@@ -305,7 +448,8 @@ func _pick_event_sets(pool: Array) -> Array:
 ## foe_tag_override задаёт противника (в «спасти путника» это жертва, а не
 ## вторая группа).
 func _spawn_group(map: Node, ev: Dictionary, side: String, set_name: String,
-		center: Vector2i, side_dir: int, foe_tag_override: String = "") -> void:
+		center: Vector2i, side_dir: int, foe_tag_override: String = "",
+		count_override: int = 0) -> void:
 	var tile := int(map.get("tile_size"))
 	var my_tag := str(ev["tag_" + side])
 	var other := "b" if side == "a" else "a"
@@ -313,7 +457,8 @@ func _spawn_group(map: Node, ev: Dictionary, side: String, set_name: String,
 	if foe_tag == "":
 		foe_tag = str(ev["tag_" + other])
 	var placed: Array = ev["members_" + side]
-	var count := randi_range(GameConfig.geti("events", "members_min"),
+	var count := count_override if count_override > 0 else randi_range(
+		GameConfig.geti("events", "members_min"),
 		GameConfig.geti("events", "members_max"))
 	var mults: Array = MapGenerator.gray_tier_mults(set_name)
 	for _k in range(count):
@@ -405,7 +550,10 @@ func _abstract_tick() -> void:
 			visible_now = true
 		if visible_now:
 			continue   # бой на глазах у игрока — рулит настоящий FSM
-		if str(ev.get("kind", "")) == "rescue":
+		if str(ev.get("kind", "")) == "ambush":
+			continue   # засада не дерётся сама с собой в тумане: стая просто ждёт
+		if str(ev.get("kind", "")) == "caravan" \
+				or str(ev.get("kind", "")) == "rescue":
 			# Off screen the pack keeps beating the traveller; he never answers.
 			var mob: Node2D = _first_alive(ev, "members_a")
 			var victim: Node2D = _first_alive(ev, "members_v")
@@ -427,11 +575,13 @@ func _abstract_tick() -> void:
 		if _first_alive(ev, "members_a") == null or _first_alive(ev, "members_b") == null:
 			_finish_event(ev)
 
-## Судьба путника решается здесь: стая мертва — спасён; путник упал или исчез —
-## событие провалено. Одна проверка на кадр на активное событие.
+## Судьба жертвы решается здесь: стая мертва — спасён; жертва упала или исчезла —
+## событие провалено. Одна проверка на кадр на активное событие. Караван идёт по
+## тому же пути, что и «спасти путника»: торговец — тоже беззащитный Npc.
 func _check_rescue_state() -> void:
 	for ev in _events.duplicate():
-		if str(ev.get("kind", "")) != "rescue":
+		var kind := str(ev.get("kind", ""))
+		if kind != "rescue" and kind != "caravan":
 			continue
 		var victim: Node2D = _first_alive(ev, "members_v")
 		if victim == null:
@@ -452,7 +602,16 @@ func _check_gone() -> void:
 		# The same rule as in _abstract_tick: a standing corpse looks for no foe,
 		# so the tags come off the survivors and the clash is closed. Rescue
 		# events have a single mob side and are closed by _check_rescue_state.
-		if str(ev.get("kind", "")) == "rescue":
+		var kind := str(ev.get("kind", ""))
+		if kind == "rescue":
+			continue
+		if kind == "ambush":
+			# Single-sided event: it is over when the last Grey of the pack is gone.
+			if _first_alive(ev, "members_a") == null:
+				_finish_event(ev)
+			continue
+		if kind == "caravan":
+			# Same as rescue: the caravan closes through _check_rescue_state.
 			continue
 		if _first_alive(ev, "members_a") == null or _first_alive(ev, "members_b") == null:
 			_finish_event(ev)
@@ -496,7 +655,8 @@ func _clear_tags(ev: Dictionary) -> void:
 ## Time ran out: survivors despawn without loot. For a rescue this is a failure:
 ## the traveller is killed off screen and the reward is lost.
 func _expire_event(ev: Dictionary) -> void:
-	if str(ev.get("kind", "")) == "rescue":
+	var kind := str(ev.get("kind", ""))
+	if kind == "rescue" or kind == "caravan":
 		_finish_rescue(ev, false, "time ran out")
 		return
 	_free_event_units(ev)
@@ -505,6 +665,7 @@ func _expire_event(ev: Dictionary) -> void:
 	print("EVENT: encounter %d expired by time" % int(ev["id"]))
 
 func _free_event_units(ev: Dictionary) -> void:
+	_free_cart(ev)
 	for key in ["members_a", "members_b"]:
 		for e in _alive_in(ev, key):
 			Game.enemies.erase(e)
@@ -524,13 +685,18 @@ func _finish_rescue(ev: Dictionary, saved: bool, reason: String = "") -> void:
 	_remove_marker(ev)
 	_events.erase(ev)
 	if saved:
-		_reward_rescue(ev, victim)
+		if str(ev.get("kind", "")) == "caravan":
+			_reward_caravan(ev)
+		else:
+			_reward_rescue(ev, victim)
 		if victim != null:
 			_leave_for_city(victim, ev)
+		_free_cart(ev)
 		print("EVENT: traveller saved")
 		return
 	# Failure: the traveller dies where he stands. A live one is finished off by
 	# the event itself (the mobs may already be gone).
+	_free_cart(ev)
 	if victim != null:
 		_clear_tags(ev)
 		victim.call("take_damage", int(victim.get("current_hp")) + 1, null)
@@ -552,6 +718,34 @@ func _reward_rescue(ev: Dictionary, victim: Node2D) -> void:
 		st.log_entry("event", "Traveller saved near %s: +%d gold" % [
 			str(city.get("name", city.get("id", "the road"))), gold])
 	WORLD_FEED.post("world", Loc.f("ui.feed.rescue", [gold]))
+	SoundDB.play("ui.click")
+
+## Караван спасён: доля груза слитками и репутация ближайшего города. Золота
+## нет намеренно — платят металлом, в этом и смысл тележки со слитками.
+func _reward_caravan(ev: Dictionary) -> void:
+	var metals: Array = CARAVAN_METALS.get(Game.map_zone, CARAVAN_METALS["start"])
+	var n := randi_range(GameConfig.geti("events", "caravan_ingots_min"),
+		GameConfig.geti("events", "caravan_ingots_max"))
+	var hero = Game.hero
+	if hero != null and is_instance_valid(hero) and hero.has_method("add_item"):
+		for _i in n:
+			var metal := str(metals[randi() % metals.size()])
+			var key := ItemDB.ingot_key(metal)
+			if key == "":
+				continue
+			hero.call("add_item", key)
+			ev["paid_ingots"] = int(ev.get("paid_ingots", 0)) + 1
+	var total := int(ev.get("paid_ingots", 0))
+	var city := _nearest_city(ev)
+	var race := str(city.get("race", ""))
+	var rep := GameConfig.geti("events", "caravan_rep")
+	var st = _world_state()
+	if st != null:
+		if race != "" and rep != 0:
+			st.add_hero_reputation(race, rep)
+		st.log_entry("event", "Caravan saved near %s: %d ingots" % [
+			str(city.get("name", city.get("id", "the road"))), total])
+	WORLD_FEED.post("world", Loc.f("ui.feed.caravan", [total]))
 	SoundDB.play("ui.click")
 
 ## Ближайший к событию город (для репутации и ухода путника).
@@ -644,6 +838,26 @@ func _respawn_event(rec: Dictionary) -> void:
 			if hp > 0:
 				victim.set("current_hp", mini(hp, int(victim.get("max_hp"))))
 		ev["ttl_left"] = maxf(10.0, float(rec.get("ttl_left", 90.0)))
+		return
+	if str(rec.get("kind", "")) == "ambush":
+		# The same species comes back, not a fresh roll, so a reload is not a reroll.
+		var ambush_id := spawn_ambush_at(cell, set_a)
+		if ambush_id == 0:
+			return
+		var aev: Dictionary = _events[_events.size() - 1]
+		aev["ttl_left"] = maxf(10.0, float(rec.get("ttl_left", 90.0)))
+		return
+	if str(rec.get("kind", "")) == "caravan":
+		var caravan_id := spawn_caravan_at(cell)
+		if caravan_id == 0:
+			return
+		var cev: Dictionary = _events[_events.size() - 1]
+		var cv = cev.get("victim")
+		if cv != null and is_instance_valid(cv):
+			var chp := int(rec.get("victim_hp", 0))
+			if chp > 0:
+				cv.set("current_hp", mini(chp, int(cv.get("max_hp"))))
+		cev["ttl_left"] = maxf(10.0, float(rec.get("ttl_left", 90.0)))
 		return
 	if set_a == "" or set_b == "" or not UnitDB.has(set_a) or not UnitDB.has(set_b):
 		return

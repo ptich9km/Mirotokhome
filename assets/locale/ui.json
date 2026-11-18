@@ -1464,5 +1464,6 @@
   "ui.role.spell": {"ru": "Магия", "en": "Magic"},
   "ui.role.spell.tip": {"ru": "Держит дистанцию и бьёт выбранным заклинанием", "en": "Keeps the distance and casts the chosen spell"},
   "ui.role.heal": {"ru": "Лечение", "en": "Healing"},
-  "ui.role.heal.tip": {"ru": "Не бросается в бой: лечит героя и отряд", "en": "Does not rush into battle: heals the hero and the party"}
+  "ui.role.heal.tip": {"ru": "Не бросается в бой: лечит героя и отряд", "en": "Does not rush into battle: heals the hero and the party"},
+  "ui.feed.caravan": {"ru": "Караван спасён: слитки в сумке (+%d)", "en": "Caravan saved: ingots in your bag (+%d)"}
 }
