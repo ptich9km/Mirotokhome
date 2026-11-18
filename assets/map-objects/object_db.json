@@ -320,5 +320,19 @@
   "dead": null,
   "fire": null,
   "variants": []
+ },
+ "prop_cart": {
+  "desc": "Seedream prop prop_cart",
+  "phases": 1,
+  "w": 64,
+  "h": 56,
+  "cx": 32,
+  "cy": 56,
+  "frames": 1,
+  "anim_time": [],
+  "anim_frame": [],
+  "dead": null,
+  "fire": null,
+  "variants": []
  }
 }

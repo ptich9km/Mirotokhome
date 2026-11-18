@@ -251,5 +251,16 @@
   "phases": 1,
   "frames": 1,
   "desc": "Seedream aloe"
+ },
+ "216": {
+  "folder": "prop_cart",
+  "index": 0,
+  "w": 64,
+  "h": 56,
+  "cx": 32,
+  "cy": 56,
+  "phases": 1,
+  "frames": 1,
+  "desc": "Seedream prop prop_cart"
  }
 }

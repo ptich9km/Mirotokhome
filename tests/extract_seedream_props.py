@@ -23,6 +23,9 @@ SOURCES: dict[str, tuple[Path, int, int]] = {
     "prop_lantern": (REPO / "import/_stage2_props/lantern.png", 32, 56),
     "prop_sack": (REPO / "import/_stage2_props/sack.png", 40, 40),
     "prop_pot": (REPO / "import/_stage2_props/pot.png", 32, 32),
+    # Caravan cart (19.11): ingots + sack, pulled by a shaft. Slightly wider than
+    # a crate because it is a centrepiece of the caravan event, not clutter.
+    "prop_cart": (REPO / "import/_stage2_props/cart.png", 64, 56),
 }
 
 BG_TOL = 110
@@ -77,11 +80,17 @@ def fit_canvas(content: Image.Image, cw: int, ch: int) -> Image.Image:
 
 
 def main() -> None:
+    # Optional filter: `python extract_seedream_props.py --only prop_cart`.
+    # The rest of the sources lived in `import/_stage2_props/`, which is scratch
+    # space and gets cleaned; without the filter the run dies on a missing file.
+    want = set(a for a in sys.argv[1:] if not a.startswith("--"))
     db = json.loads(DB.read_text(encoding="utf-8"))
     existing_folders = {v.get("folder") for v in db.values() if isinstance(v, dict)}
     next_id = max(int(k) for k in db.keys()) + 1
 
     for folder, (src, cw, ch) in SOURCES.items():
+        if want and folder not in want:
+            continue
         if not src.exists():
             print(f"FAIL missing {src}")
             sys.exit(1)
