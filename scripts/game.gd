@@ -1727,7 +1727,7 @@ func _herb_click(herb: HerbNode) -> void:
 		return
 	_pending_building = ""
 	player.attack_target = null
-	if player.global_position.distance_to(herb.global_position) <= 52.0:
+	if player.global_position.distance_to(herb.global_position) <= HerbNode.HARVEST_REACH:
 		_harvest_herb(herb)
 		return
 	_pending_herb = herb
@@ -1742,7 +1742,7 @@ func _process_pending_herb() -> void:
 	if not is_instance_valid(_pending_herb) or not _pending_herb.is_available():
 		_pending_herb = null
 		return
-	if player.global_position.distance_to(_pending_herb.global_position) <= 52.0:
+	if player.global_position.distance_to(_pending_herb.global_position) <= HerbNode.HARVEST_REACH:
 		var herb := _pending_herb
 		_pending_herb = null
 		_harvest_herb(herb)
@@ -2050,7 +2050,14 @@ func _target_ring_pos(u: Node2D) -> Vector2:
 	var rise := 0.0
 	if alm_map != null and alm_map.has_method("relief_at_world"):
 		rise = float(alm_map.call("relief_at_world", u.global_position))
-	return Vector2(u.global_position.x, u.global_position.y - float(m[1]) * 0.55 - rise)
+	# A flying unit's sprite is drawn above the ground by fly_z (enemy.gd
+	# _apply_relief_stand): the ring follows the BODY, not the floor, or it hangs
+	# a whole model below a succubus/bat/dragon (player report 20.11).
+	var lift := 0.0
+	if "anim_set" in u:
+		lift = float(UnitDB.fly_z(str(u.get("anim_set"))))
+	return Vector2(u.global_position.x,
+		u.global_position.y - float(m[1]) * 0.55 - rise - lift)
 
 ## Target highlight: the enemy under the cursor / the current attack target (a red ring)
 ## or a peaceful NPC under the cursor (a yellow ring).

@@ -8,6 +8,14 @@ extends Area2D
 
 const REGROW_SECONDS := 180.0
 
+## How close the hero's FEET must be to pick a herb up. The node origin is the
+## cell centre and the hero's origin is his feet, so this is a real distance on
+## the screen: 52 px let the hero pick a herb while standing a whole body above
+## it (player report 20.11). One tile is honest reach.
+const HARVEST_REACH := 36.0
+## Click tolerance around the sprite itself (the cursor, not the hero).
+const CLICK_RADIUS := 28.0
+
 var item_key := ""
 var icon_path := ""
 var cell := Vector2i(-1, -1)
@@ -88,7 +96,7 @@ func is_available() -> bool:
 
 
 func contains_point(world_position: Vector2) -> bool:
-	return available and global_position.distance_to(world_position) <= 28.0
+	return available and global_position.distance_to(world_position) <= CLICK_RADIUS
 
 
 func harvest() -> bool:

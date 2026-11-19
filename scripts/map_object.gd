@@ -44,11 +44,20 @@ func setup(name: String, cell_pos: Vector2i, tile_size: int, anchor: Vector2 = V
 	_sprite.offset = -anchor
 	add_child(_sprite)
 
+	# Data-driven size (20.11): "scale" in object_db lets one prop be drawn
+	# smaller than its texture without touching the PNG. The anchor stays put:
+	# the offset is applied before the node scale, so the anchor point still
+	# maps to the origin.
+	var sc := float(o.get("scale", 1.0))
+	if sc > 0.0 and not is_equal_approx(sc, 1.0):
+		_sprite.scale = Vector2(sc, sc)
+
 	# Тень spritesb-NNN.png (у объектов Allods2 есть отдельный слой-силуэт)
 	_shadow = Sprite2D.new()
 	_shadow.centered = false
 	_shadow.offset = -anchor
 	_shadow.z_index = -1
+	_shadow.scale = Vector2(sc, sc)
 	add_child(_shadow)
 	_apply_shadow(variant)
 

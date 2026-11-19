@@ -22,6 +22,10 @@ var reg_w := 128            # размер из реестра (для норм�
 var reg_h := 128
 var cx := 64.0              # якорь в пикселях реестра
 var cy := 80.0
+## Draw scale (20.11): a prop may be drawn smaller than its canvas without a
+## new PNG (mushrooms). The anchor still maps to the node origin: the offset is
+## applied before the sprite scale.
+var draw_scale := 1.0
 
 var _frame := 0
 var _timer := 0.0
@@ -47,8 +51,9 @@ static func _load_cached(path: String) -> Texture2D:
 	return tex
 
 func setup(obs_folder: String, n_frames: int, w: int, h: int, a_cx: int, a_cy: int, index: int = 0,
-		hp_value: int = 0) -> void:
+		hp_value: int = 0, scale_factor: float = 1.0) -> void:
 	folder = obs_folder
+	draw_scale = scale_factor if scale_factor > 0.0 else 1.0
 	hp = maxi(hp_value, 0)
 	max_hp = hp
 	destructible = hp > 0
@@ -152,8 +157,10 @@ func _apply_offsets() -> void:
 		-cy / float(reg_h) * float(_tex_h))
 	if _sprite != null:
 		_sprite.offset = off
+		_sprite.scale = Vector2(draw_scale, draw_scale)
 	if _shadow != null:
 		_shadow.offset = off
+		_shadow.scale = Vector2(draw_scale, draw_scale)
 
 func _process(delta: float) -> void:
 	if frame_count <= 1 or base_index > 0:

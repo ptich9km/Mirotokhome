@@ -172,7 +172,8 @@ func _build_obstacles() -> void:
 				int(spec.get("w", 128)), int(spec.get("h", 128)),
 				int(spec.get("cx", 64)), int(spec.get("cy", 96)),
 				int(spec.get("index", 0)),
-				int(_destructible_hp.get(folder, 0)))
+				int(_destructible_hp.get(folder, 0)),
+				float(spec.get("scale", 1.0)))
 			ob.place_at(Vector2i(x, y), TILE, relief_at_tile(x, y))
 			ob.destroyed.connect(_on_obstacle_destroyed)
 			obstacles_root.add_child(ob)

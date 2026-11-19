@@ -36,6 +36,13 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	# Reach: the hero's origin is his feet, the herb's is the cell centre. A
+	# reach wider than a tile lets him pick a herb from a whole body above it
+	# (player report 20.11).
+	_check(HerbNode.HARVEST_REACH <= 36.0,
+		"the harvest reach is one tile at most (%.0f)" % HerbNode.HARVEST_REACH)
+	_check(HerbNode.CLICK_RADIUS <= HerbNode.HARVEST_REACH,
+		"the click radius is inside the harvest reach")
 	var wild_limit := HerbDB.wild_min_city_distance()
 	var seeds := {"start": 7301, "mid": 7302, "hard": 7303, "faction": 7304}
 	for zone in seeds:

@@ -272,6 +272,7 @@
   "h": 48,
   "cx": 24,
   "cy": 48,
+  "scale": 0.5,
   "frames": 1,
   "anim_time": [],
   "anim_frame": [],

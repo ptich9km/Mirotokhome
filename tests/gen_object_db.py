@@ -57,6 +57,12 @@ def build(records: dict) -> dict:
             "h": int(r.get("h", 128)),
             "cx": int(r.get("cx", 64)),
             "cy": int(r.get("cy", 128)),
+        }
+        # Optional draw scale: a prop may be drawn smaller than its canvas
+        # without touching the PNG (mushrooms, 0.5 since 20.11).
+        if r.get("scale") is not None:
+            entry["scale"] = r["scale"]
+        entry.update({
             "frames": frames,
             # Анимация возможна только при нескольких фазах. Для статичного
             # объекта это [], а не отсутствие ключа: MapObject._build
@@ -66,7 +72,7 @@ def build(records: dict) -> dict:
             "dead": None,
             "fire": None,
             "variants": [],
-        }
+        })
         out[name] = entry
     return out
 

@@ -215,6 +215,7 @@
   "h": 48,
   "cx": 24,
   "cy": 48,
+  "scale": 0.5,
   "phases": 1,
   "frames": 1,
   "desc": "Seedream mushroom_cluster"

@@ -72,6 +72,13 @@ func _test_data() -> void:
 		_check(int(o.get("cy", 0)) == int(rec.get("h", 0)),
 			"%s is anchored to the bottom of its canvas" % folder)
 		_check(int(hp.get(folder, 0)) > 0, "%s has HP in destructibles.json" % folder)
+	# Mushrooms are drawn at half size (player report 20.11): three 48 px caps
+	# read as a bush, not as undergrowth. The canvas stays 48 so the anchor,
+	# the .alm footprint and the sidecars do not move.
+	var mushrooms: Dictionary = odb.get("mushroom_cluster", {})
+	_check(is_equal_approx(float(mushrooms.get("scale", 1.0)), 0.5),
+		"mushroom_cluster is drawn at half size (scale=%s)"
+			% str(mushrooms.get("scale", 1.0)))
 
 
 ## 2. Placement: the sidecar lists exactly the clutter cells, all of them on
@@ -146,6 +153,22 @@ func _test_walkability(path: String, base: String) -> void:
 			tree_cell = cell
 			break
 	_check(tree_cell.x >= 0, "a tree cell was found for the control check")
+	# The mushrooms are drawn at half size in the LIVE scene (player report
+	# 20.11): the data says 0.5 and the sprite on the map must actually scale.
+	var mushroom_id := int(CLUTTER_IDS[0])
+	var mushroom_cell := Vector2i(-1, -1)
+	for i in range(obstacles.size()):
+		if int(obstacles[i]) == mushroom_id:
+			mushroom_cell = Vector2i(i % w, i / w)
+			break
+	_check(mushroom_cell.x >= 0, "a mushroom cluster is on the map")
+	if mushroom_cell.x >= 0:
+		var ob: Node = alm._obstacle_nodes.get(mushroom_cell)
+		_check(ob != null and is_equal_approx(float(ob.get("draw_scale")), 0.5),
+			"the mushroom obstacle carries the draw scale 0.5")
+		var spr: Node = ob.get_node_or_null("Sprite") if ob != null else null
+		_check(spr != null and is_equal_approx((spr as Sprite2D).scale.x, 0.5),
+			"the mushroom sprite is drawn at half size")
 	if tree_cell.x >= 0:
 		var pos := Vector2((tree_cell.x + 0.5) * alm.TILE, (tree_cell.y + 0.5) * alm.TILE)
 		_check(not alm.is_walkable_world(pos), "a tree cell stays impassable")
