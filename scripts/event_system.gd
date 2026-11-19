@@ -21,6 +21,9 @@ class_name EventSystem
 
 const ABSTRACT_TICK := 2.0        # сек между «дешёвыми» обменами ударами
 const BATTLE_RADIUS_PX := 600.0   # радиус поиска противника в стычке
+## Fog off (the default): an event within this distance of the hero counts as
+## seen, and the real FSM handles it instead of the abstract tick.
+const ON_SCREEN_RADIUS := 900.0
 const GROUP_GAP_CELLS := 4        # клетки между центрами групп
 ## Traveler set: the rescued NPC. Built by tests/gen_hero_strip.py --class
 ## traveler and cut by extract_hero_nb.py --tag tv1 --dest npc.
@@ -541,13 +544,30 @@ func _foe_for(e: Node2D) -> Node2D:
 func _abstract_tick() -> void:
 	_check_gone()
 	var fog: Node = get_tree().get_first_node_in_group("fog")
+	var fog_on := fog != null and bool(fog.get("enabled"))
+	# Event cell centre. Before this was (cell+1)*16, i.e. HALF of the real
+	# world position: the fog check looked at the wrong place and the abstract
+	# tick always ran (player report 20.11).
+	var tile := 32
+	var map: Node = get_tree().get_first_node_in_group("alm_map")
+	if map != null:
+		tile = maxi(1, int(map.get("tile_size")))
 	for ev in _events.duplicate():
-		var pos := Vector2(float(int(ev["cell_x"]) + 1) * 16.0,
-			float(int(ev["cell_y"]) + 1) * 16.0)
+		var pos := Vector2((float(ev["cell_x"]) + 0.5) * tile,
+			(float(ev["cell_y"]) + 0.5) * tile)
 		var visible_now := false
-		if fog != null and bool(fog.get("enabled")) \
-				and int(fog.call("state_at_world", pos)) == FogOfWar.STATE_VISIBLE:
-			visible_now = true
+		if fog_on:
+			visible_now = int(fog.call("state_at_world", pos)) == FogOfWar.STATE_VISIBLE
+		else:
+			# Fog is off by default: the player sees everything on screen. Without
+			# this branch "visible_now" was NEVER true, and the abstract tick beat
+			# the traveller while the hero fought the pack right in front of him
+			# (player report 20.11: "nobody is there, but he keeps taking hits").
+			var hero = Game.hero
+			if hero == null or not is_instance_valid(hero):
+				hero = get_tree().get_first_node_in_group("player")
+			if is_instance_valid(hero):
+				visible_now = pos.distance_to(hero.global_position) <= ON_SCREEN_RADIUS
 		if visible_now:
 			continue   # бой на глазах у игрока — рулит настоящий FSM
 		if str(ev.get("kind", "")) == "ambush":

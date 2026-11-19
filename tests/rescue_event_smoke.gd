@@ -93,7 +93,8 @@ func _run() -> void:
 	_cell = Vector2i(int(_map.get("map_width")) / 2, int(_map.get("map_height")) / 2)
 
 	_test_spawn()
-	_test_aggro_switch()
+	await _test_aggro_switch()
+	_test_on_screen_no_abstract_damage()
 	_test_damage_scale()
 	await _test_success()
 	_test_failure()
@@ -152,7 +153,30 @@ func _test_aggro_switch() -> void:
 	await process_frame
 	target = mob.call("_combat_target")
 	_check(target != fake_hero, "герой ушёл — стая возвращается к путнику")
-	fake_hero.queue_free()
+	root.remove_child(fake_hero)
+	fake_hero.free()
+
+
+## Fog is off by default, so "visible" must mean "the hero is near": otherwise
+## the abstract tick beat the traveller while the player stood right there
+## fighting the pack (player report 20.11).
+func _test_on_screen_no_abstract_damage() -> void:
+	var victims := _victims()
+	if victims.is_empty():
+		return
+	var v: Npc = victims[0]
+	var fake_hero := Node2D.new()
+	fake_hero.add_to_group("player")
+	root.add_child(fake_hero)
+	Game.hero_dead = false
+	fake_hero.global_position = v.global_position
+	var before := v.current_hp
+	for _i in range(12):
+		_es._abstract_tick()
+	_check(v.current_hp == before,
+		"герой рядом — абстрактные удары не идут (%d -> %d)" % [before, v.current_hp])
+	root.remove_child(fake_hero)
+	fake_hero.free()
 
 
 ## Вне видимости бой идёт «дёшево», но урон по путнику масштабируется.
