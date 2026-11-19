@@ -337,6 +337,17 @@ func _make_card(q: Dictionary, buttons: Array) -> PanelContainer:
 	col.add_theme_constant_override("separation", UiTheme.SPACE_1)
 	row.add_child(col)
 
+	# Story lines are marked above the title: a scenario must not read as one
+	# more rotating chore.
+	var chain_text := _chain_text(q)
+	if chain_text != "":
+		var chain_label := Label.new()
+		chain_label.name = "Chain"
+		chain_label.theme_type_variation = &"QuestHint"
+		chain_label.text = chain_text
+		chain_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		col.add_child(chain_label)
+
 	var name_label := Label.new()
 	name_label.name = "Name"
 	name_label.theme_type_variation = &"QuestName"
@@ -391,6 +402,23 @@ func _make_card(q: Dictionary, buttons: Array) -> PanelContainer:
 			actions.add_child(btn)
 			_row_buttons.append(btn)
 	return card
+
+
+## Story line badge: "Story: <name>" and "Step 1 of 4". Empty for a rotating
+## quest, so an ordinary card keeps its height.
+func _chain_text(q: Dictionary) -> String:
+	var chain_id := str(q.get("chain_id", ""))
+	if chain_id == "":
+		return ""
+	var parts: Array = []
+	var c := QuestDB.chain(chain_id)
+	if not c.is_empty():
+		parts.append(Loc.f("ui.quest.chain.badge",
+			[Loc.t(str(c.get("title_key", "")))]))
+	if int(q.get("stages_total", 0)) > 0:
+		parts.append(Loc.f("ui.quest.chain.step",
+			[int(q.get("order", 1)), int(q.get("stages_total", 0))]))
+	return "\n".join(parts)
 
 
 ## Journal mode: which head the quest came from. In the head's panel it is
@@ -601,7 +629,7 @@ func _refresh_active_only() -> void:
 
 
 func _fill_offers(qs: QuestSystem) -> void:
-	var offers := qs.offers_for(city_id)
+	var offers := qs.head_offers(city_id)
 	if offers.is_empty():
 		var empty := Label.new()
 		empty.name = "OffersEmpty"

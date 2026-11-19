@@ -43,12 +43,19 @@ const STATE_FAILED := "failed"
 ## wolves" in the journal is not a choice, it is copy-paste.
 const SAME_TEMPLATE_LIMIT := 1
 
+## World feed (F3 log): a story line ends with a line from the archmage.
+const WORLD_FEED := preload("res://scripts/world/world_feed.gd")
+
 static var instance: QuestSystem = null
 
 var offers_by_city: Dictionary = {}   # city_id -> Array[Dictionary]
 var active: Array[Dictionary] = []    # taken quests (STATE_ACTIVE/READY)
 var history: Array[Dictionary] = []   # closed: feed the journal and save
 var targets: Array[Dictionary] = []   # material targets lying on the map
+## Story lines (engine + chain A, 20.11): "<chain_id>" -> {stage, state,
+## flags, started_day, done_day}. A chain is a fixed sequence of stages; it is
+## offered beside the rotation, never inside it, and is finished ONCE.
+var chains: Dictionary = {}
 var _rotation_seed := -1              # map the current offers belong to
 var _rotation_sector := ""            # sector the current offers belong to
 var _bus: Node = null
@@ -269,8 +276,11 @@ func _held_template_ids(city_id: String) -> Array:
 ## --- One quest ---------------------------------------------------------------
 
 func _make_quest(tpl: Dictionary, rng: RandomNumberGenerator, city_id: String,
-		race: String, difficulty: int, rotation: int) -> Dictionary:
+		race: String, difficulty: int, rotation: int,
+		id_override := "", difficulty_override := 0) -> Dictionary:
 	var type := str(tpl.get("type", ""))
+	if difficulty_override > 0:
+		difficulty = difficulty_override
 	var count := QuestDB.count_for(tpl, difficulty, rng)
 	var q := {
 		"city_race": race,
@@ -291,7 +301,7 @@ func _make_quest(tpl: Dictionary, rng: RandomNumberGenerator, city_id: String,
 		"elite": false,
 		"pick": str(tpl.get("pick", "")),
 	}
-	q["id"] = "q%d" % _next_id
+	q["id"] = id_override if id_override != "" else "q%d" % _next_id
 	q["template"] = str(tpl.get("id", ""))
 	q["type"] = type
 	q["city_id"] = city_id
@@ -358,7 +368,8 @@ func _make_quest(tpl: Dictionary, rng: RandomNumberGenerator, city_id: String,
 				q["target_cell"] = _quest_cell(rng, tpl)
 		_:
 			return {}
-	_next_id += 1
+	if id_override == "":
+		_next_id += 1
 	q["title"] = _title_for(q, tpl)
 	q["text"] = _text_for(q, tpl)
 	return q
@@ -670,6 +681,322 @@ func offers_for(city_id: String) -> Array[Dictionary]:
 	return out
 
 
+## --- Chains ------------------------------------------------------------------
+
+## What the head shows: the story line first, then the rotation. The rotation
+## itself stays exactly offer_slots offers (a chain never eats a rotation slot).
+func head_offers(city_id: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var cq := chain_offer(city_id)
+	if not cq.is_empty():
+		out.append(cq)
+	out.append_array(offers_for(city_id))
+	return out
+
+
+## The one stage the head can offer right now, or {} when the chain is done,
+## already taken, or gated by its own conditions. The id is deterministic
+## ("chain_<chain>_<stage>"): the panel may be rebuilt between a frame and a
+## click, and the card must still match.
+func chain_offer(city_id: String) -> Dictionary:
+	if city_id == "" or GameConfig.geti("quests", "enabled") == 0:
+		return {}
+	var race := _city_race(city_id)
+	if race == "":
+		return {}
+	for c in QuestDB.chains():
+		if str(c.get("race", "")) != race:
+			continue
+		var chain_id := str(c.get("id", ""))
+		var st: Dictionary = chains.get(chain_id, {})
+		if str(st.get("state", "")) == "done":
+			continue
+		# A taken stage hides the offer: the chain moves only on turn-in.
+		var busy := false
+		for a in active:
+			if str(a.get("chain_id", "")) == chain_id \
+					and str(a.get("sector", "")) == Game.map_sector:
+				busy = true
+				break
+		if busy:
+			continue
+		if not _requires_ok(c.get("requires", {})):
+			continue
+		var stage_id := _next_stage(chain_id, st)
+		if stage_id == "":
+			continue
+		var tpl := QuestDB.stage(chain_id, stage_id)
+		if tpl.is_empty():
+			continue
+		var q := _make_stage_quest(tpl, city_id, race)
+		if not q.is_empty():
+			return q
+	return {}
+
+
+## Next stage of a chain: the first entry of `next` whose conditions pass, or
+## the first stage of the chain when it has not started yet. "" - the end.
+func _next_stage(chain_id: String, st: Dictionary) -> String:
+	var c := QuestDB.chain(chain_id)
+	if c.is_empty():
+		return ""
+	var stages: Array = c.get("stages", [])
+	var last := str(st.get("stage", ""))
+	if last == "":
+		for raw in stages:
+			var tpl := QuestDB.stage(chain_id, str(raw))
+			if not tpl.is_empty() and _requires_ok(tpl.get("requires", {})):
+				return str(raw)
+		return ""
+	var last_tpl := QuestDB.stage(chain_id, last)
+	for raw in last_tpl.get("next", []):
+		var tpl := QuestDB.stage(chain_id, str(raw))
+		if tpl.is_empty():
+			continue
+		if _requires_ok(tpl.get("requires", {})):
+			return str(raw)
+	return ""
+
+
+## Stage conditions. Only the keys QuestDB.REQUIRES_KEYS declares are read:
+## a typo is caught at load, not silently ignored at runtime.
+func _requires_ok(raw: Variant) -> bool:
+	if not (raw is Dictionary):
+		return true
+	var req: Dictionary = raw
+	if req.is_empty():
+		return true
+	if req.has("zone"):
+		var zones: Array = req["zone"]
+		if not zones.has(Game.map_zone):
+			return false
+	if req.has("cities_min"):
+		if _city_count() < int(req["cities_min"]):
+			return false
+	if req.has("day_min"):
+		if _day() < int(req["day_min"]):
+			return false
+	if req.has("hero_rep"):
+		var hr: Dictionary = req["hero_rep"]
+		var st = _state()
+		if st == null:
+			return false
+		if int(st.hero_rep(str(hr.get("faction", "")))) < int(hr.get("min", 0)):
+			return false
+	return true
+
+
+## Build one stage quest. Difficulty is the one the data fixes; the seed keeps
+## the stage content stable from call to call (same map, town, chain, stage).
+func _make_stage_quest(tpl: Dictionary, city_id: String, race: String) -> Dictionary:
+	var chain_id := str(tpl.get("chain", ""))
+	var stage_id := str(tpl.get("stage", ""))
+	var diff := clampi(int(tpl.get("difficulty", 1)), 1, 3)
+	var rng := _stage_rng(city_id, chain_id, stage_id)
+	var q := _make_quest(tpl, rng, city_id, race, diff, -1,
+		"chain_%s_%s" % [chain_id, stage_id], diff)
+	if q.is_empty():
+		return {}
+	q["chain_id"] = chain_id
+	q["stage"] = stage_id
+	q["order"] = int(tpl.get("order", 1))
+	var c := QuestDB.chain(chain_id)
+	q["stages_total"] = (c.get("stages", []) as Array).size()
+	q["expires_day"] = 0
+	return q
+
+
+func _stage_rng(city_id: String, chain_id: String, stage_id: String) -> RandomNumberGenerator:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("%d|%s|%s|%s|%s|%s" % [Game.map_seed, Game.map_zone,
+		Game.map_sector, city_id, chain_id, stage_id])
+	return rng
+
+
+## Stage turned in: pay the effects and move the chain one step. Called once per
+## stage: the quest leaves active[] in the same call, so a second turn-in only
+## finds nothing (not_found).
+func _complete_stage(q: Dictionary) -> void:
+	var chain_id := str(q.get("chain_id", ""))
+	if chain_id == "" or bool(q.get("effects_applied", false)):
+		return
+	_apply_effects(q)
+	q["effects_applied"] = true
+	_advance_chain(chain_id, str(q.get("stage", "")))
+
+
+func _advance_chain(chain_id: String, stage_id: String) -> void:
+	var st: Dictionary = chains.get(chain_id, {})
+	if st.is_empty():
+		st = {"stage": "", "state": "available", "flags": {},
+			"started_day": _day(), "done_day": 0}
+	st["stage"] = stage_id
+	st["state"] = "active"
+	if _next_stage(chain_id, st) == "":
+		st["state"] = "done"
+		st["done_day"] = _day()
+	chains[chain_id] = st
+
+
+## Closed list of effects (QuestDB.EFFECT_OPS). Every one of them is idempotent
+## through the effects_applied flag of the stage record in history.
+func _apply_effects(q: Dictionary) -> void:
+	if bool(q.get("effects_applied", false)):
+		return
+	q["effects_applied"] = true
+	var chain_id := str(q.get("chain_id", ""))
+	var tpl := QuestDB.stage(chain_id, str(q.get("stage", "")))
+	var st = null
+	for raw in tpl.get("effects", []):
+		if not (raw is Dictionary):
+			continue
+		var e: Dictionary = raw
+		match str(e.get("op", "")):
+			"hero_rep":
+				st = _state()
+				if st != null:
+					st.add_hero_reputation(str(e.get("race", "")),
+						int(e.get("amount", 0)))
+			"archmage_power":
+				st = _state()
+				if st != null:
+					st.add_archmage_power(str(e.get("race", "")),
+						float(e.get("amount", 0.0)))
+			"item":
+				if Game.hero != null and is_instance_valid(Game.hero):
+					Game.hero.add_item(str(e.get("key", "")))
+			"flag":
+				var entry: Dictionary = chains.get(chain_id, {})
+				var flags: Dictionary = entry.get("flags", {})
+				flags[str(e.get("key", ""))] = e.get("value", true)
+				entry["flags"] = flags
+				chains[chain_id] = entry
+			"feed":
+				WORLD_FEED.post("world", Loc.t(str(e.get("key", ""))))
+
+
+## Test/UI helper: what the chain remembers about itself.
+func chain_state(chain_id: String) -> Dictionary:
+	return chains.get(chain_id, {})
+
+
+## --- Objective guidance ------------------------------------------------------
+
+## Where the quest happens, in map cells. The minimap draws a quest cross there
+## and the HUD may point to it: a task without a place is "go and find out".
+##
+## Static places are taken from the quest itself (a found item, an elite, a
+## delivery town). A hunt has no fixed point, so the cell is the DEN of the
+## nearest matching pack (Enemy.home_position), not the beast's live position:
+## the player is pointed at the hunting ground, not at a moving unit.
+## Returns (-1, -1) when there is nothing to point at.
+func objective_cell(q: Dictionary) -> Vector2i:
+	match str(q.get("type", "")):
+		"FIND_ITEM", "KILL_TARGET":
+			return json_cell(q.get("target_cell", []))
+		"DELIVER":
+			return _city_cell(str(q.get("deliver_city", "")))
+		"GATHER":
+			if str(q.get("rival_race", "")) != "":
+				return _nearest_outpost_cell(str(q.get("rival_race", "")))
+			return _nearest_herb_cell(str(q.get("item_key", "")))
+		"KILL_SPECIES", "KILL_GROUP", "URGENT":
+			return _nearest_den_cell(q)
+	return Vector2i(-1, -1)
+
+
+func _city_cell(city_id: String) -> Vector2i:
+	if city_id == "":
+		return Vector2i(-1, -1)
+	var map: Node = get_tree().get_first_node_in_group("alm_map")
+	if map == null or not map.has_method("city_heads"):
+		return Vector2i(-1, -1)
+	var rec: Dictionary = map.call("city_heads").get(city_id, {})
+	var cells: Array = rec.get("cells", [])
+	if cells.is_empty():
+		return Vector2i(-1, -1)
+	var c: Array = cells[0]
+	return Vector2i(int(c[0]), int(c[1]))
+
+
+func _nearest_herb_cell(item_key: String) -> Vector2i:
+	if item_key == "":
+		return Vector2i(-1, -1)
+	var best := Vector2i(-1, -1)
+	var best_d := INF
+	for node in get_tree().get_nodes_in_group("herb_resource"):
+		if not is_instance_valid(node):
+			continue
+		if str(node.get("item_key")) != item_key:
+			continue
+		if not bool(node.get("available")):
+			continue
+		var cell: Vector2i = node.get("cell")
+		var d := _dist_to_hero_cell(cell)
+		if d < best_d:
+			best_d = d
+			best = cell
+	return best
+
+
+func _nearest_outpost_cell(race: String) -> Vector2i:
+	var best := Vector2i(-1, -1)
+	var best_d := INF
+	for raw in Game.outposts:
+		if not (raw is Dictionary):
+			continue
+		var o: Dictionary = raw
+		if str(o.get("faction", "")) != race:
+			continue
+		if Game.is_outpost_captured(str(o.get("id", ""))):
+			continue
+		var cell := Vector2i(int(o.get("x", -1)), int(o.get("y", -1)))
+		var d := _dist_to_hero_cell(cell)
+		if d < best_d:
+			best_d = d
+			best = cell
+	return best
+
+
+## Hunting ground: the den of the nearest pack the quest counts. The den, not
+## the beast: a moving marker would turn into a wall-hack.
+func _nearest_den_cell(q: Dictionary) -> Vector2i:
+	var best := Vector2i(-1, -1)
+	var best_d := INF
+	for e in Game.enemies:
+		if e == null or not is_instance_valid(e):
+			continue
+		if str(e.get("state")) in ["dying", "decay", "corpse"]:
+			continue
+		if not _counts_kill(q, str(e.get("anim_set"))):
+			continue
+		var map: Node = get_tree().get_first_node_in_group("alm_map")
+		var tile := 32
+		if map != null:
+			tile = maxi(1, int(map.get("tile_size")))
+		var pos: Vector2 = e.get("home_position")
+		var cell := Vector2i(int(pos.x) / tile, int(pos.y) / tile)
+		var d := _dist_to_hero_cell(cell)
+		if d < best_d:
+			best_d = d
+			best = cell
+	return best
+
+
+func _dist_to_hero_cell(cell: Vector2i) -> float:
+	if cell.x < 0 or cell.y < 0:
+		return INF
+	if Game.hero == null or not is_instance_valid(Game.hero):
+		return 0.0
+	var map: Node = get_tree().get_first_node_in_group("alm_map")
+	var tile := 32
+	if map != null:
+		tile = maxi(1, int(map.get("tile_size")))
+	var hero_cell := Vector2i(int(Game.hero.global_position.x) / tile,
+		int(Game.hero.global_position.y) / tile)
+	return Vector2(cell).distance_to(Vector2(hero_cell))
+
+
 func active_for_city(city_id: String) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for a in active:
@@ -681,7 +1008,7 @@ func active_for_city(city_id: String) -> Array[Dictionary]:
 
 func has_work(city_id: String) -> bool:
 	## Is the "!" lit: there are offers or something to turn in.
-	if not offers_for(city_id).is_empty():
+	if not head_offers(city_id).is_empty():
 		return true
 	for a in active_for_city(city_id):
 		if str(a.get("state", "")) == STATE_READY:
@@ -697,7 +1024,7 @@ func marker_kind_for(city_id: String) -> String:
 	for a in active_for_city(city_id):
 		if str(a.get("state", "")) == STATE_READY:
 			return "ready"
-	if not offers_for(city_id).is_empty():
+	if not head_offers(city_id).is_empty():
 		return "available"
 	return ""
 
@@ -739,9 +1066,16 @@ func accept(city_id: String, quest_id: String) -> String:
 		if str((list[i] as Dictionary).get("id", "")) == quest_id:
 			idx = i
 			break
-	if idx < 0:
-		return Loc.t("ui.quest.err_gone")
-	var q: Dictionary = list[idx]
+	var q: Dictionary = {}
+	if idx >= 0:
+		q = list[idx]
+	else:
+		# A story stage is not stored in the rotation: it is rebuilt on demand,
+		# and the deterministic id is what ties the card to this click.
+		var cq := chain_offer(city_id)
+		if cq.is_empty() or str(cq.get("id", "")) != quest_id:
+			return Loc.t("ui.quest.err_gone")
+		q = cq
 	var tpl := str(q.get("template", ""))
 	var same := 0
 	for a in active:
@@ -749,11 +1083,18 @@ func accept(city_id: String, quest_id: String) -> String:
 			same += 1
 	if same >= SAME_TEMPLATE_LIMIT:
 		return Loc.t("ui.quest.err_taken")
-	list.remove_at(idx)
+	if idx >= 0:
+		list.remove_at(idx)
 	q["state"] = STATE_ACTIVE
 	q["progress"] = 0
 	if str(q.get("type", "")) == "GATHER":
 		q["progress"] = count_item(str(q.get("item_key", "")))
+	if str(q.get("type", "")) == "FIND_ITEM" and str(q.get("chain_id", "")) != "":
+		# The search spot is fixed on TAKE, not on the card build: the offer is
+		# rebuilt every panel refresh, and the hero walks in between.
+		q["target_cell"] = _quest_cell(
+			_stage_rng(city_id, str(q.get("chain_id", "")), str(q.get("stage", ""))),
+			QuestDB.stage(str(q.get("chain_id", "")), str(q.get("stage", ""))))
 	_give_issue_item(q)
 	active.append(q)
 	_materialize(q)
@@ -772,7 +1113,10 @@ func abandon(quest_id: String) -> bool:
 		active.remove_at(i)
 		_dematerialize(q)
 		_take_issue_item(q)
-		_return_to_offers(q)
+		# A story stage goes back to its chain, not to the rotation: the head
+		# offers it again until it is really done.
+		if str(q.get("chain_id", "")) == "":
+			_return_to_offers(q)
 		active_changed.emit()
 		quest_abandoned.emit(quest_id)
 		return true
@@ -821,6 +1165,7 @@ func turn_in(city_id: String, quest_id: String) -> String:
 	if hero != null and str(q.get("type", "")) == "FIND_ITEM":
 		hero.remove_item(_bag_key(q))
 	var gained := _grant(q)
+	_complete_stage(q)
 	q["state"] = STATE_DONE
 	q["closed_day"] = _day()
 	active.erase(q)
@@ -1142,6 +1487,7 @@ func to_payload() -> Dictionary:
 		"active": active.duplicate(true),
 		"history": history.duplicate(true),
 		"next_id": _next_id,
+		"chains": chains.duplicate(true),
 	}
 
 
@@ -1166,6 +1512,24 @@ func apply_payload(p: Dictionary) -> void:
 	_next_id = maxi(1, int(p.get("next_id", 1)))
 	_rotation_seed = int(p.get("seed", Game.map_seed))
 	_rotation_sector = str(p.get("sector", Game.map_sector))
+	# Chains are restored BEFORE the map targets: a stage quest in active[] must
+	# not be offered again after the load.
+	chains = {}
+	var ch: Variant = p.get("chains", {})
+	if ch is Dictionary:
+		for cid in (ch as Dictionary).keys():
+			var entry: Variant = (ch as Dictionary)[cid]
+			if not (entry is Dictionary):
+				continue
+			var st: Dictionary = (entry as Dictionary).duplicate(true)
+			var stage_id := str(st.get("stage", ""))
+			# Content changed and this stage is gone: close the chain instead of
+			# offering a middle stage that no longer exists.
+			if stage_id != "" and QuestDB.stage(str(cid), stage_id).is_empty():
+				push_warning("QuestSystem: chain %s - unknown stage '%s', closed"
+					% [str(cid), stage_id])
+				st["state"] = "done"
+			chains[str(cid)] = st
 	# Elites and pickups are nodes, not data: rebuild them from the records.
 	for q in active:
 		_materialize(q)
@@ -1180,6 +1544,7 @@ func reset() -> void:
 	active.clear()
 	history.clear()
 	targets.clear()
+	chains.clear()
 	_rotation_seed = -1
 	_next_id = 1
 

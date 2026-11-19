@@ -65,11 +65,26 @@ func _test_factions(ui) -> void:
 		"ork_mage/t1": orcs,
 		"monsters/bat": grey,
 		"monsters/druid": druids,
+		# Locals and mercenaries are not Greys (player report 20.11: the rescue
+		# traveller's card said "Faction: Grey").
+		"npc/traveler_m": Loc.t("ui.faction_name.civilian"),
+		"merc/human_warrior/t0": humans,
+		"merc/undead_mage/t1": undead,
+		"merc/druid_archer/t0": druids,
+		"merc/orc_warrior/t0": orcs,
 	}
 	for set_name in cases:
 		var got: String = ui.call("_faction_of_set", set_name)
 		_check(got == cases[set_name],
 			"фракция %s = %s (получено %s)" % [set_name, cases[set_name], got])
+	# The unit's own faction wins over the set: an outpost guard is a faction
+	# soldier, not a Grey, though it wears a monsters/ set.
+	var guard := Enemy.new()
+	guard.anim_set = "monsters/wolf_t1"
+	guard.faction = "ork"
+	_check(str(ui.call("_faction_of_unit", guard)) == orcs,
+		"своя фракция юнита важнее набора (стражник форпоста)")
+	guard.free()
 
 func _test_item_card(ui) -> void:
 	var it := ItemDB.find("Common iron Long Sword")

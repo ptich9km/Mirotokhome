@@ -888,7 +888,7 @@ func _test_panel_refresh(qs: QuestSystem) -> QuestPanel:
 	# The first build is quiet (a focus grab is deferred); this call fills the
 	# cards, so the checks below need no frame.
 	panel.call("_refresh")
-	var expected := qs.offers_for(CITY).size()
+	var expected := qs.head_offers(CITY).size()
 	# The cards are added in this very scope: no frame is needed for them.
 	_check(offers_box.get_child_count() == expected,
 		"the offers column shows one card per offer (%d cards / %d offers)" % [
@@ -909,7 +909,7 @@ func _test_panel_refresh(qs: QuestSystem) -> QuestPanel:
 	bus.state.day = day_before + ttl
 	qs.offers_for(CITY)
 	panel.call("_refresh")
-	expected = qs.offers_for(CITY).size()
+	expected = qs.head_offers(CITY).size()
 	_check(offers_box.get_child_count() == expected,
 		"the offers column follows the rotation (%d cards -> %d, offers %d)" % [
 			cards_before, offers_box.get_child_count(), expected])

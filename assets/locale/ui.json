@@ -1235,6 +1235,7 @@
   "ui.faction_name.grey": {"ru": "Серые", "en": "Grey"},
   "ui.faction_name.hero": {"ru": "Герой", "en": "Hero"},
   "ui.faction_name.humans": {"ru": "Люди", "en": "Humans"},
+  "ui.faction_name.civilian": {"ru": "Местные", "en": "Locals"},
   "ui.magic.seconds": {"ru": " (%.0f с)", "en": " (%.0f s)"},
   "ui.shop.title": {"ru": "МАГАЗИН", "en": "SHOP"},
   "ui.shop.cat.armor": {"ru": "Рец. Броня", "en": "Armour rec."},
@@ -1465,5 +1466,17 @@
   "ui.role.spell.tip": {"ru": "Держит дистанцию и бьёт выбранным заклинанием", "en": "Keeps the distance and casts the chosen spell"},
   "ui.role.heal": {"ru": "Лечение", "en": "Healing"},
   "ui.role.heal.tip": {"ru": "Не бросается в бой: лечит героя и отряд", "en": "Does not rush into battle: heals the hero and the party"},
-  "ui.feed.caravan": {"ru": "Караван спасён: слитки в сумке (+%d)", "en": "Caravan saved: ingots in your bag (+%d)"}
+  "ui.feed.caravan": {"ru": "Караван спасён: слитки в сумке (+%d)", "en": "Caravan saved: ingots in your bag (+%d)"},
+  "ui.quest.chain.badge": {"ru": "Сценарий: %s", "en": "Story: %s"},
+  "ui.quest.chain.step": {"ru": "Шаг %d из %d", "en": "Step %d of %d"},
+  "ui.quest.chain.count_after_shift.title": {"ru": "Счёт после смены", "en": "The count after the shift"},
+  "ui.quest.chain.count_after_shift.a1.title": {"ru": "Третий пост молчит", "en": "The third post is silent"},
+  "ui.quest.chain.count_after_shift.a1.text": {"ru": "Третий пост молчит вторую ночь. Глава сказал коротко: «Считаю сам». Иди и посчитай — %s у дороги, %s голов.", "en": "The third post has been silent for two nights. The head said it flatly: \"I do my own counting.\" Go and count them: %s on the road, %s heads."},
+  "ui.quest.chain.count_after_shift.a2.title": {"ru": "Жетон учёта", "en": "The tally token"},
+  "ui.quest.chain.count_after_shift.a2.text": {"ru": "Пост сгорел, но счёт остался: у каждого, кто вернулся, был жетон. Найди %s и принеси — по нему видно, кого не досчитались.", "en": "The post burned, but the count survived: everyone who came back carried a token. Find %s and bring it in — it shows who is missing."},
+  "ui.quest.chain.count_after_shift.a3.title": {"ru": "Отметка на обороте", "en": "A mark on the back"},
+  "ui.quest.chain.count_after_shift.a3.text": {"ru": "Отнеси счёт в %s и вернись с отметкой на обороте: без отметки это не отчёт, а слух.", "en": "Carry the ledger to %s and come back with a mark on the back: without it this is a rumour, not a report."},
+  "ui.quest.chain.count_after_shift.a4.title": {"ru": "Тот, кто сжёг пост", "en": "The one who burned the post"},
+  "ui.quest.chain.count_after_shift.a4.text": {"ru": "Тот, кто сжёг пост, ещё там — %s. Глава просил не геройствовать: просто верни счёт.", "en": "The one who burned the post is still out there — %s. The head asked you not to play hero: just bring the ledger back."},
+  "ui.quest.chain.count_after_shift.feed": {"ru": "Маша: «Двадцать три вернулись. Один — с книгой. Считаю снова.»", "en": "Masha: \"Twenty-three came back. One with a ledger. I count again.\""}
 }

@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "note": "Town head quest templates. Reward numbers are the base for difficulty 1; quests.rep_base/power_base and difficulty_mult below scale them. item_pool - item_db keys a quest item is drawn from; pick - which quest art goes with it (assets/ui/quest/items/). ALL player-visible text is a Loc key (title_key / text_key, assets/locale/ui.json): template JSON never holds Russian or English prose. populate lists the substitution keys in order; populate keys also fix the placeholder kind - numbers go in as %d, texts as %s. The key 'item' is the quest name of the item (quest_item_names), not the shop name: a shop trait like '4.4' must never reach a quest card.",
+  "version": 3,
+  "note": "Town head quest templates. Chains: a stage is an ordinary template plus chain/stage/order/difficulty/requires/effects/next; stages never enter the rotation (pick_template skips them). Reward numbers are the base for difficulty 1; quests.rep_base/power_base and difficulty_mult below scale them. item_pool - item_db keys a quest item is drawn from; pick - which quest art goes with it (assets/ui/quest/items/). ALL player-visible text is a Loc key (title_key / text_key, assets/locale/ui.json): template JSON never holds Russian or English prose. populate lists the substitution keys in order; populate keys also fix the placeholder kind - numbers go in as %d, texts as %s. The key 'item' is the quest name of the item (quest_item_names), not the shop name: a shop trait like '4.4' must never reach a quest card.",
   "difficulty_gold": [25, 50, 90],
   "difficulty_mult": [1.0, 1.8, 3.0],
   "quest_item_names": {
@@ -71,6 +71,15 @@
       "ru_short": "свиток «Благословение»"
     }
   },
+  "chains": [
+    {
+      "id": "count_after_shift",
+      "race": "humans",
+      "title_key": "ui.quest.chain.count_after_shift.title",
+      "requires": {"zone": ["start", "mid"]},
+      "stages": ["a1", "a2", "a3", "a4"]
+    }
+  ],
   "templates": [
     {
       "id": "kill_species",
@@ -162,6 +171,83 @@
       "reward_recipe": "giver",
       "icon": "quest_armor",
       "weight": 16
+    },
+    {
+      "id": "chain_cas_a1",
+      "chain": "count_after_shift",
+      "stage": "a1",
+      "order": 1,
+      "difficulty": 1,
+      "type": "KILL_SPECIES",
+      "title_key": "ui.quest.chain.count_after_shift.a1.title",
+      "text_key": "ui.quest.chain.count_after_shift.a1.text",
+      "populate": ["species_plural", "count_word"],
+      "count_by_difficulty": [6, 6, 6],
+      "requires": {},
+      "effects": [],
+      "next": ["a2"],
+      "icon": "quest_sword"
+    },
+    {
+      "id": "chain_cas_a2",
+      "chain": "count_after_shift",
+      "stage": "a2",
+      "order": 2,
+      "difficulty": 2,
+      "type": "FIND_ITEM",
+      "title_key": "ui.quest.chain.count_after_shift.a2.title",
+      "text_key": "ui.quest.chain.count_after_shift.a2.text",
+      "populate": ["item"],
+      "count_by_difficulty": [1, 1, 1],
+      "item_pool": ["Common bronze Amulet"],
+      "pick": "quest_amulet",
+      "cell_dist": [8, 16],
+      "requires": {},
+      "effects": [
+        {"op": "flag", "key": "ledger_found", "value": true}
+      ],
+      "next": ["a3", "a4"],
+      "icon": "quest_amulet"
+    },
+    {
+      "id": "chain_cas_a3",
+      "chain": "count_after_shift",
+      "stage": "a3",
+      "order": 3,
+      "difficulty": 2,
+      "type": "DELIVER",
+      "title_key": "ui.quest.chain.count_after_shift.a3.title",
+      "text_key": "ui.quest.chain.count_after_shift.a3.text",
+      "populate": ["city"],
+      "count_by_difficulty": [1, 1, 1],
+      "item_pool": ["Scroll Bless"],
+      "pick": "quest_book",
+      "requires": {"cities_min": 2},
+      "effects": [
+        {"op": "flag", "key": "ledger_delivered", "value": true}
+      ],
+      "next": ["a4"],
+      "icon": "quest_book"
+    },
+    {
+      "id": "chain_cas_a4",
+      "chain": "count_after_shift",
+      "stage": "a4",
+      "order": 4,
+      "difficulty": 3,
+      "type": "KILL_TARGET",
+      "title_key": "ui.quest.chain.count_after_shift.a4.title",
+      "text_key": "ui.quest.chain.count_after_shift.a4.text",
+      "populate": ["species"],
+      "count_by_difficulty": [1, 1, 1],
+      "requires": {},
+      "effects": [
+        {"op": "archmage_power", "race": "humans", "amount": 5.0},
+        {"op": "item", "key": "Post Ledger"},
+        {"op": "feed", "key": "ui.quest.chain.count_after_shift.feed"}
+      ],
+      "next": [],
+      "icon": "quest_sword"
     }
   ]
 }

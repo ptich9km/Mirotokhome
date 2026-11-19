@@ -1242,7 +1242,7 @@ func _unit_tooltip_lines(e: Node2D) -> Array:
 	if name == "":
 		name = set_name.get_slice("/", 1) if "/" in set_name else set_name
 	lines.append(name if name != "" else Loc.t("ui.card.creature"))
-	lines.append(Loc.f("ui.card.faction", [_faction_of_set(set_name)]))
+	lines.append(Loc.f("ui.card.faction", [_faction_of_unit(e)]))
 	return lines
 func _building_tooltip_lines(h: Dictionary) -> Array:
 	var lines: Array = []
@@ -1276,6 +1276,26 @@ func _loot_tooltip_lines(lb: LootDrop) -> Array:
 ## The `humans/` and `heroes/` families (Allods II art) were removed on 11.10 together with
 ## the assets, and their branches were deleted: they would point into the void and substitute
 ## the label of a removed faction. The `rig/` branch is the pilot hero rig.
+## The unit's OWN faction wins over the animation set: an outpost guard is a
+## faction soldier (Enemy.faction) and a rescue traveller is a local, not a Grey.
+## The set is only a fallback.
+func _faction_of_unit(e: Node2D) -> String:
+	if "faction" in e:
+		var f := str(e.get("faction"))
+		if f != "":
+			return _lore_faction_label(f)
+	return _faction_of_set(str(e.get("anim_set")) if "anim_set" in e else "")
+
+
+## The faction label the lore canon uses (`ui.faction.*` is a different, older
+## table: for these four it returns the raw key).
+func _lore_faction_label(race: String) -> String:
+	if race == "":
+		return ""
+	var label := Loc.field(Lore.faction(race), "label")
+	return label if label != "" else race
+
+
 func _faction_of_set(set_name: String) -> String:
 	# City sets city_* — the city race (09.10). The label must come from
 	# lore world.json, otherwise the tooltip said "Passer-by".
@@ -1289,6 +1309,19 @@ func _faction_of_set(set_name: String) -> String:
 		return Loc.t("ui.faction_name.ork")
 	if set_name.begins_with("rig/"):
 		return Loc.t("ui.faction_name.hero")
+	# Locals: the rescue traveller and other peaceful NPC sets. Without this
+	# branch the card said "Faction: Grey" over a civilian (player report 20.11).
+	if set_name.begins_with("npc/"):
+		return Loc.t("ui.faction_name.civilian")
+	# A mercenary set carries its race: merc/human_warrior/t0, merc/undead_mage/t1.
+	if set_name.begins_with("merc/"):
+		var token := set_name.get_slice("/", 1).get_slice("_", 0)
+		var race_key := "necro" if token == "undead" else token
+		if race_key == "human":
+			race_key = "humans"
+		if race_key == "orc":
+			race_key = "ork"
+		return _lore_faction_label(race_key)
 	for k in ["orc", "goblin", "troll", "ogre"]:
 		if k in set_name:
 			return Loc.t("ui.faction_name.ork")
@@ -1463,6 +1496,7 @@ func _draw_minimap():
 	# Event/quest markers (19.10): always visible, over the fog.
 	if MinimapMarkers.instance != null:
 		_draw_minimap_markers(w, h, mw, mh)
+	_draw_quest_objectives(w, h, mw, mh)
 
 	minimap_texture.update(minimap_image)
 	var tex_rect2 := minimap_rect.get_node_or_null("MinimapTex")
@@ -1507,6 +1541,38 @@ func _draw_minimap_markers(w: int, h: int, mw: int, mh: int) -> void:
 				var yy := cy + dy
 				if xx >= 0 and xx < w and yy >= 0 and yy < h:
 					minimap_image.set_pixel(xx, yy, col)
+
+
+## Quest objectives on the minimap (20.11): a plus of two cells around the
+## place the quest points at. Quests used to have no map mark at all, so
+## "find the token" or "carry the ledger to town 2" was a blind errand.
+## A ready quest (go and turn it in) is NOT marked: the head has its own "?".
+## Only the current sector is drawn, and a point that does not exist (no pack
+## left, no herb found) draws nothing.
+func _draw_quest_objectives(w: int, h: int, mw: int, mh: int) -> void:
+	var qs := QuestSystem.instance
+	if qs == null:
+		return
+	var sx := float(w) / float(mw)
+	var sy := float(h) / float(mh)
+	var blink := (Time.get_ticks_msec() / 500) % 2 == 0
+	var col: Color = MINIMAP_OBJECTIVE if blink else MINIMAP_OBJECTIVE_DIM
+	for q in qs.active:
+		if str(q.get("sector", "")) != Game.map_sector:
+			continue
+		if str(q.get("state", "")) == QuestSystem.STATE_READY:
+			continue
+		var cell: Vector2i = qs.objective_cell(q)
+		if cell.x < 0 or cell.y < 0:
+			continue
+		var cx := int(cell.x * sx)
+		var cy := int(cell.y * sy)
+		for d in range(-2, 3):
+			for pair in [[cx + d, cy], [cx, cy + d]]:
+				var xx: int = pair[0]
+				var yy: int = pair[1]
+				if xx >= 0 and xx < w and yy >= 0 and yy < h:
+					minimap_image.set_pixel(xx, yy, col)
 # Minimap colours: game data (biomes/units), not the UI panel palette.
 const MINIMAP_NPC_GUARD := Color(0.2, 0.8, 0.2, 1.0)
 const MINIMAP_NPC_CIV := Color(1.0, 0.85, 0.2, 1.0)
@@ -1517,6 +1583,9 @@ const MINIMAP_HERO := Color(1, 1, 1, 1)
 const MINIMAP_BATTLE := Color(1.0, 0.25, 0.15, 1.0)
 const MINIMAP_BATTLE_FADE := Color(0.75, 0.1, 0.1, 1.0)
 const MINIMAP_QUEST := Color(1.0, 0.75, 0.1, 1.0)
+## Quest objective: a cyan plus, pulsing so it reads as "go here", not as loot.
+const MINIMAP_OBJECTIVE := Color(0.35, 0.95, 1.0, 1.0)
+const MINIMAP_OBJECTIVE_DIM := Color(0.15, 0.55, 0.65, 1.0)
 const MINIMAP_BG := Color(0.03, 0.03, 0.04, 1.0)
 const MINIMAP_CUSTOM := {  # MINIMAP biome colors
 	1: Color(0.55, 0.35, 0.15, 1.0),    # MINIMAP soil

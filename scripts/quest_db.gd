@@ -51,9 +51,21 @@ const WORD_POPULATE := ["count_word"]
 const SPECIES_FORM := {
 	"kill_species": {"title": "acc", "text": "nom"},
 	"urgent_hunt": {"title": "acc", "text": "nom"},
+	"chain_cas_a1": {"title": "acc", "text": "nom"},
 }
 
+## Chain stages (engine + chain A, 20.11). A stage is an ordinary template that
+## additionally names its chain, its stage, the step number, a FIXED difficulty
+## (the zone must not reprice a stage of a story line) and what happens when it
+## is turned in. Stages never enter the rotation: pick_template skips them.
+const EFFECT_OPS := ["hero_rep", "archmage_power", "item", "flag", "feed"]
+
+## Conditions a stage (or a chain) may put on being offered. Unknown keys are a
+## load error: a typo must not silently make a gate always pass.
+const REQUIRES_KEYS := ["zone", "cities_min", "day_min", "hero_rep"]
+
 static var _templates: Array[Dictionary] = []
+static var _chains: Array[Dictionary] = []
 static var _item_names: Dictionary = {}
 static var _difficulty_gold: Array = [25, 50, 90]
 static var _difficulty_mult: Array = [1.0, 1.8, 3.0]
@@ -62,6 +74,7 @@ static var _loaded := false
 
 static func clear_cache() -> void:
 	_templates = []
+	_chains = []
 	_item_names = {}
 	_difficulty_gold = [25, 50, 90]
 	_difficulty_mult = [1.0, 1.8, 3.0]
@@ -96,6 +109,150 @@ static func _load() -> void:
 		var t := _validate(raw)
 		if not t.is_empty():
 			_templates.append(t)
+	var chain_list: Variant = db.get("chains", [])
+	if chain_list is Array:
+		for raw_chain in chain_list:
+			var c := _validate_chain(raw_chain)
+			if not c.is_empty():
+				_chains.append(c)
+	_finalize_chains()
+
+
+## A chain record: the story line itself. Its stages live in templates[].
+static func _validate_chain(raw: Variant) -> Dictionary:
+	if not (raw is Dictionary):
+		push_error("QuestDB: chain is not an object")
+		return {}
+	var d: Dictionary = raw
+	var id := str(d.get("id", ""))
+	if id == "":
+		push_error("QuestDB: chain without id")
+		return {}
+	var race := str(d.get("race", ""))
+	if not MapGenerator.CITY_POPULATION.has(race):
+		push_error("QuestDB: chain %s - unknown race '%s'" % [id, race])
+		return {}
+	var title_key := str(d.get("title_key", ""))
+	if title_key == "" or not Loc.has_key(title_key):
+		push_error("QuestDB: chain %s - unknown title_key '%s'" % [id, title_key])
+		return {}
+	var stages: Variant = d.get("stages", [])
+	if not (stages is Array) or (stages as Array).is_empty():
+		push_error("QuestDB: chain %s - stages must be a non-empty array" % id)
+		return {}
+	if not _requires_valid(d.get("requires", {}), "chain " + id):
+		return {}
+	return d
+
+
+## Every stage of a chain exists, and every stage belongs to a real chain.
+## Runs after both lists are read: a stage cannot be checked before its chain.
+static func _finalize_chains() -> void:
+	var keep: Array[Dictionary] = []
+	for t in _templates:
+		var chain_id := str(t.get("chain", ""))
+		if chain_id == "":
+			keep.append(t)
+			continue
+		var c := chain(chain_id)
+		if c.is_empty():
+			push_error("QuestDB: template %s - unknown chain '%s'"
+				% [str(t.get("id", "")), chain_id])
+			continue
+		var stages: Array = c.get("stages", [])
+		if not stages.has(str(t.get("stage", ""))):
+			push_error("QuestDB: template %s - stage '%s' is not listed in chain %s"
+				% [str(t.get("id", "")), str(t.get("stage", "")), chain_id])
+			continue
+		keep.append(t)
+	_templates = keep
+
+
+static func _requires_valid(raw: Variant, where: String) -> bool:
+	if raw == null:
+		return true
+	if not (raw is Dictionary):
+		push_error("QuestDB: %s - requires is not an object" % where)
+		return false
+	for key in (raw as Dictionary).keys():
+		if not REQUIRES_KEYS.has(str(key)):
+			push_error("QuestDB: %s - unknown requires key '%s' (known: %s)"
+				% [where, str(key), ", ".join(REQUIRES_KEYS)])
+			return false
+	return true
+
+
+## Fields a chain stage adds on top of an ordinary template. Numbers come from
+## JSON as floats, so they are narrowed here and the rest of the code can rely
+## on ints.
+static func _validate_stage_fields(d: Dictionary, id: String) -> bool:
+	var stage := str(d.get("stage", ""))
+	if stage == "":
+		push_error("QuestDB: %s - a chain template needs a stage id" % id)
+		return false
+	var order_raw: Variant = d.get("order", 1)
+	if not (order_raw is float or order_raw is int) or int(order_raw) < 1:
+		push_error("QuestDB: %s - order must be a positive number" % id)
+		return false
+	var diff_raw: Variant = d.get("difficulty", 1)
+	if not (diff_raw is float or diff_raw is int) or int(diff_raw) < 1 or int(diff_raw) > 3:
+		push_error("QuestDB: %s - difficulty must be 1..3" % id)
+		return false
+	d["order"] = int(order_raw)
+	d["difficulty"] = int(diff_raw)
+	if not _requires_valid(d.get("requires", {}), id):
+		return false
+	var next_raw: Variant = d.get("next", [])
+	if not (next_raw is Array):
+		push_error("QuestDB: %s - next must be an array of stage ids" % id)
+		return false
+	var effects_raw: Variant = d.get("effects", [])
+	if not (effects_raw is Array):
+		push_error("QuestDB: %s - effects must be an array" % id)
+		return false
+	for raw in (effects_raw as Array):
+		if not _effect_valid(raw, id):
+			return false
+	return true
+
+
+## One effect: op from the closed list plus the fields that op needs. A broken
+## effect is a load error: a quest that silently pays nothing is a bug report.
+static func _effect_valid(raw: Variant, id: String) -> bool:
+	if not (raw is Dictionary):
+		push_error("QuestDB: %s - effect is not an object" % id)
+		return false
+	var e: Dictionary = raw
+	var op := str(e.get("op", ""))
+	if not EFFECT_OPS.has(op):
+		push_error("QuestDB: %s - unknown effect op '%s' (known: %s)"
+			% [id, op, ", ".join(EFFECT_OPS)])
+		return false
+	match op:
+		"hero_rep", "archmage_power":
+			var race := str(e.get("race", ""))
+			if not MapGenerator.CITY_POPULATION.has(race):
+				push_error("QuestDB: %s - effect %s: unknown race '%s'" % [id, op, race])
+				return false
+			var amount: Variant = e.get("amount", 0)
+			if not (amount is float or amount is int) or float(amount) <= 0.0:
+				push_error("QuestDB: %s - effect %s: amount must be positive" % [id, op])
+				return false
+		"item":
+			var key := str(e.get("key", ""))
+			if key == "" or ItemDB.find(key).is_empty():
+				push_error("QuestDB: %s - effect item: unknown item '%s'" % [id, key])
+				return false
+		"flag":
+			if str(e.get("key", "")) == "":
+				push_error("QuestDB: %s - effect flag without a key" % id)
+				return false
+		"feed":
+			var key := str(e.get("key", ""))
+			if key == "" or not Loc.has_key(key):
+				push_error("QuestDB: %s - effect feed: unknown loc key '%s'" % [id, key])
+				return false
+	return true
 
 
 static func _validate(raw: Variant) -> Dictionary:
@@ -110,6 +267,9 @@ static func _validate(raw: Variant) -> Dictionary:
 		return {}
 	if not TYPES.has(type):
 		push_error("QuestDB: unknown type '%s' in template %s" % [type, id])
+		return {}
+	var chain_id := str(d.get("chain", ""))
+	if chain_id != "" and not _validate_stage_fields(d, id):
 		return {}
 	var counts: Variant = d.get("count_by_difficulty", [])
 	if not (counts is Array) or (counts as Array).size() < 3:
@@ -249,6 +409,36 @@ static func template(id: String) -> Dictionary:
 	return {}
 
 
+static func chains() -> Array[Dictionary]:
+	_load()
+	return _chains
+
+
+static func chain(id: String) -> Dictionary:
+	if id == "":
+		return {}
+	_load()
+	for c in _chains:
+		if str(c.get("id", "")) == id:
+			return c
+	return {}
+
+
+## One stage of a chain by its own stage id ("a2").
+static func stage(chain_id: String, stage_id: String) -> Dictionary:
+	if chain_id == "" or stage_id == "":
+		return {}
+	for t in templates():
+		if str(t.get("chain", "")) == chain_id \
+				and str(t.get("stage", "")) == stage_id:
+			return t
+	return {}
+
+
+static func is_chain_template(template_id: String) -> bool:
+	return str(template(template_id).get("chain", "")) != ""
+
+
 ## Reward/count multiplier for difficulty 1..3.
 static func difficulty_mult(difficulty: int) -> float:
 	_load()
@@ -267,6 +457,9 @@ static func base_gold(difficulty: int) -> int:
 static func templates_for(zone: String, difficulty: int, city_count: int) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for t in templates():
+		# A chain stage is offered by its chain, never by the rotation.
+		if str(t.get("chain", "")) != "":
+			continue
 		if difficulty < int(t.get("min_difficulty", 1)):
 			continue
 		var tags: Array = t.get("tags", [])
