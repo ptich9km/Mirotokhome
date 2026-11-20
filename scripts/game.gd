@@ -1313,6 +1313,77 @@ func _clear_party_nodes() -> void:
 
 ## Spawn NPCs/monsters from map data: the .alm units section (type_id) or
 ## the .npcs.json sidecar (set). Hostility — UnitDB.is_hostile (monsters palette=5).
+## --- City guards: posts and respawn -------------------------------------------
+##
+## Allods rule (player, 20.11): a raid may wipe the guards, but the town keeps
+## living - replacements arrive and grind the raid down. There is no "city fell"
+## state, so a guard post must be able to come back.
+static var _guard_records: Array = []      # original .npcs.json guard posts
+static var _guard_respawn_accum := 0.0
+
+
+## The posts of this map, taken once after the initial spawn: a replacement
+## stands where the killed guard stood, not in a random corner.
+func _collect_guard_records(recs: Array) -> void:
+	_guard_records.clear()
+	for rec in recs:
+		if str(rec.get("role", "")) != "guard":
+			continue
+		if str(rec.get("city_id", "")) == "":
+			continue
+		# The record may name the set or the numeric type: _spawn_map_units accepts
+		# both, so the collector must too, otherwise the town's target count comes
+		# out short and no replacement is ever needed.
+		var set_name := str(rec.get("set", ""))
+		if set_name == "":
+			set_name = UnitDB.set_name_for_id(int(rec.get("type_id", -1)))
+		if set_name == "" or not UnitDB.has(set_name):
+			continue
+		var copy: Dictionary = rec.duplicate()
+		copy["set"] = set_name
+		_guard_records.append(copy)
+
+
+## One replacement per city per period: the town recovers slowly, not instantly.
+func _guard_respawn_tick(delta: float) -> void:
+	if _guard_records.is_empty() or alm_map == null:
+		return
+	var period := GameConfig.getf("npc", "guard_respawn_seconds")
+	if period <= 0.0:
+		return
+	_guard_respawn_accum += delta
+	if _guard_respawn_accum < period:
+		return
+	_guard_respawn_accum = 0.0
+	var alive := {}
+	for n in npcs:
+		if not is_instance_valid(n):
+			continue
+		if str(n.get("role")) != "guard":
+			continue
+		if str(n.get("state")) in ["dying", "decay", "corpse"]:
+			continue
+		var cid := str(n.get("city_id"))
+		alive[cid] = int(alive.get(cid, 0)) + 1
+	var target := {}
+	for rec in _guard_records:
+		var cid := str(rec.get("city_id", ""))
+		target[cid] = int(target.get(cid, 0)) + 1
+	var ts := int(alm_map.get("tile_size"))
+	for rec in _guard_records:
+		var cid := str(rec.get("city_id", ""))
+		if int(alive.get(cid, 0)) >= int(target.get(cid, 0)):
+			continue
+		var post: Array = rec.get("post", [])
+		var cell := Vector2i(int(post[0]), int(post[1])) if post.size() >= 2 \
+			else Vector2i(int(rec.get("x", 0)), int(rec.get("y", 0)))
+		var pos := _find_open_spot(cell, ts)
+		if pos.x < 0.0:
+				continue
+		_spawn_npc(str(rec.get("set", "")), pos, rec)
+		alive[cid] = int(alive.get(cid, 0)) + 1
+
+
 func _spawn_map_units(done: Callable = Callable()) -> void:
 	if alm_map == null or not alm_map.has_method("get_units"):
 		if done.is_valid():
@@ -1353,6 +1424,7 @@ func _spawn_map_units(done: Callable = Callable()) -> void:
 			await get_tree().process_frame
 	print("Map: %d units spawned" % spawned)
 	_on_spawn_batch(recs.size(), recs.size())
+	_collect_guard_records(recs)
 	if done.is_valid():
 		done.call()
 
@@ -2487,6 +2559,7 @@ func _process_impl(delta):
 	if is_paused:
 		return
 	_gray_respawn_tick(delta)
+	_guard_respawn_tick(delta)
 	if is_instance_valid(player) and camera:
 		_autosave_tick(delta)
 		# The camera is already in _physics_process — here only UI/regen/timers.
@@ -3049,19 +3122,62 @@ func _gray_respawn_tick(delta: float) -> void:
 	var spot := _find_open_spot(cell, int(alm_map.get("tile_size")))
 	if spot.x < 0.0:
 		return
-	var e2 := Enemy.new()
-	e2.name = "Monster_" + set_name.get_file()
-	e2.anim_set = set_name
-	# The tier strengthens a respawned beast the same way as at map generation.
+	# A raid owns its town's outskirts: an ambient beast there would read as part
+	# of the pack but not count for it ("2 squirrels and a spirit", player 20.11).
+	if _raid_near(spot):
+		return
+	make_gray(set_name, spot, self)
+
+
+## Is an assaulting pack close to this point? Then the ambient respawn waits.
+func _raid_near(spot: Vector2) -> bool:
+	var limit := 12.0 * 32.0
+	for e in enemies:
+		if not is_instance_valid(e):
+			continue
+		if not (e is Enemy):
+			continue
+		var order: Vector2 = (e as Enemy).assault_to
+		if order == Vector2.INF:
+			continue
+		if (e as Enemy).global_position.distance_to(spot) < limit:
+			return true
+	return false
+
+## One hostile beast of `set_name` at `spot`, registered in Game.enemies.
+## Static with an explicit parent so a quest can call it without holding the
+## world node: URGENT quests spawn their own pack ("Trolls at the gates").
+static func make_gray(set_name: String, spot: Vector2, parent: Node,
+		assault_to: Vector2 = Vector2.INF) -> Node2D:
+	if parent == null or set_name == "":
+		return null
+	var beast := Enemy.new()
+	beast.name = "Monster_" + set_name.get_file()
+	beast.anim_set = set_name
+	# The tier strengthens the beast exactly as at map generation and respawn.
 	var mults: Array = MapGenerator.gray_tier_mults(set_name)
-	e2.max_hp = int(round(float(randi_range(GameConfig.geti("grey", "hp_min"),
+	beast.max_hp = int(round(float(randi_range(GameConfig.geti("grey", "hp_min"),
 		GameConfig.geti("grey", "hp_max"))) * float(mults[0])))
-	e2.damage = int(round(float(randi_range(GameConfig.geti("grey", "damage_min"),
+	beast.damage = int(round(float(randi_range(GameConfig.geti("grey", "damage_min"),
 		GameConfig.geti("grey", "damage_max"))) * float(mults[1])))
-	e2.position = spot
-	e2.home_position = spot
-	add_child(e2)
-	Game.enemies.append(e2)
+	beast.position = spot
+	beast.home_position = spot
+	if assault_to != Vector2.INF:
+		# The pack is told to take the town and looks further around: it must
+		# engage the guards it meets, not walk past them.
+		beast.assault_to = assault_to
+		beast.aggro_radius = maxf(beast.aggro_radius, 260.0)
+	parent.add_child(beast)
+	Game.enemies.append(beast)
+	# The map is what turns an Enemy.died into the quest's progress: a beast
+	# spawned here without watch_enemy() died silently and the counters stayed at
+	# zero (player, 20.11: "перебил кучу волков, а не засчиталось ни одного").
+	if parent.is_inside_tree():
+		var map := parent.get_tree().get_first_node_in_group("alm_map")
+		if map != null and map.has_method("watch_enemy"):
+			map.call("watch_enemy", beast)
+	return beast
+
 
 ## A random walkable cell not closer than gray_respawn_min_dist to the hero.
 func _gray_respawn_cell() -> Vector2i:

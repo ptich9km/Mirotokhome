@@ -501,6 +501,14 @@ static func count_for(template_d: Dictionary, difficulty: int,
 	return maxi(1, base + rng.randi_range(-1, 1))
 
 
+## Raid size of an URGENT quest: 4-6 beasts, never the generic +-1 jitter.
+## A raid of three read as a bug to the player (20.11: "я же говорил пул 4-6"),
+## and the template's own counts are 4/5/6.
+static func urgent_count(template_d: Dictionary, difficulty: int,
+		rng: RandomNumberGenerator) -> int:
+	return clampi(count_for(template_d, difficulty, rng), 4, 6)
+
+
 ## Gray set of the needed tier: "monsters/wolf_t2".
 ##
 ## `species` is the beast ("wolf"), NOT a set: the tier comes from the zone

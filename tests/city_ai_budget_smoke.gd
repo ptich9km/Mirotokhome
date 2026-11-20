@@ -82,10 +82,77 @@ func _run() -> void:
 		% _awake_guards(Game.npcs))
 	# Отсечение не ослепило стражу: враг вплотную обязан быть найден.
 	await _check_guard_sees_enemy()
+	_check_guard_respawn()
 	_report()
 
 
 ## Регрессия отсечения: стражник с врагом в 40 px обязан видеть этого врага.
+## Allods rule (player, 20.11): the raid may wipe the guards, the town keeps
+## living - replacements arrive at their posts and grind the raid down.
+func _check_guard_respawn() -> void:
+	var recs: Array = Game._guard_records
+	_check(not recs.is_empty(), "посты стражи собраны (%d)" % recs.size())
+	if recs.is_empty():
+		return
+	var city := str((recs[0] as Dictionary).get("city_id", ""))
+	var before := _guards_of_city(city)
+	_check(before > 0, "в городе %s есть стража (%d)" % [city, before])
+	var killed := false
+	for n in Game.npcs:
+		if not is_instance_valid(n):
+			continue
+		if str(n.get("role")) != "guard" or str(n.get("city_id")) != city:
+			continue
+		if str(n.get("state")) in ["dying", "decay", "corpse"]:
+			continue
+		n.set("state", "dying")
+		killed = true
+		break
+	_check(killed, "стражник выбыл для проверки")
+	var after_kill := _guards_of_city(city)
+	_check(after_kill == before - 1, "выбывший больше не считается (%d -> %d)"
+		% [before, after_kill])
+	# One period is enough for one replacement.
+	var game: Node = current_scene
+	game.call("_guard_respawn_tick",
+		float(GameConfig.getf("npc", "guard_respawn_seconds")) + 0.1)
+	var after := _guards_of_city(city)
+	_check(after == before, "пост восстановлен (%d -> %d)" % [after_kill, after])
+	var near_post := false
+	for n in Game.npcs:
+		if not is_instance_valid(n):
+			continue
+		if str(n.get("role")) != "guard" or str(n.get("city_id")) != city:
+			continue
+		if str(n.get("state")) in ["dying", "decay", "corpse"]:
+			continue
+		near_post = true
+	_check(near_post, "новая стража стоит в городе")
+
+
+func _records_of_city(city: String) -> int:
+	var n := 0
+	for rec in Game._guard_records:
+		if str((rec as Dictionary).get("city_id", "")) == city:
+			n += 1
+	return n
+
+
+func _guards_of_city(city: String) -> int:
+	var n := 0
+	for unit in Game.npcs:
+		if not is_instance_valid(unit):
+			continue
+		if str(unit.get("role")) != "guard":
+			continue
+		if str(unit.get("city_id")) != city:
+			continue
+		if str(unit.get("state")) in ["dying", "decay", "corpse"]:
+			continue
+		n += 1
+	return n
+
+
 func _check_guard_sees_enemy() -> void:
 	var guard: Node2D = null
 	for n in Game.npcs:

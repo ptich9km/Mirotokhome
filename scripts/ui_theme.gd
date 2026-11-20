@@ -31,6 +31,10 @@ const SLOT_EDGE := Color(0.580, 0.361, 0.161, 0.96)   ## рамка ячейки
 
 const DANGER := Color(0.769, 0.333, 0.227)           ## «Нет», удаление слота
 const SUCCESS := Color(0.498, 0.651, 0.314)          ## «Да», подтверждение
+## Medium difficulty and other "pay attention, not a threat" marks: the panel
+## needs a third colour between green and red, and a bare Color() in a panel is
+## forbidden by tests/ui_design_system_smoke.gd.
+const INFO := Color(0.404, 0.596, 0.851)
 
 ## Затемнение под модальным окном. Не раньше 0.45 — иначе панель «плавает».
 const SCRIM := Color(0.0, 0.0, 0.0, 0.45)

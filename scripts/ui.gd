@@ -1543,12 +1543,13 @@ func _draw_minimap_markers(w: int, h: int, mw: int, mh: int) -> void:
 					minimap_image.set_pixel(xx, yy, col)
 
 
-## Quest objectives on the minimap (20.11): a plus of two cells around the
-## place the quest points at. Quests used to have no map mark at all, so
-## "find the token" or "carry the ledger to town 2" was a blind errand.
+## Quest objectives on the minimap (20.11): the sign of the mission type - the
+## same chest, swords or daisy the quest row shows, as a still frame. A cyan plus
+## was the first version, but a plus says "somewhere here", not "a chest"; the
+## player still had to open the journal to learn what he was walking into.
 ## A ready quest (go and turn it in) is NOT marked: the head has its own "?".
 ## Only the current sector is drawn, and a point that does not exist (no pack
-## left, no herb found) draws nothing.
+## left, no herb found) draws nothing. Types without a sheet keep the plus.
 func _draw_quest_objectives(w: int, h: int, mw: int, mh: int) -> void:
 	var qs := QuestSystem.instance
 	if qs == null:
@@ -1567,12 +1568,35 @@ func _draw_quest_objectives(w: int, h: int, mw: int, mh: int) -> void:
 			continue
 		var cx := int(cell.x * sx)
 		var cy := int(cell.y * sy)
+		var icon := QuestIcons.mission_minimap_icon(QuestIcons.mission_slug_for_quest(q))
+		if icon != null and _stamp_minimap_icon(icon, cx, cy):
+			continue
 		for d in range(-2, 3):
 			for pair in [[cx + d, cy], [cx, cy + d]]:
 				var xx: int = pair[0]
 				var yy: int = pair[1]
 				if xx >= 0 and xx < w and yy >= 0 and yy < h:
 					minimap_image.set_pixel(xx, yy, col)
+
+
+## Puts a sign on the minimap with its centre on (cx, cy). The centre is clamped
+## so a sign near the border still draws instead of dropping to the plus.
+func _stamp_minimap_icon(icon: Image, cx: int, cy: int) -> bool:
+	var w := minimap_image.get_width()
+	var h := minimap_image.get_height()
+	var half := icon.get_width() / 2
+	if w <= icon.get_width() or h <= icon.get_height():
+		return false
+	cx = clampi(cx, half, w - half - 1)
+	cy = clampi(cy, half, h - half - 1)
+	for y in range(icon.get_height()):
+		for x in range(icon.get_width()):
+			var c := icon.get_pixel(x, y)
+			if c.a <= 0.02:
+				continue
+			var dst := minimap_image.get_pixel(cx - half + x, cy - half + y)
+			minimap_image.set_pixel(cx - half + x, cy - half + y, dst.lerp(c, c.a))
+	return true
 # Minimap colours: game data (biomes/units), not the UI panel palette.
 const MINIMAP_NPC_GUARD := Color(0.2, 0.8, 0.2, 1.0)
 const MINIMAP_NPC_CIV := Color(1.0, 0.85, 0.2, 1.0)

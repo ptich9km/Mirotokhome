@@ -89,6 +89,9 @@ const DEFAULTS := {
 		"guard_aggro_radius": 133.0,
 		# Beyond this distance from the post a guard does not chase a Grey.
 		"guard_leash": 380.0,
+		# A killed guard post comes back this often: the town keeps living after
+		# a raid wipes its guards (Allods rule, player 20.11). 0 = never.
+		"guard_respawn_seconds": 20.0,
 	},
 	"movement": {
 		"accel": 1100.0,   # duplicated in player.gd and enemy.gd
@@ -315,13 +318,22 @@ const DEFAULTS := {
 		"rescue_gold_min": 40,
 		"rescue_gold_max": 80,
 		"rescue_rep": 5,        # reputation with the nearest city's race
+		# Weights of the three encounters (sum 100) and the ambush/caravan numbers.
+		"rescue_weight": 50,
+		"ambush_weight": 25,
+		"caravan_weight": 25,
+		"ambush_members_min": 3,   # a raid on the hero is bigger than a skirmish
+		"ambush_members_max": 5,
+		"caravan_ingots_min": 2,   # ingots in the saved cart, by zone
+		"caravan_ingots_max": 5,
+		"caravan_rep": 4,          # reputation for saving the caravan
 	},
 	"quests": {
 		# City head quests (22.10): offers by map seed, rotation by the world
 		# day, reward = gold + faction reputation + mage power +
 		# a blueprint for a hard quest.
 		"enabled": 1,
-		"offer_slots": 3,          # how many offers one city holds
+		"offer_slots": 5,          # how many offers one city holds
 		"max_active": 5,           # how many quests can be taken at once
 		"offer_ttl_days": 3,       # an offer lives this many world days, then rotates
 		"urgent_seconds": 120.0,   # time limit of an urgent quest, real seconds

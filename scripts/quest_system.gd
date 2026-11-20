@@ -34,6 +34,16 @@ signal quest_abandoned(quest_id: String)
 signal quest_completed(quest_id: String)
 signal quest_failed(quest_id: String)
 
+## An URGENT quest promises a pack at the gates: how many beasts we keep alive
+## near the town, and how often the pack is topped up while the clock runs.
+## The raid size comes from the template (4-6); the cap only guards bad data.
+const URGENT_PACK_CAP := 6
+const URGENT_TOPUP_SECONDS := 4.0
+## A raid is an EVENT, not a chore: at most this many towns per rotation carry
+## one (player, 20.11: "их не надо делать много, 1-2 таких за тик респавна").
+const URGENT_OFFERS_MAX := 2
+const URGENT_TEMPLATE := "urgent_hunt"
+
 const STATE_ACTIVE := "active"
 const STATE_READY := "ready"
 const STATE_DONE := "done"
@@ -60,6 +70,8 @@ var _rotation_seed := -1              # map the current offers belong to
 var _rotation_sector := ""            # sector the current offers belong to
 var _bus: Node = null
 var _next_id := 1
+## Seconds accumulated for the URGENT pack top-up (see _ensure_urgent_pack).
+var _urgent_topup := 0.0
 var _map: Node = null                 # map we listen to for enemy deaths
 
 
@@ -200,6 +212,10 @@ func _regenerate(city_id: String) -> void:
 	var city_count := _city_count()
 	var excluded := _held_template_ids(city_id)
 	var slots := maxi(1, GameConfig.geti("quests", "offer_slots"))
+	# Only 1-2 towns of the map get a raid this rotation; the rest never see the
+	# urgent template at all (it is filtered out of the pool, not re-rolled).
+	if not _urgent_allowed(city_id, rotation):
+		excluded.append(URGENT_TEMPLATE)
 	var out: Array[Dictionary] = []
 	# Offers of the CURRENT rotation survive the re-roll (an abandoned quest
 	# comes back to them); they are not excluded either.
@@ -281,7 +297,8 @@ func _make_quest(tpl: Dictionary, rng: RandomNumberGenerator, city_id: String,
 	var type := str(tpl.get("type", ""))
 	if difficulty_override > 0:
 		difficulty = difficulty_override
-	var count := QuestDB.count_for(tpl, difficulty, rng)
+	var count := QuestDB.urgent_count(tpl, difficulty, rng) if type == "URGENT" \
+		else QuestDB.count_for(tpl, difficulty, rng)
 	var q := {
 		"city_race": race,
 		"faction": QuestDB.faction_of_race(race),
@@ -632,7 +649,7 @@ func _text_arg(key: String, q: Dictionary, short := false) -> String:
 	return ""
 
 
-## Town name by id ("c0t0"). The generator's _cities records have no names, so
+## Town names by id ("c0t0"). The generator's _cities records have no names, so
 ## the number matches the one the player sees next to the head's marker.
 func city_name(city_id: String) -> String:
 	if city_id == "":
@@ -649,6 +666,32 @@ func _city_race(city_id: String) -> String:
 		return MapGenerator.city_race_for_hero(Game.hero_race)
 	var rec: Dictionary = map.call("city_heads").get(city_id, {})
 	return str(rec.get("race", MapGenerator.city_race_for_hero(Game.hero_race)))
+
+
+## Does this town carry an URGENT raid in this rotation? Deterministic by seed,
+## zone and rotation, so the same town keeps the same answer until the offers
+## rotate: 1 to URGENT_OFFERS_MAX towns of the map, never more.
+func _urgent_allowed(city_id: String, rotation: int) -> bool:
+	var n := _city_count()
+	if n <= 1:
+		return true
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("%d|%s|%d|urgent" % [int(Game.map_seed), Game.map_zone, rotation])
+	var count := mini(n, rng.randi_range(1, URGENT_OFFERS_MAX))
+	var idx := _city_index(city_id)
+	var allowed: Array = []
+	while allowed.size() < count:
+		var pick := rng.randi_range(0, n - 1)
+		if not allowed.has(pick):
+			allowed.append(pick)
+	return allowed.has(idx)
+
+
+## "c2t1" -> 2 (the town number the player sees next to the head's marker).
+func _city_index(city_id: String) -> int:
+	if not city_id.begins_with("c"):
+		return 0
+	return int(city_id.trim_prefix("c").get_slice("t", 0))
 
 
 func _city_count() -> int:
@@ -880,6 +923,122 @@ func chain_state(chain_id: String) -> Dictionary:
 	return chains.get(chain_id, {})
 
 
+## --- URGENT pack -------------------------------------------------------------
+
+## "Trolls at the gates" must really have trolls at the gates. An URGENT quest
+## spawns its own pack next to the head's town when it is taken, and keeps it
+## topped up while the clock runs; without this the text is a lie and the map has
+## nothing to point at (player, 20.11: "не видно на карте и у города никого нет").
+## Returns how many beasts were added.
+func _ensure_urgent_pack(q: Dictionary) -> int:
+	if str(q.get("type", "")) != "URGENT":
+		return 0
+	if str(q.get("sector", "")) != Game.map_sector:
+		return 0
+	var set_name := str(q.get("set", ""))
+	if set_name == "":
+		return 0
+	var alive := 0
+	for e in Game.enemies:
+		if not is_instance_valid(e):
+			continue
+		if str(e.get("state")) in ["dying", "decay", "corpse"]:
+			continue
+		if str(e.get("anim_set")) == set_name:
+			alive += 1
+	var want := mini(maxi(int(q.get("need", 3)), 1), URGENT_PACK_CAP)
+	var missing := want - alive
+	if missing <= 0:
+		return 0
+	# A raid may refill at most once over its target: if beasts keep dying at the
+	# gates (or the spots are blocked), the top-up must not spawn forever.
+	var spent := int(q.get("spawned", 0))
+	if spent >= want * 2:
+		return 0
+	missing = mini(missing, want * 2 - spent)
+	var map := get_tree().get_first_node_in_group("alm_map")
+	if map == null or Game.hero == null or not is_instance_valid(Game.hero):
+		return 0
+	var ts := maxi(1, int(map.get("tile_size")))
+	var town := _town_cell(str(q.get("city_id", "")))
+	if town.x < 0:
+		return 0
+	var parent := Game.hero.get_parent()
+	if parent == null:
+		return 0
+	var spots := _pack_spots(town, ts, map, missing)
+	# The quest text says the beasts are AT THE GATES and the town is in danger:
+	# the pack is ordered onto the town square, so it is a defence, not a hunt
+	# in a field (player, 20.11: "моя задача помочь в защите города").
+	var town_world := Vector2(town.x * ts + ts / 2.0, town.y * ts + ts / 2.0)
+	var spawned := 0
+	for spot in spots:
+		if Game.make_gray(set_name, spot, parent, town_world) != null:
+			spawned += 1
+	q["spawned"] = spent + spawned
+	return spawned
+
+
+## Open cells around the town for the pack: the ring just outside the walls, so
+## the beasts are "at the gates" and not inside a house.
+## Centre of the town: the centroid of its heads (AlmMap.get_cities). The first
+## head's cell can sit on the town's edge, and a ring around it lands outside the
+## walls - the pack then read as "spawn far from the city" (player, 20.11).
+func _town_cell(city_id: String) -> Vector2i:
+	var map := get_tree().get_first_node_in_group("alm_map")
+	if map != null and map.has_method("get_cities"):
+		for c in map.call("get_cities"):
+			if str((c as Dictionary).get("id", "")) == city_id:
+				var x := int((c as Dictionary).get("x", -1))
+				var y := int((c as Dictionary).get("y", -1))
+				if x >= 0 and y >= 0:
+					return Vector2i(x, y)
+	return _city_cell(city_id)
+
+
+func _pack_spots(town: Vector2i, ts: int, map: Node, count: int) -> Array:
+	var out: Array = []
+	# Just outside the walls: the town oval is about 11x11, so radius 6-9 puts
+	# the beasts at the gates instead of inside somebody's house.
+	# Outside the walls, not on the doorstep: the town oval is about 11x11, and at
+	# radius 6 the pack climbed out of the houses (player, 20.11: "как будто бы
+	# они из зданий вылазят"). 9-14 cells reads as "they came to the gates".
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+		Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)]
+	for radius in [9, 11, 13]:
+		for dir in dirs:
+			if out.size() >= count:
+				return out
+			var cell: Vector2i = town + dir * radius
+			if not _terrain_walkable(map, cell):
+				continue
+			if _cell_built_over(map, cell):
+				continue
+			out.append(Vector2(cell.x * ts + ts / 2.0, cell.y * ts + ts / 2.0))
+	return out
+
+
+## A building or a declared no-walk cell: the pack must not spawn inside a house.
+func _cell_built_over(map: Node, cell: Vector2i) -> bool:
+	if map.has_method("is_structure_cell") and bool(map.call("is_structure_cell", cell)):
+		return true
+	if map.has_method("is_nowalk_cell") and bool(map.call("is_nowalk_cell", cell)):
+		return true
+	return false
+
+
+func _terrain_walkable(map: Node, cell: Vector2i) -> bool:
+	if not map.has_method("cell_type_at"):
+		return false
+	var terrain := int(map.call("cell_type_at", cell.x, cell.y))
+	if terrain < 0 or terrain >= 7:
+		return false
+	# 0 grass, 3 road, 4 soil, 5 sand, 6 mud. Roads were missing, and a town is
+	# mostly roads - the pack then spawned on the few grass patches outside the
+	# walls, which read as "they appear far from the city" (player, 20.11).
+	return terrain in [0, 3, 4, 5, 6]
+
+
 ## --- Objective guidance ------------------------------------------------------
 
 ## Where the quest happens, in map cells. The minimap draws a quest cross there
@@ -1098,6 +1257,8 @@ func accept(city_id: String, quest_id: String) -> String:
 	_give_issue_item(q)
 	active.append(q)
 	_materialize(q)
+	# URGENT: the pack promised by the text appears at the town gates right away.
+	_ensure_urgent_pack(q)
 	_update_state(q)
 	active_changed.emit()
 	quest_taken.emit(str(q.get("id", "")))
@@ -1464,6 +1625,10 @@ func _tick_urgent(delta: float) -> void:
 			continue
 		q["seconds_left"] = float(q.get("seconds_left", 0.0)) - delta
 		if float(q["seconds_left"]) > 0.0:
+			_urgent_topup += delta
+			if _urgent_topup >= URGENT_TOPUP_SECONDS:
+				_urgent_topup = 0.0
+				_ensure_urgent_pack(q)
 			continue
 		q["state"] = STATE_FAILED
 		active.erase(q)

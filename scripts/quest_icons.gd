@@ -164,3 +164,109 @@ static func target_icon(pick: String, item_key: String) -> Texture2D:
 	if art == "":
 		return null
 	return load(art) as Texture2D
+
+
+## --- Mission sheets of the heads (gameplay missions). -----------------------
+
+## Type of quest ("type" in QuestDB) -> sheet slug. MVP quests have sheets;
+## the rest exist for the mission types whose mechanics land later.
+static var MISSION_SLUG_BY_TYPE := {
+	"FIND_ITEM": "find_items",
+	"GATHER": "alchemy_gather",
+	"KILL_SPECIES": "destroy",
+	"KILL_GROUP": "destroy",
+	"KILL_TARGET": "boss_kill",
+	## No animated sheet of their own yet: an urgent hunt is a fight, and a
+	## delivery is a wagon - a fitting sign beats the legacy 32x32 icon.
+	"URGENT": "destroy",
+	"DELIVER": "caravan",
+	"escort": "escort",
+	"build_repair": "build_repair",
+	"caravan": "caravan",
+	"faction_war": "faction_war",
+	"story_chain": "story_chain",
+}
+
+## Template id -> sheet, for quests whose TYPE is too coarse to tell them apart.
+## "gather_tags" is a GATHER quest like "gather_herbs", but it hunts the rival
+## faction for trophy tags, not herbs - the daisy read as weed picking (player,
+## 20.11: "это фракционная война, где стена щитов и камни").
+const MISSION_SLUG_BY_TEMPLATE := {
+	"gather_tags": "faction_war",
+}
+
+## Sheet of a whole quest record: a scenario stage always wears the golden key
+## (it is one story, not a chore of its own type), then the template override,
+## then the type.
+static func mission_slug_for_quest(q: Dictionary) -> String:
+	if str(q.get("chain_id", "")) != "":
+		return "story_chain"
+	var by_template: String = MISSION_SLUG_BY_TEMPLATE.get(str(q.get("template", "")), "")
+	if by_template != "":
+		return by_template
+	return mission_slug_for_type(str(q.get("type", "")))
+
+const MISSION_DIR := "res://assets/quests/missions/"
+const MISSION_FRAMES := 4
+const MISSION_FRAME_TIME := 0.22
+## Minimap sign: a flat 16x16 glyph per mission type, drawn by
+## tests/gen_minimap_signs.py. The 64x64 mission frames are painterly and turn
+## into a dark smudge at minimap scale (measured 20.11), so the map gets its own
+## simplified set. The glyph carries its own 1 px outline, so nothing is scaled
+## at runtime.
+const MINIMAP_DIR := "res://assets/quests/missions/minimap/"
+const MINIMAP_ICON_SIZE := 16
+## Cache: the minimap stamps these signs every redraw (0.25 s), and load() per
+## stamp would be wasted work.
+static var _minimap_cache: Dictionary = {}
+
+
+static func mission_minimap_path(slug: String) -> String:
+	if slug == "":
+		return ""
+	var path := "%s%s.png" % [MINIMAP_DIR, slug]
+	return path if ResourceLoader.exists(path) else ""
+
+
+## Still sign of a mission for the minimap; null while the glyph is missing.
+static func mission_minimap_icon(slug: String) -> Image:
+	if slug == "":
+		return null
+	if _minimap_cache.has(slug):
+		return _minimap_cache[slug]
+	var path := mission_minimap_path(slug)
+	if path == "":
+		return null
+	var tex := load(path) as Texture2D
+	var img: Image = tex.get_image() if tex != null else null
+	if img == null:
+		return null
+	_minimap_cache[slug] = img
+	return img
+
+
+static func mission_slug_for_type(t: String) -> String:
+	return MISSION_SLUG_BY_TYPE.get(t, "")
+
+
+static func mission_frame_path(slug: String, index: int) -> String:
+	if slug == "":
+		return ""
+	var path := "%s%s-%03d.png" % [MISSION_DIR, slug, index]
+	return path if ResourceLoader.exists(path) else ""
+
+
+static func mission_frames(slug: String) -> Array:
+	## Frames of the sheet; empty while the art does not exist (same contract
+	## as mark_frame_path: "" and [] when nothing is there).
+	var out: Array = []
+	for i in range(MISSION_FRAMES):
+		var path := mission_frame_path(slug, i)
+		if path == "":
+			return []
+		out.append(load(path) as Texture2D)
+	return out
+
+
+static func has_mission_art(slug: String) -> bool:
+	return mission_frame_path(slug, 0) != ""

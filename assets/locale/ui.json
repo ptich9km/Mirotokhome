@@ -1478,5 +1478,10 @@
   "ui.quest.chain.count_after_shift.a3.text": {"ru": "Отнеси счёт в %s и вернись с отметкой на обороте: без отметки это не отчёт, а слух.", "en": "Carry the ledger to %s and come back with a mark on the back: without it this is a rumour, not a report."},
   "ui.quest.chain.count_after_shift.a4.title": {"ru": "Тот, кто сжёг пост", "en": "The one who burned the post"},
   "ui.quest.chain.count_after_shift.a4.text": {"ru": "Тот, кто сжёг пост, ещё там — %s. Глава просил не геройствовать: просто верни счёт.", "en": "The one who burned the post is still out there — %s. The head asked you not to play hero: just bring the ledger back."},
-  "ui.quest.chain.count_after_shift.feed": {"ru": "Маша: «Двадцать три вернулись. Один — с книгой. Считаю снова.»", "en": "Masha: \"Twenty-three came back. One with a ledger. I count again.\""}
+  "ui.quest.chain.count_after_shift.feed": {"ru": "Маша: «Двадцать три вернулись. Один — с книгой. Считаю снова.»", "en": "Masha: \"Twenty-three came back. One with a ledger. I count again.\""},
+  "ui.quest.difficulty_story": {"ru": "Сценарий", "en": "Story"},
+  "ui.quest.badge_short_easy": {"ru": "Обычный", "en": "Common"},
+  "ui.quest.badge_short_normal": {"ru": "Средний", "en": "Medium"},
+  "ui.quest.badge_short_hard": {"ru": "Тяжёлый", "en": "Hard"},
+  "ui.quest.state_taken": {"ru": "Взято", "en": "Taken"}
 }

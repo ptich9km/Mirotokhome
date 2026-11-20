@@ -52,6 +52,7 @@ func _phase() -> void:
 	_test_offer(qs)
 	_test_panel(qs)
 	_test_template_limit(qs)
+	_test_taken_rows(qs)
 	_test_flow(qs)
 	_test_save(qs)
 	_report()
@@ -274,17 +275,72 @@ func _test_panel(qs: QuestSystem) -> void:
 		panel.close()
 		return
 	_check(box.get_child_count() == qs.head_offers(CITY).size(),
-		"the offers column shows rotation + story (%d cards / %d offers)"
+		"the offers column shows rotation + story (%d rows / %d offers)"
 		% [box.get_child_count(), qs.head_offers(CITY).size()])
-	var chain_label := _find_label(box, "Chain")
-	_check(chain_label != null, "the story card carries a badge")
-	if chain_label != null:
-		_check(chain_label.text.contains("Story:"),
-			"the badge names the scenario (%s)" % chain_label.text.replace("\n", " / "))
-		_check(chain_label.text.contains("Step 1 of 4"),
-			"the badge shows the step (%s)" % chain_label.text.replace("\n", " / "))
+	# A row, not a card: 64 px mission icon, difficulty badge, one-line text.
+	var rows := _find_nodes(box, "Quest_", true)
+	_check(rows.size() == qs.head_offers(CITY).size(),
+		"every offer is its own row (%d)" % rows.size())
+	var slots := _find_nodes(box, "IconSlot")
+	_check(slots.size() == rows.size(), "every row carries an icon slot (%d)" % slots.size())
+	var tallest := 0.0
+	for row in rows:
+		tallest = maxf(tallest, (row as Control).get_combined_minimum_size().y)
+	_check(tallest <= 84.0, "a quest row stays compact (%d px, 160 px cards are back)"
+		% int(tallest))
+	_check(tallest * 5.0 <= 460.0, "five offers fit the column without scrolling (%d px)"
+		% int(tallest * 5.0))
+	for slot in slots:
+		_check((slot as Control).custom_minimum_size == Vector2(64, 64),
+			"the icon slot is 64x64, the frame size (%s)"
+			% str((slot as Control).custom_minimum_size))
+	var icons := _find_nodes(box, "Icon")
+	var with_texture := 0
+	for icon in icons:
+		if (icon as TextureRect).texture != null:
+			with_texture += 1
+	_check(with_texture == rows.size(),
+		"every row shows an icon texture (%d / %d)" % [with_texture, rows.size()])
+	var badges := _find_nodes(box, "Badge")
+	_check(badges.size() == rows.size(), "every row carries a difficulty badge (%d)" % badges.size())
+	var badge_texts := {}
+	for badge in badges:
+		var label := _find_label(badge, "Text")
+		if label != null:
+			badge_texts[label.text] = true
+	_check(badge_texts.has("Story"), "the scenario row is marked gold with the word (%s)"
+		% str(badge_texts.keys()))
+	_check(badge_texts.size() >= 2, "difficulty words differ between rows (%s)"
+		% str(badge_texts.keys()))
+	var hint_label := _find_label(box, "Hint")
+	_check(hint_label != null and hint_label.text.contains("Story:"),
+		"the scenario step moved into the info line (%s)"
+		% ("" if hint_label == null else hint_label.text))
+	_check(hint_label != null and hint_label.text.contains("Step 1 of 4"),
+		"the step number survives the move (%s)"
+		% ("" if hint_label == null else hint_label.text))
+	# The head's window is offers only: taken quests belong to the journal.
+	var active_col := panel.get("_active_col") as Control
+	_check(active_col != null and not active_col.visible,
+		"the head's window hides the taken column")
+	var offers_col := panel.get("_offers_col") as Control
+	_check(offers_col != null and offers_col.visible,
+		"the offers column takes the width")
 	Loc.set_locale("ru")
 	panel.close()
+
+
+## Nodes by name; with `prefix` the name only has to START with it (rows are
+## "Quest_<id>"). Exact matching matters: "Icon" would otherwise catch "IconSlot"
+## and the cast to TextureRect would read a property of Nil.
+func _find_nodes(node: Node, wanted: String, prefix: bool = false) -> Array:
+	var out: Array = []
+	var hit := node.name.begins_with(wanted) if prefix else String(node.name) == wanted
+	if hit:
+		out.append(node)
+	for child in node.get_children():
+		out.append_array(_find_nodes(child, wanted, prefix))
+	return out
 
 
 func _find_label(node: Node, label_name: String) -> Label:
@@ -295,6 +351,82 @@ func _find_label(node: Node, label_name: String) -> Label:
 		if found != null:
 			return found
 	return null
+
+
+# --- 4b. Taken quests stay in the head's list ---------------------------------
+
+## Player, 20.11: "берёшь задание — оно исчезает, а сдать как?". A taken quest
+## must keep its row with a red mark (WoW rule) and offer the turn-in button once
+## it is done, instead of vanishing and leaving the journal as the only place.
+func _test_taken_rows(qs: QuestSystem) -> void:
+	Loc.set_locale("ru")
+	# An ordinary rotation offer, never the chain stage: the chain tests below
+	# need their first stage untouched.
+	var offers := qs.head_offers(CITY)
+	var pick := ""
+	for q in offers:
+		if str(q.get("chain_id", "")) == "":
+			pick = str(q.get("id", ""))
+			break
+	_check(pick != "", "есть обычный оффер, чтобы взять его (%d офферов)" % offers.size())
+	var err := qs.accept(CITY, pick)
+	_check(err == "", "квест берётся для проверки списка (%s)" % err)
+	# A finished quest must offer the turn-in right there: the whole point of
+	# keeping the row is to hand the quest back at the same head.
+	var marked_ready := false
+	for a in qs.active:
+		if str(a.get("id", "")) == pick:
+			a["state"] = QuestSystem.STATE_READY
+			marked_ready = true
+	_check(marked_ready, "квест помечен выполненным для проверки кнопки «Сдать»")
+	var panel := QuestPanel.new()
+	panel.name = "TakenRowsSmoke"
+	root.add_child(panel)
+	panel.setup(null, CITY)
+	panel.call("_refresh")
+	var box: Node = panel.get("_offers_box")
+	var taken := qs.active_for_city(CITY)
+	_check(not taken.is_empty(), "для проверки есть взятые квесты (%d)" % taken.size())
+	_check(box.get_child_count() == qs.head_offers(CITY).size() + taken.size(),
+		"взятые остаются в списке главы (%d строк / %d офферов + %d взятых)"
+		% [box.get_child_count(), qs.head_offers(CITY).size(), taken.size()])
+	var marks := _find_nodes(box, "Taken")
+	_check(marks.size() == taken.size(),
+		"взятые помечены красным «Взято» (%d метки / %d взятых)" % [marks.size(), taken.size()])
+	for mark in marks:
+		_check((mark as Label).text == "Взято", "метка читается как «Взято» (%s)"
+			% (mark as Label).text)
+		var row: Node = mark.get_parent()
+		while row != null and not String(row.name).begins_with("Quest_"):
+			row = row.get_parent()
+		_check(row != null, "метка живёт внутри строки квеста")
+		if row == null:
+			continue
+		var buttons := _find_buttons(row)
+		var has_take := false
+		var has_turn_in := false
+		for b in buttons:
+			if b.text == Loc.t("ui.quest.action_take"):
+				has_take = true
+			if b.text == Loc.t("ui.quest.action_turn_in"):
+				has_turn_in = true
+		_check(not has_take, "у взятого квеста нет кнопки «Взять»")
+		_check(has_turn_in, "у выполненного взятого квеста есть кнопка «Сдать»")
+	panel.close()
+	# Leave the journal as it was: the flow tests below start from a clean slate.
+	for a in qs.active:
+		if str(a.get("id", "")) == pick:
+			a["state"] = QuestSystem.STATE_ACTIVE
+	qs.abandon(pick)
+
+
+func _find_buttons(node: Node) -> Array:
+	var out: Array = []
+	if node is Button:
+		out.append(node)
+	for child in node.get_children():
+		out.append_array(_find_buttons(child))
+	return out
 
 
 # --- 4. Same-template limit --------------------------------------------------

@@ -22,13 +22,17 @@ extends CanvasLayer
 signal closed
 signal inventory_changed
 
-const ICON_SIZE := Vector2(48, 48)
-## Reward coins in a quest card: the swaying sprite, smaller than the item slot.
+const ICON_SIZE := Vector2(64, 64)
+## Reward coins in a quest row: the swaying sprite, smaller than the icon slot.
 const COIN_SIZE := Vector2(20, 20)
 const COIN_FRAME_TIME := QuestIcons.COIN_FRAME_TIME
-## Panel width: two card columns at 1280x800, the world stays visible at the
+const MISSION_FRAME_TIME := QuestIcons.MISSION_FRAME_TIME
+## Panel width: one full-width list at 1280x800, the world stays visible at the
 ## edges.
 const PANEL_WIDTH := 1100
+## Row height budget: 64 px icon + the card margins. Seven rows fit the column,
+## so five offers plus a scenario are visible without scrolling.
+const BADGE_MIN_HEIGHT := 20
 
 var player: Player
 var city_id: String = ""
@@ -49,6 +53,13 @@ var _coin_sprites: Array = []      # TextureRect nodes; Array on purpose (see _r
 var _coin_frames: Array = []
 var _coin_t := 0.0
 var _coin_frame := 0
+## Animated mission icons in the rows: [{ "texture": TextureRect, "frames": Array,
+## "frame": int, "t": float }]. Ticked like the coin so every row shows its own
+## phase (a shared timer would make all rows flip at once - the eye reads that as
+## one blinking block, not as several living icons).
+var _mission_views: Array = []
+var _offers_col: Control
+var _active_col: Control
 var _refresh_t := 0.0
 var _dirty := false           # quest taken / turned in elsewhere - rebuild cards
 var _offers_sig := ""         # journal signature at the last rebuild
@@ -95,6 +106,7 @@ func _mark_dirty_city(target_city_id: String) -> void:
 
 func _process(delta: float) -> void:
 	_tick_coin(delta)
+	_tick_missions(delta)
 	# An urgent quest ticks in real time: its counter in the panel must live.
 	_refresh_t += delta
 	if _refresh_t >= 0.5:
@@ -151,6 +163,7 @@ func _make_theme() -> Theme:
 	UiKit.add_label(theme, &"QuestText", UiTheme.TEXT, UiTheme.FONT_BODY)
 	UiKit.add_label(theme, &"QuestHint", UiTheme.TEXT_MUTED, UiTheme.FONT_MICRO)
 	UiKit.add_label(theme, &"QuestStatus", UiTheme.ACCENT_DIM, UiTheme.FONT_BODY)
+	UiKit.add_label(theme, &"QuestTaken", UiTheme.DANGER, UiTheme.FONT_MICRO)
 	UiKit.add_label(theme, &"QuestReady", UiTheme.SUCCESS, UiTheme.FONT_BODY)
 	UiKit.add_panel(theme, &"QuestCard", UiTheme.PANEL_INNER, UiTheme.SLOT_EDGE,
 		UiTheme.RADIUS_SLOT)
@@ -158,6 +171,20 @@ func _make_theme() -> Theme:
 		UiTheme.RADIUS_SLOT)
 	UiKit.add_panel(theme, &"QuestScrollPanel", UiTheme.BG_DEEP, UiTheme.PANEL_EDGE,
 		UiTheme.RADIUS_SLOT)
+	# Difficulty badge: colour is the second channel, the word is the first one -
+	# one colour alone would say nothing to a colour-blind player.
+	UiKit.add_panel(theme, &"QuestBadge_easy", UiTheme.PANEL_INNER,
+		UiTheme.SUCCESS, UiTheme.RADIUS_SLOT)
+	UiKit.add_panel(theme, &"QuestBadge_normal", UiTheme.PANEL_INNER,
+		UiTheme.INFO, UiTheme.RADIUS_SLOT)
+	UiKit.add_panel(theme, &"QuestBadge_hard", UiTheme.PANEL_INNER,
+		UiTheme.DANGER, UiTheme.RADIUS_SLOT)
+	UiKit.add_panel(theme, &"QuestBadge_story", UiTheme.PANEL_INNER,
+		UiTheme.ACCENT, UiTheme.RADIUS_SLOT)
+	UiKit.add_label(theme, &"QuestBadgeText_easy", UiTheme.SUCCESS, UiTheme.FONT_MICRO)
+	UiKit.add_label(theme, &"QuestBadgeText_normal", UiTheme.INFO, UiTheme.FONT_MICRO)
+	UiKit.add_label(theme, &"QuestBadgeText_hard", UiTheme.DANGER, UiTheme.FONT_MICRO)
+	UiKit.add_label(theme, &"QuestBadgeText_story", UiTheme.ACCENT, UiTheme.FONT_MICRO)
 	UiKit.add_button(theme, &"QuestAction",
 		UiTheme.PANEL_INNER, UiTheme.ACCENT_DIM,
 		UiTheme.PANEL_INNER.lightened(0.14), UiTheme.ACCENT,
@@ -191,7 +218,7 @@ func _build_ui() -> void:
 	_panel.name = "Panel"
 	_panel.theme_type_variation = &"QuestPanel"
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	_panel.custom_minimum_size = Vector2(PANEL_WIDTH, 600)
+	_panel.custom_minimum_size = Vector2(PANEL_WIDTH, 660)
 	center.add_child(_panel)
 
 	var margin := MarginContainer.new()
@@ -242,6 +269,7 @@ func _build_ui() -> void:
 	var offers_col := _make_column("Offers", _offers_title)
 	columns.add_child(offers_col[0])
 	_offers_box = offers_col[1]
+	_offers_col = offers_col[0]
 
 	_active_title = Label.new()
 	_active_title.name = "ActiveTitle"
@@ -249,6 +277,7 @@ func _build_ui() -> void:
 	var active_col := _make_column("Active", _active_title)
 	columns.add_child(active_col[0])
 	_active_box = active_col[1]
+	_active_col = active_col[0]
 
 	_status = Label.new()
 	_status.name = "Status"
@@ -301,16 +330,24 @@ func _make_column(column_name: String, title: Label) -> Array:
 	return [col, box]
 
 
-## --- One quest card -----------------------------------------------------------
+## --- One quest row ------------------------------------------------------------
+##
+## A row, not a card: the panel must show five offers plus the scenario at once,
+## and a card with a title, a description, a place, a reward line and buttons
+## took 160 px, so three of them filled the whole window. The description is cut
+## to one line here (the full text lives in the city feed), everything that has
+## to be scanned - type icon, name, difficulty, progress, reward - stays.
 
-func _make_card(q: Dictionary, buttons: Array) -> PanelContainer:
-	## buttons: [[text, Callable], ...] - action buttons at the bottom.
+func _make_row(q: Dictionary, buttons: Array, taken: bool = false) -> PanelContainer:
+	## buttons: [[text, Callable], ...] - action buttons on the right.
+	## taken: the head lists this quest as already accepted - the row keeps its
+	## place and turns red instead of disappearing.
 	var card := PanelContainer.new()
 	card.name = "Quest_" + str(q.get("id", ""))
 	card.theme_type_variation = &"QuestCard"
 	var margin := MarginContainer.new()
-	UiKit.set_margins(margin, UiTheme.SPACE_2, UiTheme.SPACE_2,
-		UiTheme.SPACE_2, UiTheme.SPACE_2)
+	UiKit.set_margins(margin, UiTheme.SPACE_2, UiTheme.SPACE_1,
+		UiTheme.SPACE_2, UiTheme.SPACE_1)
 	card.add_child(margin)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", UiTheme.SPACE_2)
@@ -320,7 +357,7 @@ func _make_card(q: Dictionary, buttons: Array) -> PanelContainer:
 	slot.name = "IconSlot"
 	slot.theme_type_variation = &"QuestIconSlot"
 	slot.custom_minimum_size = ICON_SIZE
-	slot.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(slot)
 	var icon := TextureRect.new()
 	icon.name = "Icon"
@@ -328,46 +365,63 @@ func _make_card(q: Dictionary, buttons: Array) -> PanelContainer:
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.custom_minimum_size = ICON_SIZE
-	icon.texture = _quest_icon(str(q.get("icon", "")))
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	slot.add_child(icon)
+	_attach_row_icon(icon, q)
 
 	var col := VBoxContainer.new()
 	col.name = "Body"
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	col.add_theme_constant_override("separation", UiTheme.SPACE_1)
+	col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	col.add_theme_constant_override("separation", 0)
 	row.add_child(col)
 
-	# Story lines are marked above the title: a scenario must not read as one
-	# more rotating chore.
-	var chain_text := _chain_text(q)
-	if chain_text != "":
-		var chain_label := Label.new()
-		chain_label.name = "Chain"
-		chain_label.theme_type_variation = &"QuestHint"
-		chain_label.text = chain_text
-		chain_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		col.add_child(chain_label)
+	var head := HBoxContainer.new()
+	head.name = "Head"
+	head.add_theme_constant_override("separation", UiTheme.SPACE_2)
+	col.add_child(head)
 
 	var name_label := Label.new()
 	name_label.name = "Name"
 	name_label.theme_type_variation = &"QuestName"
 	name_label.text = str(q.get("title", ""))
-	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	col.add_child(name_label)
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	head.add_child(name_label)
+
+	if taken:
+		var mark := Label.new()
+		mark.name = "Taken"
+		mark.theme_type_variation = &"QuestTaken"
+		mark.text = Loc.t("ui.quest.state_taken")
+		mark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		head.add_child(mark)
+
+	# The chain badge already says "scenario": a separate line above the name
+	# repeated it and cost 18 px on the one row that needs the height most.
+	head.add_child(_difficulty_badge(q))
 
 	var text_label := Label.new()
 	text_label.name = "Text"
 	text_label.theme_type_variation = &"QuestText"
 	text_label.text = str(q.get("text", ""))
-	text_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text_label.clip_text = true
+	text_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	col.add_child(text_label)
+
+	var foot := HBoxContainer.new()
+	foot.name = "Foot"
+	foot.add_theme_constant_override("separation", UiTheme.SPACE_2)
+	col.add_child(foot)
 
 	var hint := Label.new()
 	hint.name = "Hint"
 	hint.theme_type_variation = &"QuestHint"
 	hint.text = _hint_text(q)
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	col.add_child(hint)
+	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hint.clip_text = true
+	hint.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	foot.add_child(hint)
 
 	var place_text := _place_text(q)
 	if place_text != "":
@@ -375,33 +429,81 @@ func _make_card(q: Dictionary, buttons: Array) -> PanelContainer:
 		place.name = "Place"
 		place.theme_type_variation = &"QuestHint"
 		place.text = place_text
-		col.add_child(place)
-
-	col.add_child(_reward_row(q))
+		foot.add_child(place)
 
 	if str(q.get("state", "")) == QuestSystem.STATE_READY:
 		var ready := Label.new()
 		ready.name = "Ready"
 		ready.theme_type_variation = &"QuestReady"
 		ready.text = _ready_text(q)
-		ready.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		col.add_child(ready)
+		foot.add_child(ready)
+
+	foot.add_child(_reward_row(q))
 
 	if not buttons.is_empty():
-		var actions := HBoxContainer.new()
+		var actions := VBoxContainer.new()
 		actions.name = "Actions"
-		actions.add_theme_constant_override("separation", UiTheme.SPACE_2)
-		col.add_child(actions)
+		actions.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		actions.add_theme_constant_override("separation", UiTheme.SPACE_1)
+		row.add_child(actions)
 		for pair in buttons:
 			var btn := Button.new()
 			btn.text = str((pair as Array)[0])
 			btn.theme_type_variation = &"QuestAction"
-			btn.custom_minimum_size = Vector2(0, 30)
+			btn.custom_minimum_size = Vector2(0, 28)
 			var cb: Callable = (pair as Array)[1]
 			btn.pressed.connect(cb)
 			actions.add_child(btn)
 			_row_buttons.append(btn)
 	return card
+
+
+## Difficulty of the row: green common, blue medium, red hard, gold scenario -
+## a scenario is harder to spot among rotating chores than any difficulty number.
+func _difficulty_badge(q: Dictionary) -> PanelContainer:
+	var key := "story" if str(q.get("chain_id", "")) != "" else "easy"
+	if key != "story":
+		var diff := clampi(int(q.get("difficulty", 1)) - 1, 0,
+			QuestDB.DIFFICULTY_NAMES.size() - 1)
+		key = QuestDB.DIFFICULTY_NAMES[diff]
+	var badge := PanelContainer.new()
+	badge.name = "Badge"
+	badge.theme_type_variation = StringName("QuestBadge_" + key)
+	badge.custom_minimum_size = Vector2(0, BADGE_MIN_HEIGHT)
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var label := Label.new()
+	label.name = "Text"
+	label.theme_type_variation = StringName("QuestBadgeText_" + key)
+	label.text = Loc.t("ui.quest.difficulty_story" if key == "story"
+		else "ui.quest.badge_short_" + key)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	badge.add_child(label)
+	return badge
+
+
+## Type icon of the row: the mission animation when a sheet exists for the quest
+## type, the old static item icon otherwise. Animated frames are 64x64 and the
+## slot is 64x64, so nothing is scaled up: the previous 32x32 item icons were
+## blown up 1.5x into the slot and read as grey mush.
+func _attach_row_icon(icon: TextureRect, q: Dictionary) -> void:
+	var slug := QuestIcons.mission_slug_for_quest(q)
+	var frames := QuestIcons.mission_frames(slug) if slug != "" else []
+	if frames.is_empty():
+		# Old static item icons are 32x32: keep their natural size centred in the
+		# 64 px slot. Stretching them to the slot is what made the sword and the
+		# armour read as grey mush.
+		icon.expand_mode = TextureRect.EXPAND_KEEP_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+		icon.texture = _quest_icon(str(q.get("icon", "")))
+		return
+	icon.texture = frames[0]
+	_mission_views.append({
+		"texture": icon,
+		"frames": frames,
+		"frame": 0,
+		"t": 0.0,
+	})
 
 
 ## Story line badge: "Story: <name>" and "Step 1 of 4". Empty for a rotating
@@ -433,14 +535,14 @@ func _place_text(q: Dictionary) -> String:
 	return Loc.f("ui.quest.from_head", [qs.city_name(own_city)])
 
 
-## Line under the name: difficulty, time limit, progress. The reward has its
-## own row with the swaying coin sprite (_reward_row).
+## Line under the name: the scenario step, time limit, progress. The difficulty
+## moved to the badge beside the name, the reward has its own row with the
+## swaying coin (_reward_row).
 func _hint_text(q: Dictionary) -> String:
 	var parts: Array = []
-	var diff := clampi(int(q.get("difficulty", 1)) - 1, 0,
-		QuestDB.DIFFICULTY_NAMES.size() - 1)
-	parts.append(Loc.f("ui.quest.difficulty",
-		[Loc.t("ui.quest.difficulty_" + QuestDB.DIFFICULTY_NAMES[diff])]))
+	var chain_text := _chain_text(q)
+	if chain_text != "":
+		parts.append(chain_text.replace("\n", " · "))
 	if str(q.get("type", "")) == "URGENT":
 		parts.append(Loc.f("ui.quest.time_left",
 			[_time_text(float(q.get("seconds_left", 0.0)))]))
@@ -537,6 +639,32 @@ func _tick_coin(delta: float) -> void:
 	_coin_sprites = live
 
 
+## Mission icons of the rows. Each view keeps its own phase, so the chest, the
+## swords and the daisy do not flip on the same frame.
+func _tick_missions(delta: float) -> void:
+	if _mission_views.is_empty():
+		return
+	var live: Array = []
+	for view in _mission_views:
+		var tex = view.get("texture")
+		if not is_instance_valid(tex) or not tex.is_inside_tree():
+			continue
+		var frames: Array = view.get("frames", [])
+		if frames.size() <= 1:
+			live.append(view)
+			continue
+		var t := float(view.get("t", 0.0)) + delta
+		var frame := int(view.get("frame", 0))
+		while t >= MISSION_FRAME_TIME:
+			t -= MISSION_FRAME_TIME
+			frame = (frame + 1) % frames.size()
+		view["t"] = t
+		view["frame"] = frame
+		tex.texture = frames[frame]
+		live.append(view)
+	_mission_views = live
+
+
 ## --- Refresh ------------------------------------------------------------------
 
 func _refresh() -> void:
@@ -550,6 +678,11 @@ func _refresh() -> void:
 		if is_instance_valid(old):
 			old.visible = false
 	_coin_sprites.clear()
+	for view in _mission_views:
+		var tex = view.get("texture")
+		if is_instance_valid(tex):
+			tex.texture = null
+	_mission_views.clear()
 	_row_buttons.clear()
 	UiKit.clear(_offers_box)
 	UiKit.clear(_active_box)
@@ -563,20 +696,32 @@ func _refresh() -> void:
 	qs.sync_inventory()
 	_gold_label.text = Loc.f("ui.quest.gold_total",
 		[int(player.gold) if is_instance_valid(player) else 0])
+	# The head's window shows his OFFERS only: taken quests live in the journal
+	# (W) and in the inventory, and a half-empty "taken" column beside the offers
+	# cost the list its width and three of its rows.
 	if city_id != "":
 		_title.text = Loc.f("ui.quest.head_of", [qs.city_name(city_id).to_upper()])
 		_offers_title.text = Loc.t("ui.quest.offers")
 		_offers_box.visible = true
+		if _offers_col != null:
+			_offers_col.visible = true
 		_fill_offers(qs)
 	else:
 		_title.text = Loc.t("ui.quest.journal_title")
 		_offers_title.text = ""
 		_offers_box.visible = false
-	_active_title.text = Loc.f("ui.quest.taken_count", [
-		qs.active.size(), GameConfig.geti("quests", "max_active")])
+		if _offers_col != null:
+			_offers_col.visible = false
+	var show_taken := city_id == ""
+	if _active_col != null:
+		_active_col.visible = show_taken
+	if show_taken:
+		_active_title.text = Loc.f("ui.quest.taken_count", [
+			qs.active.size(), GameConfig.geti("quests", "max_active")])
 	_offers_sig = _signature(qs)
 	_offer_rows = _row_buttons.size()
-	_fill_active(qs)
+	if show_taken:
+		_fill_active(qs)
 	var rows := _row_buttons.duplicate()
 	if not rows.is_empty():
 		UiKit.wire_grid_focus(rows, 1)
@@ -603,6 +748,10 @@ func _refresh_active_only() -> void:
 	var qs := QuestSystem.instance
 	if qs == null:
 		return
+	# The head's window does not draw the taken column at all: nothing to keep
+	# in sync there, and the offers never move.
+	if _active_col != null and not _active_col.visible:
+		return
 	if _signature(qs) == _offers_sig:
 		return
 	_offers_sig = _signature(qs)
@@ -618,6 +767,10 @@ func _refresh_active_only() -> void:
 		_row_buttons.erase(btn)
 	_coin_sprites = _coin_sprites.filter(
 		func(n): return is_instance_valid(n) and _active_box.is_ancestor_of(n))
+	_mission_views = _mission_views.filter(
+		func(v):
+			var tex = v.get("texture")
+			return is_instance_valid(tex) and _active_box.is_ancestor_of(tex))
 	UiKit.clear(_active_box)
 	_fill_active(qs)
 	if focus_text == "":
@@ -630,7 +783,11 @@ func _refresh_active_only() -> void:
 
 func _fill_offers(qs: QuestSystem) -> void:
 	var offers := qs.head_offers(city_id)
-	if offers.is_empty():
+	# Quests already taken from this head: they leave the offers, and without
+	# this list they vanished from the window on "Take" with no way to hand them
+	# in. Player, 20.11: "берёшь задание — оно исчезает, а сдать как?".
+	var taken := qs.active_for_city(city_id)
+	if offers.is_empty() and taken.is_empty():
 		var empty := Label.new()
 		empty.name = "OffersEmpty"
 		empty.theme_type_variation = &"QuestHint"
@@ -640,8 +797,14 @@ func _fill_offers(qs: QuestSystem) -> void:
 		return
 	for q in offers:
 		var qid := str(q.get("id", ""))
-		var card := _make_card(q, [[Loc.t("ui.quest.action_take"), _on_accept.bind(qid)]])
+		var card := _make_row(q, [[Loc.t("ui.quest.action_take"), _on_accept.bind(qid)]])
 		_offers_box.add_child(card)
+	for q in taken:
+		var qid := str(q.get("id", ""))
+		var buttons: Array = []
+		if str(q.get("state", "")) == QuestSystem.STATE_READY:
+			buttons.append([Loc.t("ui.quest.action_turn_in"), _on_turn_in.bind(qid)])
+		_offers_box.add_child(_make_row(q, buttons, true))
 
 
 func _fill_active(qs: QuestSystem) -> void:
@@ -656,7 +819,7 @@ func _fill_active(qs: QuestSystem) -> void:
 		if str(q.get("state", "")) == QuestSystem.STATE_READY and here:
 			buttons.append([Loc.t("ui.quest.action_turn_in"), _on_turn_in.bind(qid)])
 		buttons.append([Loc.t("ui.quest.action_abandon"), _on_abandon.bind(qid)])
-		var card := _make_card(q, buttons)
+		var card := _make_row(q, buttons)
 		_active_box.add_child(card)
 		shown += 1
 	if shown > 0:

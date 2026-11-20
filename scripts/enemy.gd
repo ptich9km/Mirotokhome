@@ -22,6 +22,12 @@ var quest_id: String = ""
 
 var current_hp: int
 var state: String = "idle"
+## URGENT quest orders: the beast walks on the town instead of standing at the
+## gate. Vector2.INF means "no orders" (an ordinary beast). The quest sets it
+## when it spawns the pack that the quest text calls "already at the gates".
+var assault_to: Vector2 = Vector2.INF
+## How close counts as "reached the town", in pixels.
+const ASSAULT_ARRIVE := 48.0
 var attack_target: Node2D = null
 var attack_cooldown: float = 0.0
 var _impact_timer := -1.0            # countdown to the hit frame (swing); <0 = no hit in flight
@@ -83,8 +89,12 @@ func _physics_process_impl(delta):
 	if Game.is_paused:
 		return
 	# P5: far from the hero — the AI sleeps (content untouched, CPU only).
+	# An assaulting pack is the exception: it must reach the town on its own,
+	# otherwise it waits in the field for the hero to come near (player, 20.11:
+	# "сидят кучкой").
 	if Game.hero != null and is_instance_valid(Game.hero):
-		if global_position.distance_squared_to(Game.hero.global_position) > 1600.0 * 1600.0:
+		if assault_to == Vector2.INF \
+				and global_position.distance_squared_to(Game.hero.global_position) > 1600.0 * 1600.0:
 			velocity = Vector2.ZERO
 			return
 	# Fog of war (19.10): outside the visible cell the unit does not tick and is not drawn.
@@ -134,6 +144,11 @@ func _physics_process_impl(delta):
 	# Single combat target: the player (priority) or a city guard within aggro range.
 	var target: Node2D = _combat_target()
 	if target == null:
+		# An assaulting pack does not wait to be found: it walks on the town.
+		# Anyone it meets on the way becomes its target through _combat_target.
+		if _march_to(delta):
+			_apply_relief_stand()
+			return
 		velocity = Vector2.ZERO
 		move_and_slide()
 		# The outpost guard stands with no target (neutral) — it must stand on
@@ -348,6 +363,30 @@ func is_hostile_to_hero() -> bool:
 
 ## Chase with obstacle avoidance. Replanning about once per 1.2 s + random
 ## start, so 75 enemies do not call find_path in the same frame (stutters).
+## Walk toward the assault point. Returns true while the order is active, so the
+## caller skips the "stand still" branch. On arrival the order clears: the beast
+## then behaves as an ordinary one, which is exactly "they are in the town now".
+func _march_to(delta: float) -> bool:
+	if assault_to == Vector2.INF:
+		return false
+	if global_position.distance_to(assault_to) <= ASSAULT_ARRIVE:
+		assault_to = Vector2.INF
+		_path.clear()
+		return false
+	var map_node = get_tree().get_first_node_in_group("alm_map")
+	if _path.is_empty() and map_node != null and map_node.has_method("find_path"):
+		_path = map_node.find_path(global_position, assault_to)
+	var waypoint := assault_to
+	if not _path.is_empty():
+		if global_position.distance_to(_path[0]) <= 8.0:
+			_path.pop_front()
+		if not _path.is_empty():
+			waypoint = _path[0]
+	_move_checked(Game.safe_dir(global_position, waypoint), effective_speed(), delta)
+	move_and_slide()
+	return true
+
+
 func _chase_move(delta: float, target: Node2D) -> void:
 	var tpos: Vector2 = target.global_position
 	var dist := global_position.distance_to(tpos)

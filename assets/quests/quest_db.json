@@ -156,7 +156,7 @@
       "title_key": "ui.quest.tpl.urgent_hunt.title",
       "text_key": "ui.quest.tpl.urgent_hunt.text",
       "populate": ["species_plural", "count_word", "minutes"],
-      "count_by_difficulty": [3, 4, 6],
+      "count_by_difficulty": [4, 5, 6],
       "icon": "quest_sword",
       "weight": 12
     },
