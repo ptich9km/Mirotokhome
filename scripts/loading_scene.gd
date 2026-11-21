@@ -63,7 +63,12 @@ func _ready() -> void:
 	var seed_value := int(Game.map_seed)
 	if seed_value == 0:
 		seed_value = int(wm.seed_of(Game.world_seed, sector))
-	var race := MapGenerator.city_race_for_hero(Game.hero_race)
+	# Co-op (21.11): the map is generated on both machines from the same seed,
+	# so the race hint must be the HOST's one, not the local hero's - otherwise
+	# the two peers would get different cities.
+	var race := str(Game.net_map_race)
+	if race == "":
+		race = MapGenerator.city_race_for_hero(Game.hero_race)
 	var ns: Array = wm.neighbors(sector)
 	var size := int(info.get("size", 192))
 	var relief := str(info.get("relief", ""))

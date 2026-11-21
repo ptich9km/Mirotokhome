@@ -723,6 +723,48 @@ func _refresh_relations() -> void:
 		none.theme_type_variation = &"InvRowNote"
 		none.text = Loc.t("ui.inv.rel.none")
 		_relations_box.add_child(none)
+	_add_players_section()
+
+
+## --- Players (co-op, 22.11): peace by default, war by an explicit choice ------
+func _add_players_section() -> void:
+	var net := NetSession.active()
+	if net == null:
+		return
+	if not net.pvp_changed.is_connected(_on_pvp_changed):
+		net.pvp_changed.connect(_on_pvp_changed)
+	var title := Label.new()
+	title.theme_type_variation = &"InvSection"
+	title.text = Loc.t("ui.inv.rel.players_title")
+	_relations_box.add_child(title)
+	var other := net.other_peer()
+	var info: Dictionary = net.peer_heroes.get(other, {}) if other != 0 else {}
+	var pname := str(info.get("name", ""))
+	if pname == "":
+		pname = Loc.t("ui.inv.rel.players_none")
+	var status := Loc.t("ui.inv.rel.players_war") if net.pvp \
+		else Loc.t("ui.inv.rel.players_peace")
+	var row := _add_row(_relations_box, pname, status, "")
+	if other != 0:
+		var b := Button.new()
+		b.theme_type_variation = &"InvTab"
+		b.text = Loc.t("ui.inv.rel.players_to_peace") if net.pvp \
+			else Loc.t("ui.inv.rel.players_to_war")
+		b.custom_minimum_size = Vector2(170, 34)
+		b.pressed.connect(func() -> void:
+			net.set_pvp(not net.pvp)
+			_refresh_relations())
+		row.add_child(b)
+	var hint := Label.new()
+	hint.theme_type_variation = &"InvRowNote"
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.text = Loc.t("ui.inv.rel.players_note")
+	_relations_box.add_child(hint)
+
+## The other player changed the peace/war state: redraw the open tab.
+func _on_pvp_changed(_on: bool) -> void:
+	if _relations_box != null:
+		_refresh_relations()
 
 
 ## --- Вкладка «Ремёсла» --------------------------------------------------------

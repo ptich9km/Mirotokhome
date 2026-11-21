@@ -92,6 +92,10 @@ var _cards: Array = []
 var _name_idx := -1  # последнее сгенерированное имя (для повторной кнопки)
 var _root: VBoxContainer   # корневая колонка-раскладка
 var _start_btn: Button
+## Co-op (21.11): the host's world arrives as a message and is applied only
+## after the client presses "Start" (otherwise the hero choice is lost).
+var _net_config: Dictionary = {}
+var _net_started := false
 var _next_btn: Button
 var _back_btn: Button
 var _name_row: HBoxContainer
@@ -147,6 +151,15 @@ func _ready():
 	_setup_step2_buttons()
 	_show_step(1)
 	_select.call_deferred(0)
+	# Co-op (21.11): listen for the host's world right away — it may arrive while
+	# the client is still picking a hero.
+	var net := NetSession.active()
+	if net != null and net.is_client():
+		if not net.world_config.is_connected(_on_net_world_config):
+			net.world_config.connect(_on_net_world_config)
+		# The host may have pressed "Start" while this screen was still loading.
+		if not net.world.is_empty():
+			_net_config = net.world.duplicate()
 	if is_instance_valid(_next_btn):
 		_next_btn.call_deferred("grab_focus")
 
@@ -1071,6 +1084,11 @@ func _start_game() -> void:
 	Game.hero_portrait = str(c["image"])
 	Game.hero_race = _race
 	Game.hero_dead = false
+	# Co-op (21.11): the host owns the world seed and sends it to the client.
+	var net := NetSession.active()
+	if net != null:
+		_start_net(net)
+		return
 	# Мир из блока «Мир»: случайный сид, конкретный сид или готовая карта.
 	# `StartSetup.apply()` сам раскладывает сид мира по секторам через
 	# world_map.seed_of (то же правило, что было в new_random_map).
@@ -1087,4 +1105,67 @@ func _start_game() -> void:
 	SoundDB.play("ui.confirm")  # click_ok
 	# Карта 96x96 генерируется в фоне на отдельном экране с полосой прогресса:
 	# раньше main.tscn открывался с чёрной паузой на генерацию.
+	get_tree().change_scene_to_file("res://scenes/loading.tscn")
+
+## Co-op (21.11). The host applies its own world setup and sends the resulting
+## seed to the client; the client waits for that message instead of generating
+## a world of its own (two different seeds would be two different games).
+func _start_net(net: NetSession) -> void:
+	Game.pending_party = []
+	Game.hotbar = {}
+	SoundDB.play("ui.confirm")
+	if net.is_host():
+		var err := _start_setup.apply()
+		if err != "":
+			push_warning("Сетевая игра не начата: %s" % err)
+			_open_world_panel()
+			return
+		Game.net_map_race = MapGenerator.city_race_for_hero(Game.hero_race)
+		# The new hero becomes a saved co-op character (22.11): the next session
+		# starts a fresh world, but this character keeps what it earned.
+		NetProfile.upsert(NetProfile.from_new_game())
+		net.send_world_config(Game.map_seed, Game.map_zone, Game.world_seed,
+			Game.map_sector, Game.net_map_race)
+		get_tree().change_scene_to_file("res://scenes/loading.tscn")
+		return
+	# Client: wait for the host's world. The button is locked so the player
+	# does not press it twice while waiting.
+	_net_started = true
+	if not _net_config.is_empty():
+		_apply_net_world()
+		return
+	if _start_btn != null and is_instance_valid(_start_btn):
+		_start_btn.disabled = true
+		_start_btn.text = Loc.t("ui.net.waiting_host")
+
+## The config may arrive before or after the client presses "Start": both paths
+## end up here, and only the one where the player already pressed starts the
+## world (otherwise the client would lose its hero choice).
+func _on_net_world_config(seed_value: int, zone: String, world_seed: int,
+		sector: String, race_hint: String) -> void:
+	_net_config = {
+		"seed": seed_value, "zone": zone, "world_seed": world_seed,
+		"sector": sector, "race": race_hint,
+	}
+	if _net_started:
+		_apply_net_world()
+
+func _apply_net_world() -> void:
+	if _net_config.is_empty():
+		return
+	Game.map_seed = int(_net_config["seed"])
+	Game.map_zone = str(_net_config["zone"])
+	Game.world_seed = int(_net_config["world_seed"])
+	Game.map_sector = str(_net_config["sector"])
+	Game.net_map_race = str(_net_config["race"])
+	Game.pending_map_path = ""
+	Game.clear_load_position()
+	Game.clear_hero_save()
+	# A new hero created on this screen becomes a saved co-op character (22.11).
+	NetProfile.upsert(NetProfile.from_new_game())
+	# The client never runs StartSetup.apply(), so its SIM world must be reset
+	# here — otherwise it would keep the cities of a previous session.
+	var bus = get_node_or_null("/root/WorldBus")
+	if bus != null and bus.state != null:
+		bus.state.reset_for_new_game()
 	get_tree().change_scene_to_file("res://scenes/loading.tscn")

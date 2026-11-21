@@ -499,7 +499,14 @@ func _on_mods_closed() -> void:
 
 func _on_network() -> void:
 	SoundDB.play("ui.click")
-	_open_overlay("ui.menu.network", _build_network_body)
+	# Co-op window (21.11): host/join. The connection lives on the root node
+	# NetSession, so it survives the menu -> character select -> world path.
+	_ui_root.visible = false
+	var panel := NetPanel.new()
+	panel.closed.connect(func() -> void:
+		_ui_root.visible = true)
+	add_child(panel)
+	panel.open()
 
 
 func _on_about() -> void:

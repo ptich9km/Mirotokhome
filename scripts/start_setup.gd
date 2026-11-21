@@ -86,6 +86,9 @@ func summary() -> String:
 ## Применить к игре ДО смены сцены. Пустая строка — успех, иначе текст ошибки.
 func apply() -> String:
 	normalize()
+	# A single-player world must never inherit the co-op host's race hint from a
+	# previous session (21.11): the map would get another player's cities.
+	Game.net_map_race = ""
 	var wm: GDScript = load("res://scripts/world/world_map.gd")
 	if mode == "map":
 		if map_path == "" or not FileAccess.file_exists(map_path):
