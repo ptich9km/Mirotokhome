@@ -432,6 +432,11 @@ static func deal_damage(target: Node2D, dmg: int, kind: String, sphere: String, 
 		DamageNumber.show_at(target.global_position, 0,
 			"resist" if kind == "magic" else "armor")
 		return 0
+	# Net co-op (21.11): on the client a monster is a visual proxy — the blow is
+	# forwarded to the host, which owns that monster's HP.
+	var net := NetGame.instance
+	if net != null and net.forward_damage(target, final, kind, sphere):
+		return final
 	var dealt := 0
 	if target.has_method("take_damage"):
 		dealt = target.call("take_damage", final, attacker)
@@ -492,6 +497,75 @@ static func tick_shields(delta: float) -> void:
 		else:
 			u.set_meta("shield_time", 0.0)
 			u.set_meta("shield_strength", 0)
+
+## The closest LIVING hero on this machine: the local player plus the other
+## player's remote body (net co-op, 21.11). Before, monsters simply took
+## `get_first_node_in_group("player")`, which is always one hero.
+static func nearest_hero(from: Vector2) -> Node2D:
+	var tree := Engine.get_main_loop() as SceneTree
+	var best: Node2D = null
+	var bd := INF
+	if tree == null:
+		return hero
+	for n in tree.get_nodes_in_group("player"):
+		var nd := n as Node2D
+		if nd == null or not is_instance_valid(nd) or nd.get("is_dead") == true:
+			continue
+		var d := from.distance_squared_to(nd.global_position)
+		if d < bd:
+			bd = d
+			best = nd
+	for n in tree.get_nodes_in_group("remote_hero"):
+		var nd2 := n as Node2D
+		if nd2 == null or not is_instance_valid(nd2) or bool(nd2.get("is_dead")):
+			continue
+		var d2 := from.distance_squared_to(nd2.global_position)
+		if d2 < bd:
+			bd = d2
+			best = nd2
+	return best
+
+
+## PvP (22.11): peace is the default and the flag is shared by both players.
+## Single-player always reads "peace" because there is no session.
+static func pvp_on() -> bool:
+	var s := NetSession.active()
+	return s != null and s.pvp
+
+
+## Everything the LOCAL player may hit: the monsters, plus the other hero when
+## the session is at war. Used by melee AoE, projectiles, chains and zones, so
+## there is one answer to "what counts as a target".
+static func hostile_units() -> Array:
+	# At peace the answer is exactly the monster list — return it as is (no copy):
+	# auto-magic asks this every frame.
+	if not pvp_on():
+		return enemies
+	var out: Array = []
+	for e in enemies:
+		out.append(e)
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		return out
+	for n in tree.get_nodes_in_group("remote_hero"):
+		var nd := n as Node2D
+		if nd == null or not is_instance_valid(nd) or nd.get("is_dead") == true:
+			continue
+		out.append(nd)
+	return out
+
+
+## Can this unit still be a target? A corpse cannot, and at peace the other
+## player cannot either — that is what "мир" means mechanically.
+static func is_attackable(u: Node2D) -> bool:
+	if u == null or not is_instance_valid(u):
+		return false
+	if u.is_in_group("remote_hero"):
+		return pvp_on() and u.get("is_dead") != true
+	if u.is_in_group("enemy"):
+		return enemies.has(u)
+	return true
+
 
 ## Physical core of a unit. Diablo 2 blocks only the CENTRE cell of a unit — the
 ## sprites may overlap a neighbour's "wings". A 24 px body (radius 12) turned every
@@ -715,6 +789,8 @@ var _pending_herb: HerbNode = null
 var _pending_archmage: Node2D = null      # the captain mage we are approaching
 var _pending_city_head: Node2D = null     # the city head we are approaching
 var _save_menu: SaveMenu = null
+## Net co-op orchestrator; null in single-player (21.11).
+var _net: NetGame = null
 ## Death sequence (04.11): the actor emits `died`, the game owns the 1 s fall,
 ## the full-screen title and the load menu. One flag prevents a second lethal
 ## hit (or a re-entrant signal) from stacking two screens.
@@ -800,6 +876,8 @@ static var pending_map_path: String = ""
 ## (deterministic dev mode and automated tests — a random map would get in their way).
 static var map_seed: int = 0
 static var map_zone: String = "mid"   # start | mid | hard | faction (sector TIER)
+## Co-op (21.11): the host's race hint, so both peers generate the same cities.
+static var net_map_race: String = ""
 ## World seed of the 4x3 world and the current sector ("s41"). map_seed is derived from them.
 static var world_seed: int = 0
 static var map_sector: String = ""
@@ -1175,6 +1253,13 @@ func _ready():  # World and combat initialisation
 	Game.reload_outposts(alm_map)
 	_sep_grid.clear()
 	_sep_grid_frame = -1
+	# Net co-op (21.11): the orchestrator must exist before the map units are
+	# spawned, because every monster registers itself with it.
+	var net_session := NetSession.active()
+	if net_session != null:
+		_net = NetGame.new()
+		add_child(_net)
+		_net.attach(self)
 	# NPCs and monsters from the map (.alm units section or the .npcs.json sidecar)
 	if Game.startup_loading:
 		Game.startup_loading = false
@@ -1187,9 +1272,12 @@ func _ready():  # World and combat initialisation
 	var fog_node := FogOfWar.new()
 	fog_node.name = "FogOfWar"
 	add_child(fog_node)
-	var events_node := EventSystem.new()
-	events_node.name = "EventSystem"
-	add_child(events_node)
+	# Co-op (21.11): map events spawn monsters, so only the host runs them — its
+	# spawns reach the client as replicated proxies.
+	if not (NetSession.is_net_game() and not NetSession.instance.is_host()):
+		var events_node := EventSystem.new()
+		events_node.name = "EventSystem"
+		add_child(events_node)
 	var quests_node := QuestSystem.new()
 	quests_node.name = "QuestSystem"
 	add_child(quests_node)
@@ -1346,6 +1434,10 @@ func _collect_guard_records(recs: Array) -> void:
 
 ## One replacement per city per period: the town recovers slowly, not instantly.
 func _guard_respawn_tick(delta: float) -> void:
+	# Co-op (21.11): the host owns the city life; a client that respawned its own
+	# guards would double them on the host's screen.
+	if NetSession.is_net_game() and not NetSession.instance.is_host():
+		return
 	if _guard_records.is_empty() or alm_map == null:
 		return
 	var period := GameConfig.getf("npc", "guard_respawn_seconds")
@@ -1463,6 +1555,11 @@ func _spawn_monster(set_name: String, pos: Vector2, rec: Dictionary) -> void:
 	e.home_position = pos
 	add_child(e)
 	enemies.append(e)
+	# Net co-op (21.11): a stable id from the map record — both peers compute
+	# the same string, so no id table has to travel over the wire.
+	if _net != null:
+		var cell := Vector2i(int(rec.get("x", 0)), int(rec.get("y", 0)))
+		_net.register_map_enemy(e, NetGame.map_enemy_key(cell, set_name))
 	if alm_map != null and alm_map.has_method("watch_enemy"):
 		alm_map.call("watch_enemy", e)
 
@@ -1633,6 +1730,10 @@ func _input(event):
 
 	if event is InputEventKey and event.pressed and not event.echo \
 			and event.is_action_pressed("pause"):
+		# Co-op has no tactical pause (player's decision 21.11): freezing the
+		# tree would freeze the other player's world too.
+		if NetSession.is_net_game():
+			return
 		is_paused = !is_paused
 		get_tree().paused = is_paused
 		return
@@ -2155,7 +2256,8 @@ func _update_target_ring() -> void:
 		_select_ring.visible = false
 
 func get_enemy_at_position(click_pos: Vector2) -> Node2D:
-	for enemy in enemies:
+	# PvP (22.11): at war the other player is a click target as well.
+	for enemy in hostile_units():
 		if is_instance_valid(enemy) and unit_hover_hit(enemy, click_pos, 8.0):
 			return enemy
 	return null
@@ -2715,6 +2817,13 @@ func _on_portal_answer(travel: bool, portal: Dictionary) -> void:
 	_on_portal_enter(str(portal.get("to", "")))
 
 func _on_portal_enter(target_sector: String = "") -> void:
+	if NetSession.is_net_game():
+		# Co-op (21.11): a portal regenerates the whole map on THIS machine only,
+		# which would teleport one player away from the other. The party travels
+		# together in a later version; for now the portal is closed.
+		var wf = load("res://scripts/world/world_feed.gd")
+		wf.post("world", Loc.t("ui.net.no_portal"))
+		return
 	if target_sector != "":
 		# Autosave BEFORE the sector change: otherwise the "before the portal" point is lost after teleporting.
 		autosave_now()
@@ -3095,6 +3204,9 @@ func _alive_gray_count() -> int:
 	return n
 
 func _gray_respawn_tick(delta: float) -> void:
+	# Co-op (21.11): only the host spawns monsters; every spawn is replicated.
+	if NetSession.is_net_game() and not NetSession.instance.is_host():
+		return
 	var period := GameConfig.getf("spawn", "gray_respawn_seconds")
 	if period <= 0.0:
 		return
@@ -3176,6 +3288,11 @@ static func make_gray(set_name: String, spot: Vector2, parent: Node,
 		var map := parent.get_tree().get_first_node_in_group("alm_map")
 		if map != null and map.has_method("watch_enemy"):
 			map.call("watch_enemy", beast)
+	# Net co-op (21.11): runtime monsters exist only on the host; the client
+	# receives a spawn message with the same set and stats.
+	var ng := NetGame.instance
+	if ng != null:
+		ng.note_runtime_spawn(beast)
 	return beast
 
 
@@ -3244,6 +3361,12 @@ const DEATH_TO_TITLE := 1.0
 const DEATH_TO_MENU := 1.0
 
 func _on_hero_died() -> void:
+	# Co-op (21.11): no Game Over screen. The hero is reborn at the map spawn
+	# point by NetGame; the other player keeps playing the whole time.
+	if NetSession.is_net_game():
+		if _net != null:
+			_net.on_local_hero_died()
+		return
 	if _death_sequence_running:
 		return
 	_death_sequence_running = true
@@ -3306,6 +3429,12 @@ func _close_game_over() -> void:
 ## removed here, not in SaveMenu: the menu can be closed with Esc, "To the main menu"
 ## or by terminating the process, and in every path the removal must be in one place.
 func open_save_menu() -> void:
+	if NetSession.is_net_game():
+		# Co-op (21.11): no slots, no pause. The map and the world are shared,
+		# and a slot stores exactly one hero.
+		var wf = load("res://scripts/world/world_feed.gd")
+		wf.post("world", Loc.t("ui.net.no_save"))
+		return
 	if _save_menu != null and is_instance_valid(_save_menu):
 		return
 	_set_menu_pause(true)
@@ -3325,6 +3454,10 @@ func open_save_menu() -> void:
 ## The world is paused while the save menu is open. The hero is dead — the pause is held
 ## by the death screen (_on_hero_died), and it must not be lifted the usual way.
 func _set_menu_pause(on: bool) -> void:
+	# Co-op (21.11): panels never freeze the world — the other player is still
+	# playing, and walking into a menu must not stop their game.
+	if NetSession.is_net_game():
+		return
 	if Game.hero_dead:
 		return
 	if is_instance_valid(player) and player.state in ["dead", "decay", "corpse"]:
@@ -3405,6 +3538,22 @@ func _delete_slot(slot: String) -> void:
 
 
 func _quit_to_menu() -> void:
+	# Co-op (21.11/22.11): the character is stored on this machine, the world is
+	# not. Leaving ends the session (a peer cannot play alone against a host that
+	# already went to the menu) and the single-player autosave is NOT touched —
+	# a co-op hero must not overwrite the solo slot.
+	var net := NetSession.active()
+	if net != null:
+		if is_instance_valid(player):
+			NetProfile.upsert(NetProfile.capture(player))
+		net.leave()
+		_close_game_over()
+		_menu_release_pause()
+		is_paused = false
+		get_tree().paused = false
+		_set_leaving_scene(true)
+		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+		return
 	# Autosave first: while the hero is dead _save_to_slot is a no-op, so the
 	# last living save survives "To the main menu" from the game-over screen.
 	_save_to_slot(SaveSystem.AUTOSAVE_SLOT)
@@ -3522,6 +3671,8 @@ func _set_menu_status(text: String) -> void:
 
 ## One-off autosave (portal, leaving an interior). The same slot as the timer.
 func autosave_now() -> void:
+	if NetSession.is_net_game():
+		return
 	if Game.hero_dead:
 		return
 	if not is_instance_valid(player):
@@ -3536,6 +3687,10 @@ func autosave_now() -> void:
 ## Timer autosave. Skipped if the save menu is open (otherwise
 ## the player presses "Save" and immediately gets an autosave on top).
 func _autosave_tick(delta: float) -> void:
+	# Co-op sessions are not saved (21.11): a slot holds one hero and one map
+	# state, so autosaving here would silently clobber the single-player game.
+	if NetSession.is_net_game():
+		return
 	if Game.hero_dead:
 		return
 	_autosave_accum += delta

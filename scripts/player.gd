@@ -1625,8 +1625,8 @@ func _follow_path(delta: float) -> void:
 
 func chase_target(delta):
 	if attack_target and is_instance_valid(attack_target):
-		# The target died (falling/decomposing) — we stop the chase
-		if attack_target.is_in_group("enemy") and not Game.enemies.has(attack_target):
+		# The target died (falling/decomposing) or the war ended — stop the chase
+		if not Game.is_attackable(attack_target):
 			attack_target = null
 			state = "idle"
 			velocity = Vector2.ZERO
@@ -1667,8 +1667,8 @@ func attack_enemy(delta):
 			_impact_timer = -1.0
 			_swing_target = null
 			return
-		# The target is dead (corpse/decomposing) — we stop swinging at the corpse
-		if not Game.enemies.has(attack_target):
+		# The target is dead (corpse/decomposing) or the war ended — stop swinging
+		if not Game.is_attackable(attack_target):
 			attack_target = null
 			state = "idle"
 			velocity = Vector2.ZERO
@@ -2339,7 +2339,7 @@ func _damage_area_at(pos: Vector2, radius: float, dmg: int, sphere: String = "")
 	if alm_map and alm_map.has_method("damage_area"):
 		alm_map.damage_area(pos, radius, dmg)
 	var targets: Array = []
-	for enemy in Game.enemies:
+	for enemy in Game.hostile_units():
 		if not is_instance_valid(enemy):
 			continue
 		if Game.fog != null and Game.fog.blocks_process(enemy.global_position):
@@ -2394,7 +2394,7 @@ func get_nearest_enemy(click_pos: Vector2, attack_range: float) -> Node2D:
 	var nearest = null
 	var min_dist = attack_range
 
-	for enemy in Game.enemies:
+	for enemy in Game.hostile_units():
 		if is_instance_valid(enemy):
 			if Game.fog != null and Game.fog.blocks_process(enemy.global_position):
 				continue

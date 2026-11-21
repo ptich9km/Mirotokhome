@@ -933,6 +933,11 @@ func chain_state(chain_id: String) -> Dictionary:
 func _ensure_urgent_pack(q: Dictionary) -> int:
 	if str(q.get("type", "")) != "URGENT":
 		return 0
+	# Co-op (21.11): monsters are spawned by the host only, and its pack reaches
+	# the client as proxies. A client-side pack would be a ghost the host cannot
+	# see (and cannot kill).
+	if NetSession.is_net_game() and not NetSession.instance.is_host():
+		return 0
 	if str(q.get("sector", "")) != Game.map_sector:
 		return 0
 	var set_name := str(q.get("set", ""))

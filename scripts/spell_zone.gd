@@ -447,7 +447,7 @@ func _spawn_shard() -> void:
 func _damage_units() -> void:
 	# Обе точки (зона и юниты) уже лежат в Ground-плоскости, поэтому
 	# рельеф вычитать нельзя — иначе зона уезжает на высоту холма.
-	for enemy in Game.enemies:
+	for enemy in Game.hostile_units():
 		if enemy == null or not is_instance_valid(enemy):
 			continue
 		if not covers_point(enemy.global_position):

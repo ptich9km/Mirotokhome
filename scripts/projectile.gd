@@ -98,12 +98,12 @@ func explode() -> void:
 	# Damage numbers and the flash are drawn in Game.deal_damage — silent here,
 	# so they are not duplicated (they used to be drawn both here and in enemy.gd).
 	if is_aoe:
-		for enemy in Game.enemies:
+		for enemy in Game.hostile_units():
 			if is_instance_valid(enemy) and enemy.global_position.distance_to(global_position) <= radius:
 				Game.deal_damage(enemy, damage, "magic", sphere, projectile_owner)
 	else:
 		# Single target: the specific projectile first, otherwise anything in radius
-		for enemy in Game.enemies:
+		for enemy in Game.hostile_units():
 			if is_instance_valid(enemy) and enemy.global_position.distance_to(global_position) <= radius:
 				Game.deal_damage(enemy, damage, "magic", sphere, projectile_owner)
 				break

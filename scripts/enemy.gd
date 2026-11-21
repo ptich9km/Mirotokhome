@@ -1,4 +1,4 @@
-﻿extends CharacterBody2D
+extends CharacterBody2D
 class_name Enemy
 
 @export var max_hp: int = 50
@@ -40,6 +40,10 @@ var _anim: UnitAnimBase = null
 ## Event skirmish (19.10): own group tag and opponent tag. Empty = a regular Grey.
 var event_tag: String = ""
 var foe_group: String = ""
+## Net co-op (21.11): on the client this monster is a visual proxy. Its AI is
+## off and position/HP arrive from the host in snapshots.
+var net_proxy := false
+var net_id := ""
 
 ## Faction outpost (package B, 28.10). Empty faction — a regular Grey.
 ## The outpost guard is NOT an enemy by default: it hits the hero only when hostile
@@ -86,6 +90,9 @@ func _physics_process(delta):
 
 
 func _physics_process_impl(delta):
+	if net_proxy:
+		# The host owns the AI; this body only replays the snapshots.
+		return
 	if Game.is_paused:
 		return
 	# P5: far from the hero — the AI sleeps (content untouched, CPU only).
@@ -305,8 +312,8 @@ func _combat_target_impl() -> Node2D:
 		# Rescue encounter (11.11): the pack turns on the hero as soon as he is
 		# close, before any hit lands -- saving the traveller must not require
 		# hitting a Grey first (Diablo 2 style aggro).
-		var near_hero = get_tree().get_first_node_in_group("player")
-		if is_instance_valid(near_hero) and not Game.hero_dead:
+		var near_hero: Node2D = Game.nearest_hero(global_position)
+		if is_instance_valid(near_hero) and near_hero.get("is_dead") != true:
 			if Game.units_range(self, near_hero) < aggro_radius * StatusEffects.vision_mult(self):
 				return near_hero
 		var foe: Node2D = EventSystem.foe_for(self)
@@ -316,8 +323,8 @@ func _combat_target_impl() -> Node2D:
 	# starts at faction reputation < 0 or from the hero's hit (provoked).
 	if not is_hostile_to_hero():
 		return null
-	var player = get_tree().get_first_node_in_group("player")
-	if is_instance_valid(player) and not Game.hero_dead:
+	var player: Node2D = Game.nearest_hero(global_position)
+	if is_instance_valid(player) and player.get("is_dead") != true:
 		var dp := Game.units_range(self, player)
 		var committed := state == "chase" or state == "attack" or state == "flee"
 		var lim := deaggro_radius if committed else aggro_radius
@@ -539,6 +546,54 @@ func _drop_loot():
 		host = get_tree().current_scene
 	if host != null:
 		host.add_child(drop)
+	# Co-op (21.11): the client receives the very same rolled items, otherwise
+	# its monsters would drop different loot (the roll uses randi()).
+	var ng := NetGame.instance
+	if ng != null:
+		ng.replicate_loot(drop.items, drop.global_position, drop.potion_size)
+
+## Net co-op (21.11): apply one host snapshot on a client proxy. The proxy has
+## no AI of its own — this is its whole update.
+func net_apply_state(pos: Vector2, hp: int, anim: int, vel: Vector2) -> void:
+	if net_id == "":
+		return
+	current_hp = hp
+	if Game.fog != null:
+		visible = not Game.fog.blocks_process(pos)
+	else:
+		visible = true
+	if _anim != null:
+		if vel.length_squared() > 4.0:
+			_anim.set_direction_vec(vel)
+		var kind := UnitAnim.Anim.IDLE
+		if anim == 1:
+			kind = UnitAnim.Anim.MOVE
+		elif anim == 2:
+			kind = UnitAnim.Anim.ATTACK
+		_anim.play(kind)
+	if health_bar != null and is_instance_valid(health_bar):
+		health_bar.max_hp = max_hp
+		health_bar.update_bars(current_hp, 0)
+		health_bar.visible = current_hp > 0
+
+## The host said this monster died: play the fall locally and fade the corpse.
+func net_play_death() -> void:
+	if state == "dying" or state == "corpse" or state == "decay":
+		return
+	state = "dying"
+	attack_target = null
+	velocity = Vector2.ZERO
+	collision_layer = 0
+	collision_mask = 0
+	Game.enemies.erase(self)
+	if health_bar != null and is_instance_valid(health_bar):
+		health_bar.visible = false
+	if _anim != null:
+		_anim.play(UnitAnim.Anim.DYING, true)
+	if is_inside_tree():
+		await get_tree().create_timer(4.0).timeout
+		if is_instance_valid(self):
+			queue_free()
 
 ## Relief height under the unit (0 if there is no map).
 func _relief_here() -> float:

@@ -125,12 +125,29 @@ func make_ground_coin(px: float = COIN_PX) -> CoinAnim:
 
 func _process(delta: float) -> void:
 	_tick_anim(delta)
-	if not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player")
-		if _player == null:
-			return
+	# Co-op (21.11): the drop belongs to the NEAREST local hero, not to the
+	# first node in the group — with two players the order is arbitrary.
+	_player = _nearest_hero()
+	if _player == null:
+		return
 	if global_position.distance_to(_player.global_position) < _pick_radius:
 		_collect()
+
+
+func _nearest_hero() -> Node2D:
+	var best: Node2D = null
+	var bd := INF
+	for n in get_tree().get_nodes_in_group("player"):
+		var nd := n as Node2D
+		if nd == null or not is_instance_valid(nd):
+			continue
+		if nd.get("is_dead") == true:
+			continue
+		var d := global_position.distance_squared_to(nd.global_position)
+		if d < bd:
+			bd = d
+			best = nd
+	return best
 
 
 ## One timer for every animated bottle on this drop (they share the pace).

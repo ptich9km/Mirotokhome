@@ -94,7 +94,7 @@ static func cast_chain(caster: Node2D, spell_name: String, target_position: Vect
 static func chain_targets(aim: Vector2, radius: float, origin: Vector2,
 		reach: float) -> Array:
 	var found: Array = []
-	for e in Game.enemies:
+	for e in Game.hostile_units():
 		if e == null or not is_instance_valid(e):
 			continue
 		# Node.get() in Godot 4 takes ONE argument, so the corpse state is read
