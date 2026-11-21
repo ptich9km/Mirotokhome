@@ -131,9 +131,36 @@ func _run() -> void:
 			await process_frame
 			_check(mm.get("_mods_panel") == null, "Esc закрывает панель модов")
 
-	# --- сеть / об авторах / выход (панели) ---
-	for pair in [["ui.menu.network", "ui.menu.network"],
-			["ui.menu.about", "ui.menu.about"], ["ui.menu.quit", "ui.menu.quit"]]:
+	# --- сеть (панель, 21.11) / об авторах / выход (оверлеи) ---
+	var net_btn := _find_button(mm, Loc.t("ui.menu.network"))
+	_check(net_btn != null, "кнопка «%s»" % Loc.t("ui.menu.network"))
+	if net_btn != null:
+		net_btn.pressed.emit()
+		await process_frame
+		var net_panel := mm.find_child("NetPanel", true, false)
+		_check(net_panel != null, "окно сети открылось (NetPanel)")
+		var mm_root = mm.get("_ui_root")
+		_check(mm_root != null and not (mm_root as Control).visible,
+			"при открытом окне сети главное меню скрыто")
+		var host_btn := _find_button(mm, Loc.t("ui.net.host"))
+		var join_btn := _find_button(mm, Loc.t("ui.net.join"))
+		_check(host_btn != null and join_btn != null,
+			"окно сети: есть «Создать игру» и «Подключиться»")
+		if net_panel != null:
+			# Esc closes the panel itself (it is a CanvasLayer with its own
+			# _unhandled_input, like ModsPanel/SettingsPanel).
+			var esc := InputEventKey.new()
+			esc.keycode = KEY_ESCAPE
+			esc.physical_keycode = KEY_ESCAPE
+			esc.pressed = true
+			net_panel.call("_unhandled_input", esc)
+			await process_frame
+			await process_frame
+		_check(mm.find_child("NetPanel", true, false) == null, "Esc закрывает окно сети")
+		_check(mm_root != null and (mm_root as Control).visible,
+			"после закрытия окна сети главное меню вернулось")
+
+	for pair in [["ui.menu.about", "ui.menu.about"], ["ui.menu.quit", "ui.menu.quit"]]:
 		var b := _find_button(mm, Loc.t(str(pair[0])))
 		_check(b != null, "кнопка «%s»" % Loc.t(str(pair[0])))
 		if b == null:
