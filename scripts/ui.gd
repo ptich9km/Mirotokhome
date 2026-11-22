@@ -1910,13 +1910,17 @@ func close_all_panels() -> void:
 
 ## Is any interior panel open (clicks must not move the hero on the map).
 func is_editor_open() -> bool:
-	return is_instance_valid(_shop) or is_instance_valid(_alchemy) or is_instance_valid(_school) or is_instance_valid(_inn) or is_instance_valid(_workshop) or is_instance_valid(_inventory_panel) or is_instance_valid(_archmage) or is_instance_valid(_quests) or is_instance_valid(_world_map)
+	return DevConsole.console_is_open() or is_instance_valid(_shop) or is_instance_valid(_alchemy) or is_instance_valid(_school) or is_instance_valid(_inn) or is_instance_valid(_workshop) or is_instance_valid(_inventory_panel) or is_instance_valid(_archmage) or is_instance_valid(_quests) or is_instance_valid(_world_map)
 
 ## Is the cursor over any interface element (panel/button/book/inventory)?
 ## A click on the UI must not read as movement/attack on the map.
 func is_pointer_over_ui(screen_pos: Vector2) -> bool:
 	for child in get_children():
-		if child is Control and _control_contains(child, screen_pos):
+		if child is CanvasLayer and child.visible:
+			var root := child.get_node_or_null("Root") as Control
+			if root != null and _control_contains(root, screen_pos):
+				return true
+		elif child is Control and _control_contains(child, screen_pos):
 			return true
 	return false
 
