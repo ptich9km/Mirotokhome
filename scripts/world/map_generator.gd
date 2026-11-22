@@ -630,7 +630,8 @@ const ZONES_WITH_PORTAL := ["start", "mid"]
 const CITY_POPULATION := {
 	"humans": {
 		"guards": ["city_human_mage/t1", "city_human_warrior/t2"],
-		"citizens": ["city_human_mage/t0", "city_human_warrior/t1"],
+		"citizens": ["city_human_mage/t0", "city_human_warrior/t1",
+			"npc/townsman_m", "npc/townswoman_f"],
 		"captain": "city_human_mage/t3",
 		"head": "city_human_head/t0",
 	},
