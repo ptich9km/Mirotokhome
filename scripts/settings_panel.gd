@@ -647,6 +647,10 @@ func _input(event: InputEvent) -> void:
 
 
 func close() -> void:
-	UiKit.restore_focus(_previous_focus)
+	# A freed focus owner crashes the typed call boundary of restore_focus,
+	# so the validity check must happen BEFORE the call, not inside it.
+	if _previous_focus != null and is_instance_valid(_previous_focus):
+		UiKit.restore_focus(_previous_focus)
+	_previous_focus = null
 	closed.emit()
 	queue_free()

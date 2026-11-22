@@ -84,6 +84,7 @@ func _connect_session() -> void:
 	session.hit_enemy.connect(_on_hit_enemy)
 	session.hero_hit.connect(_on_hero_hit)
 	session.loot_spawn.connect(_on_loot_spawn)
+	session.loot_taken.connect(_on_loot_taken)
 	session.server_lost.connect(_on_server_lost)
 	session.peer_left.connect(_on_peer_left)
 	session.pvp_changed.connect(_on_pvp_changed)
@@ -165,8 +166,20 @@ func _spawn_remote(peer: int, info: Dictionary) -> void:
 	remote.set_hostile(session.pvp)
 
 func _spawn_point() -> Vector2:
-	if main != null and main.get("alm_map") != null and main.alm_map.has_method("get_spawn_pos"):
-		return main.alm_map.call("get_spawn_pos")
+	if main != null and main.get("alm_map") != null:
+		var map: Node = main.alm_map
+		if map.has_method("get_cities"):
+			var cities: Array = map.call("get_cities")
+			if not cities.is_empty():
+				# Spawn the joining player in the first city, not at the map
+				# spawn point: the host already lives there, and a newcomer
+				# walking in from the wilderness reads as a bug.
+				var c: Dictionary = cities[0]
+				var pos := Vector2(float(c.get("x", 0)) * 32.0 + 16.0, float(c.get("y", 0)) * 32.0 + 16.0)
+				if map.has_method("is_walkable_world") and map.call("is_walkable_world", pos):
+					return pos
+		if map.has_method("get_spawn_pos"):
+			return map.call("get_spawn_pos")
 	return player.global_position if is_instance_valid(player) else Vector2.ZERO
 
 func _on_hero_state(peer: int, pos: Vector2, anim: int, dir: Vector2, hp: int, mana: int) -> void:
@@ -225,6 +238,9 @@ func save_profile() -> void:
 	if player == null or not is_instance_valid(player):
 		return
 	if session == null or not session.is_online():
+		return
+	# The headless companion is disposable: it must not claim a human profile slot.
+	if Game.net_bot:
 		return
 	NetProfile.upsert(NetProfile.capture(player))
 
@@ -473,6 +489,23 @@ func _on_loot_spawn(items: Array, pos: Vector2, potion: String) -> void:
 	drop.potion_size = potion
 	drop.global_position = pos
 	main.add_child(drop)
+
+func _on_loot_taken(pos: Vector2) -> void:
+	on_loot_taken(pos)
+
+## Local player picked up a drop: remove the matching drop on the other peer.
+func report_loot_taken(pos: Vector2) -> void:
+	if session == null:
+		return
+	session.send_loot_taken(pos)
+
+func on_loot_taken(pos: Vector2) -> void:
+	if main == null:
+		return
+	for child in main.get_children():
+		if child is LootDrop and child.global_position.distance_to(pos) < 1.0:
+			child.queue_free()
+			return
 
 # --- death and rebirth ------------------------------------------------------
 

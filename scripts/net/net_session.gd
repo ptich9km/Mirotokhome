@@ -42,9 +42,14 @@ signal hit_enemy(net_id: String, dmg: int, kind: String, sphere: String)
 signal hero_hit(dmg: int)
 signal hero_alive(peer: int, alive: bool, pos: Vector2, hp: int)
 signal loot_spawn(items: Array, pos: Vector2, potion: String)
+signal loot_taken(pos: Vector2)
 signal pvp_changed(on: bool)
+## A deterministic companion order (23.11). The bot is a normal co-op peer;
+## this message only tells its AI which high-level order to execute.
+signal bot_command(command: String)
 
 const DEFAULT_PORT := 7777
+const BOT_ORDERS := ["follow", "come", "stay", "attack"]
 const MAX_PEERS := 2
 const NODE_NAME := "NetSession"
 
@@ -236,6 +241,21 @@ func _apply_pvp(on: bool) -> void:
 func pvp_rpc(on: bool) -> void:
 	_apply_pvp(on)
 
+## Companion order: any peer may suggest one, the receiving bot executes it.
+## This is an AI order, not a gameplay authority transfer.
+func send_bot_command(command: String) -> void:
+	if not is_online() or not BOT_ORDERS.has(command):
+		return
+	var target := other_peer()
+	if target != 0:
+		bot_command_rpc.rpc_id(target, command)
+
+@rpc("any_peer", "call_remote", "reliable")
+func bot_command_rpc(command: String) -> void:
+	if not BOT_ORDERS.has(command):
+		return
+	bot_command.emit(command)
+
 ## Both peers tell the other side what their hero looks like.
 @rpc("any_peer", "call_remote", "reliable")
 func hero_join_rpc(info: Dictionary) -> void:
@@ -350,3 +370,13 @@ func send_loot_spawn(items: Array, pos: Vector2, potion: String) -> void:
 @rpc("authority", "call_remote", "reliable")
 func loot_spawn_rpc(items: Array, pos: Vector2, potion: String) -> void:
 	loot_spawn.emit(items, pos, potion)
+
+## Either peer -> the other: a drop was collected, remove it from the ground.
+func send_loot_taken(pos: Vector2) -> void:
+	var target := other_peer()
+	if target != 0:
+		loot_taken_rpc.rpc_id(target, pos)
+
+@rpc("any_peer", "call_remote", "reliable")
+func loot_taken_rpc(pos: Vector2) -> void:
+	loot_taken.emit(pos)

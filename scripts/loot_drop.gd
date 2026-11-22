@@ -173,9 +173,11 @@ func _tick_anim(delta: float) -> void:
 
 
 func _collect() -> void:
-	## Подбор: золото в казну, предметы в склад. После — обязательно
-	## refresh_inventory(), иначе склад на экране остаётся старым, пока игрок
-	## не откроет его заново (раньше здесь не вызывалось ничего).
+	## Co-op: tell the other peer this drop is gone, so both screens agree.
+	if NetSession.is_net_game():
+		var ng := NetGame.instance
+		if ng != null:
+			ng.report_loot_taken(global_position)
 	var got_gold := 0
 	var got_items: Array[String] = []
 	for it in items:

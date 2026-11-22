@@ -307,9 +307,9 @@ static func save_focus(node: Node) -> Control:
 	return null if viewport == null else viewport.gui_get_focus_owner()
 
 
-static func restore_focus(previous: Control) -> void:
-	if previous != null and is_instance_valid(previous):
-		previous.call_deferred("grab_focus")
+static func restore_focus(previous: Object) -> void:
+	if previous != null and is_instance_valid(previous) and previous is Control:
+		(previous as Control).call_deferred("grab_focus")
 
 
 ## Навигация по сетке кнопок: соседи влево/вправо/вверх/вниз + Tab.

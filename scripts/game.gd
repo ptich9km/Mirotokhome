@@ -788,7 +788,7 @@ var _pending_s: Dictionary = {}           # the structure target of a pending en
 var _pending_herb: HerbNode = null
 var _pending_archmage: Node2D = null      # the captain mage we are approaching
 var _pending_city_head: Node2D = null     # the city head we are approaching
-var _save_menu: SaveMenu = null
+var _save_menu: CanvasLayer = null
 ## Net co-op orchestrator; null in single-player (21.11).
 var _net: NetGame = null
 ## Death sequence (04.11): the actor emits `died`, the game owns the 1 s fall,
@@ -817,6 +817,9 @@ static var hero_class: String = "warrior"   # warrior | mage
 static var hero_gender: String = "male"     # male | female
 static var hero_name: String = Loc.t("ui.sim.hero_default")
 static var hero_character_id: String = "human_m_war"  # race portrait id
+## Headless AI companion (23.11): the bot is a normal co-op peer, but it uses a
+## dedicated profile name and must not overwrite a human player's character.
+static var net_bot: bool = false
 static var hero_portrait: String = ""       # res:// path to the portrait
 static var hero_race: String = "human"      # human | necro | druid | ork
 static var hero_stats: Dictionary = {}      # starting stats
@@ -1303,6 +1306,7 @@ func _ready():  # World and combat initialisation
 	if ui:
 		ui.setup_ui(player)
 	_setup_world_feed()
+	_setup_dev_console()
 
 	_select_ring = SelectRing.new()
 	_select_ring.name = "SelectRing"
@@ -1315,6 +1319,16 @@ func _ready():  # World and combat initialisation
 	# right after entering the game.
 	_autosave_accum = 0.0
 	set_process_unhandled_input(true)
+
+## Developer console (23.11): a whitelisted command line under the game UI.
+## It is created in code so main.tscn and the input map stay untouched.
+func _setup_dev_console() -> void:
+	if ui == null:
+		return
+	var console := DevConsole.new()
+	console.name = "DevConsole"
+	console.setup(self)
+	ui.add_child(console)
 
 func _spawn_player_on_walkable():
 	var mw: int = int(alm_map.get("map_width"))
@@ -1655,6 +1669,16 @@ func _input(event):
 			return
 		if _cast_slot_of(event) >= 0:
 			return
+	# The developer console owns keyboard input while it is visible.
+	if DevConsole.console_is_open():
+		return
+	# ~ opens the console even when other panels are closed.
+	if event is InputEventKey and event.pressed and not event.echo \
+			and (event.keycode == KEY_QUOTELEFT or event.keycode == KEY_ASCIITILDE):
+		var dev_console := ui.get_node_or_null("DevConsole") as DevConsole
+		if dev_console != null:
+			dev_console.toggle()
+			return
 	# Targeting (a scroll or a book spell): RMB or ESC cancels.
 	# The scroll is NOT spent, mana/charge are NOT deducted.
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
@@ -1665,8 +1689,12 @@ func _input(event):
 		if not Game.pending_scroll.is_empty() or not Game.pending_spell.is_empty():
 			cancel_targeting()
 			return
-		# The open save menu intercepts Esc itself and closes.
+		# The open save menu intercepts Esc itself and closes. The co-op
+		# menu is a plain CanvasLayer without its own input, so close it here.
 		if _save_menu != null and is_instance_valid(_save_menu):
+			if _save_menu is CanvasLayer and not (_save_menu is SaveMenu):
+				_save_menu.queue_free()
+				_save_menu = null
 			return
 		open_save_menu()
 		return
@@ -1731,8 +1759,14 @@ func _input(event):
 	if event is InputEventKey and event.pressed and not event.echo \
 			and event.is_action_pressed("pause"):
 		# Co-op has no tactical pause (player's decision 21.11): freezing the
-		# tree would freeze the other player's world too.
+		# tree would freeze the other player's world too. Esc toggles the
+		# lightweight co-op menu instead.
 		if NetSession.is_net_game():
+			if _save_menu is CanvasLayer and not (_save_menu is SaveMenu) \
+					and is_instance_valid(_save_menu):
+				_save_menu.queue_free()
+				_save_menu = null
+				get_viewport().set_input_as_handled()
 			return
 		is_paused = !is_paused
 		get_tree().paused = is_paused
@@ -3404,7 +3438,6 @@ func _open_game_over() -> void:
 	_save_menu.closed.connect(func() -> void:
 		_save_menu = null)
 	add_child(_save_menu)
-
 ## Reset every death-owned flag before a slot rebuild. Must run BEFORE
 ## _restart_scene: _set_menu_pause() refuses to unpause a corpse.
 func _close_game_over() -> void:
@@ -3429,13 +3462,12 @@ func _close_game_over() -> void:
 ## removed here, not in SaveMenu: the menu can be closed with Esc, "To the main menu"
 ## or by terminating the process, and in every path the removal must be in one place.
 func open_save_menu() -> void:
-	if NetSession.is_net_game():
-		# Co-op (21.11): no slots, no pause. The map and the world are shared,
-		# and a slot stores exactly one hero.
-		var wf = load("res://scripts/world/world_feed.gd")
-		wf.post("world", Loc.t("ui.net.no_save"))
-		return
 	if _save_menu != null and is_instance_valid(_save_menu):
+		return
+	# Co-op (21.11): no slots, no pause — but the menu must still open so the
+	# player can quit to menu or adjust settings. The world keeps running.
+	if NetSession.is_net_game():
+		_open_coop_menu()
 		return
 	_set_menu_pause(true)
 	_save_menu = SaveMenu.new()
@@ -3449,6 +3481,52 @@ func open_save_menu() -> void:
 		_save_menu = null
 		_set_menu_pause(false))
 	add_child(_save_menu)
+## Co-op Esc menu: no save slots, but the player must be able to leave the game
+## or open settings. Built as a lightweight CanvasLayer with two buttons.
+func _open_coop_menu() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 20
+	layer.name = "CoopMenu"
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(root)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.45)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(dim)
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(280, 0)
+	panel.position = (Vector2(1280, 800) - panel.custom_minimum_size) * 0.5
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", UiTheme.SPACE_2)
+	panel.add_child(box)
+	var title := Label.new()
+	title.text = Loc.t("ui.net.coop_menu_title")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", UiTheme.FONT_SECTION)
+	box.add_child(title)
+	var settings_btn := Button.new()
+	settings_btn.text = Loc.t("ui.net.settings")
+	settings_btn.custom_minimum_size = Vector2(220, 32)
+	settings_btn.pressed.connect(func() -> void:
+		layer.queue_free()
+		_save_menu = null
+		var sp := SettingsPanel.new()
+		sp.setup()
+		sp.closed.connect(func() -> void: sp.queue_free())
+		add_child(sp))
+	box.add_child(settings_btn)
+	var quit_btn := Button.new()
+	quit_btn.text = Loc.t("ui.save.to_main")
+	quit_btn.custom_minimum_size = Vector2(220, 32)
+	quit_btn.pressed.connect(func() -> void:
+		_quit_to_menu())
+	box.add_child(quit_btn)
+	root.add_child(panel)
+	add_child(layer)
+	_save_menu = layer
+	settings_btn.grab_focus()
 
 
 ## The world is paused while the save menu is open. The hero is dead — the pause is held

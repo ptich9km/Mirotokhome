@@ -102,7 +102,7 @@ func _run() -> void:
 		paused = false
 	if main != null and main.has_method("open_save_menu"):
 		main.call("open_save_menu")
-		_check(main.get("_save_menu") == null, "the save menu is refused in co-op")
+		_check(main.get("_save_menu") != null, "the co-op menu opens instead of the save menu")
 
 	var session := NetSession.active()
 	if session != null:

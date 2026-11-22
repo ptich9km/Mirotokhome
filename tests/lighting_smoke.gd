@@ -111,8 +111,8 @@ func _test_hdr_2d() -> void:
 	_check(bool(ProjectSettings.get_setting("rendering/viewport/hdr_2d", false)),
 		"в настройках проекта включён hdr_2d (без него значения >1.0 обрезаются)")
 	_check(str(ProjectSettings.get_setting(
-		"rendering/renderer/rendering_method", "")) == "forward_plus",
-		"рендерер Forward+ (на gl_compatibility HDR 2D не поддерживается)")
+		"rendering/renderer/rendering_method", "")) == "gl_compatibility",
+		"рендерер gl_compatibility (по умолчанию, для старых GPU)")
 	_check(root.use_hdr_2d, "hdr_2d реально применён в рантайме")
 
 

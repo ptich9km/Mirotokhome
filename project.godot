@@ -75,5 +75,6 @@ common/physics_interpolation=true
 
 [rendering]
 
+renderer/rendering_method="gl_compatibility"
 viewport/hdr_2d=true
 anti_aliasing/quality/use_debanding=true

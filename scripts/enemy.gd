@@ -92,6 +92,24 @@ func _physics_process(delta):
 func _physics_process_impl(delta):
 	if net_proxy:
 		# The host owns the AI; this body only replays the snapshots.
+		# Even as a proxy the dying state must tick: the death animation and
+		# the corpse removal happen on a timer, and a proxy that stops
+		# processing at "dying" freezes mid-fall forever (player report:
+		# "monsters killed by the host hang on the client's screen").
+		if state == "dying":
+			# Proxy death: the host already removed this monster from its list,
+			# so the client must finish the fall and free the body itself.
+			if _anim:
+				_anim.play(UnitAnim.Anim.DYING)
+				if _anim.advance(delta):
+					state = "corpse"
+					_anim.freeze_last_frame(UnitAnim.Anim.DYING)
+					_corpse_timer = 4.0
+		elif state == "corpse":
+			if _corpse_timer > 0.0:
+				_corpse_timer -= delta
+				if _corpse_timer <= 0.0:
+					queue_free()
 		return
 	if Game.is_paused:
 		return
