@@ -227,6 +227,9 @@ const DEFAULTS := {
 		"gray_target": 150,
 		"gray_respawn_seconds": 20.0,
 		"gray_respawn_min_dist": 26,
+		# Bandits (24.11): % of respawn slots that go to a bandit (one race per
+		# spawn, group purity is a generator rule; the ambient slot is one unit).
+		"bandit_respawn_chance": 12,
 	},
 	"grey": {
 		# Base stats of a tier-1 Grey (3x.11 cleanup): zone difficulty is NOT

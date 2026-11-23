@@ -1,183 +1,478 @@
 [
-	{
-		"key": "spells.spheres",
-		"value": ["Fire", "Water", "Air", "Earth", "Astral"]
-	},
-	{
-		"key": "items.weapon_types",
-		"value": [
-			"Dagger", "Short Sword", "Long Sword", "Bastard Sword", "Two Handed Sword",
-			"Spiked Club", "Club", "Mace", "Morning Star", "Pick Hammer", "War Hammer",
-			"Axe", "Two Handed Axe", "Pike", "Lance", "Halberd",
-			"Staff", "Shaman Staff", "Short Bow", "Long Bow", "Crossbow"
-		]
-	},
-	{
-		"key": "items.shield_types",
-		"value": ["Buckler", "Small Shield", "Large Shield", "Tower Shield"]
-	},
-	{
-		"key": "items.sword_types",
-		"value": ["Dagger", "Short Sword", "Long Sword", "Bastard Sword", "Two Handed Sword"]
-	},
-	{
-		"key": "items.club_types",
-		"value": ["Spiked Club", "Club", "Mace", "Morning Star", "Pick Hammer", "War Hammer"]
-	},
-	{
-		"key": "items.two_handed_types",
-		"value": [
-			"Two Handed Sword", "Two Handed Axe", "Staff", "Shaman Staff",
-			"Short Bow", "Long Bow", "Crossbow"
-		]
-	},
-	{
-		"key": "items.head_types",
-		"value": ["Helm", "Full Helm", "Plate Helm", "Chain Helm", "Cap", "Hat", "Low Hat"]
-	},
-	{
-		"key": "items.cloak_types",
-		"value": ["Cloak", "Cape"]
-	},
-	{
-		"key": "items.body_types",
-		"value": ["Cuirass", "Plate Cuirass", "Mail", "Chain Mail", "Scale Mail", "Robe", "Dress"]
-	},
-	{
-		"key": "items.hands_types",
-		"value": ["Bracers", "Plate Bracers", "Scale Gauntlets", "Gauntlets", "Gloves", "Chain Gauntlets"]
-	},
-	{
-		"key": "items.feet_types",
-		"value": ["Plate Boots", "Boots", "Shoes", "Chain Boots"]
-	},
-	{
-		"key": "items.amulet_types",
-		"value": ["Amulet"]
-	},
-	{
-		"key": "items.ring_types",
-		"value": ["Ring"]
-	},
-	{
-		"key": "units.hostile_palette",
-		"value": 5
-	},
-	{
-		"key": "spawn.gray_species",
-		"value": ["wolf", "dino", "squirrel", "bee", "bat", "ghost", "dragon",
-			"cannibal", "troll", "succubus"]
-	},
-	{
-		"key": "units.loot_families",
-		"value": ["beast", "insect", "humanoid", "undead", "monstrous"]
-	},
-	{
-		"key": "units.loot_by_species",
-		"value": {
-			"bat": "beast", "squirrel": "beast", "wolf": "beast",
-			"bee": "insect",
-			"ghost": "undead",
-			"cannibal": "humanoid", "troll": "humanoid",
-			"dino": "monstrous", "dragon": "monstrous", "succubus": "monstrous"
-		}
-	},
-	{
-		"key": "races",
-		"value": [
-			{"id": "human", "label": "Человек", "label_en": "Human", "two_styles": true},
-			{"id": "necro", "label": "Нежить", "label_en": "Undead"},
-			{"id": "druid", "label": "Друид", "label_en": "Druid"},
-			{"id": "ork", "label": "Орк", "label_en": "Orc"}
-		]
-	},
-	{
-		"key": "map.house_folders",
-		"value": {
-			"humans": ["house_s1", "house_s2"],
-			"ork": ["ork_house_a1", "ork_house_a2", "ork_house_b1", "ork_house_b2"],
-			"druid": ["druid_house_a1", "druid_house_a2", "druid_house_b1", "druid_house_b2"],
-			"necro": ["necro_house_a1", "necro_house_a2", "necro_house_b1", "necro_house_b2"]
-		}
-	},
-	{
-		"key": "map.decor_folders",
-		"value": {
-			"humans": ["barracks_s1", "barracks_s2"],
-			"ork": ["ork_decor_1", "ork_decor_2"],
-			"druid": ["druid_decor_1"],
-			"necro": ["necro_decor_1"]
-		}
-	},
-	{
-		"key": "map.city_props",
-		"value": [193, 194, 195, 196, 197, 198, 199]
-	},
-	{
-		"key": "inn.candidates",
-		"value": ["merc/human_warrior/t0", "merc/orc_warrior/t0", "merc/druid_mage/t0", "merc/undead_warrior/t0"]
-	},
-	{
-		"key": "inn.candidates.humans",
-		"value": ["merc/human_warrior/t0", "merc/human_archer/t0", "merc/human_mage/t0", "merc/human_mage/t1"]
-	},
-	{
-		"key": "inn.candidates.ork",
-		"value": ["merc/orc_warrior/t0", "merc/orc_archer/t0", "merc/orc_mage/t0", "merc/orc_warrior/t1", "merc/orc_mage/t1"]
-	},
-	{
-		"key": "inn.candidates.druid",
-		"value": ["merc/druid_warrior/t0", "merc/druid_archer/t0", "merc/druid_mage/t0", "merc/druid_warrior/t1"]
-	},
-	{
-		"key": "inn.candidates.necro",
-		"value": ["merc/undead_warrior/t0", "merc/undead_archer/t0", "merc/undead_mage/t0", "merc/undead_warrior/t1", "merc/undead_mage/t1"]
-	},
-	{
-		"key": "merc.spells",
-		"value": {
-			"humans": [{"spell": "Fire_Arrow", "tier": 0}, {"spell": "Fire_Ball", "tier": 2}, {"spell": "Prismatic_Spray", "tier": 3}],
-			"ork": [{"spell": "Fire_Arrow", "tier": 0}, {"spell": "Stone_Curse", "tier": 2}],
-			"druid": [{"spell": "Lightning", "tier": 0}, {"spell": "Blizzard", "tier": 2}],
-			"necro": [{"spell": "Ice_Missile", "tier": 0}, {"spell": "Prismatic_Spray", "tier": 2}]
-		}
-	},
-	{
-		"key": "merc.magic",
-		"value": {
-			"ref_spell": "Fire_Arrow",
-			"range_ratio": 0.8,
-			"shield": "Shield",
-			"shield_alarm_radius": 320.0,
-			"shield_cooldown": 14.0
-		}
-	},
-	{
-		"key": "merc.heal",
-		"value": {"percent": 0.08, "cooldown": 2.5, "range": 200.0}
-	},
-	{
-		"key": "merc.ranged",
-		"value": {"keep": 220.0, "arrow_speed": 520.0}
-	},
-	{
-		"key": "combat.weapon_vs_type",
-		"value": {
-			"sword": {"human": 100, "undead": 75, "beast": 110, "insect": 100, "monster": 90},
-			"axe": {"human": 110, "undead": 75, "beast": 100, "insect": 90, "monster": 110},
-			"club": {"human": 75, "undead": 125, "beast": 90, "insect": 110, "monster": 80},
-			"pike": {"human": 90, "undead": 90, "beast": 90, "insect": 80, "monster": 125},
-			"bow": {"human": 100, "undead": 90, "beast": 110, "insect": 100, "monster": 90}
-		}
-	},
-	{
-		"key": "combat.creature_types",
-		"value": {
-			"human": {"ru": "люди", "en": "humans"},
-			"undead": {"ru": "нежить", "en": "undead"},
-			"beast": {"ru": "звери", "en": "beasts"},
-			"insect": {"ru": "насекомые", "en": "insects"},
-			"monster": {"ru": "чудовища", "en": "monsters"}
-		}
-	}
+ {
+  "key": "spells.spheres",
+  "value": [
+   "Fire",
+   "Water",
+   "Air",
+   "Earth",
+   "Astral"
+  ]
+ },
+ {
+  "key": "items.weapon_types",
+  "value": [
+   "Dagger",
+   "Short Sword",
+   "Long Sword",
+   "Bastard Sword",
+   "Two Handed Sword",
+   "Spiked Club",
+   "Club",
+   "Mace",
+   "Morning Star",
+   "Pick Hammer",
+   "War Hammer",
+   "Axe",
+   "Two Handed Axe",
+   "Pike",
+   "Lance",
+   "Halberd",
+   "Staff",
+   "Shaman Staff",
+   "Short Bow",
+   "Long Bow",
+   "Crossbow"
+  ]
+ },
+ {
+  "key": "items.shield_types",
+  "value": [
+   "Buckler",
+   "Small Shield",
+   "Large Shield",
+   "Tower Shield"
+  ]
+ },
+ {
+  "key": "items.sword_types",
+  "value": [
+   "Dagger",
+   "Short Sword",
+   "Long Sword",
+   "Bastard Sword",
+   "Two Handed Sword"
+  ]
+ },
+ {
+  "key": "items.club_types",
+  "value": [
+   "Spiked Club",
+   "Club",
+   "Mace",
+   "Morning Star",
+   "Pick Hammer",
+   "War Hammer"
+  ]
+ },
+ {
+  "key": "items.two_handed_types",
+  "value": [
+   "Two Handed Sword",
+   "Two Handed Axe",
+   "Staff",
+   "Shaman Staff",
+   "Short Bow",
+   "Long Bow",
+   "Crossbow"
+  ]
+ },
+ {
+  "key": "items.head_types",
+  "value": [
+   "Helm",
+   "Full Helm",
+   "Plate Helm",
+   "Chain Helm",
+   "Cap",
+   "Hat",
+   "Low Hat"
+  ]
+ },
+ {
+  "key": "items.cloak_types",
+  "value": [
+   "Cloak",
+   "Cape"
+  ]
+ },
+ {
+  "key": "items.body_types",
+  "value": [
+   "Cuirass",
+   "Plate Cuirass",
+   "Mail",
+   "Chain Mail",
+   "Scale Mail",
+   "Robe",
+   "Dress"
+  ]
+ },
+ {
+  "key": "items.hands_types",
+  "value": [
+   "Bracers",
+   "Plate Bracers",
+   "Scale Gauntlets",
+   "Gauntlets",
+   "Gloves",
+   "Chain Gauntlets"
+  ]
+ },
+ {
+  "key": "items.feet_types",
+  "value": [
+   "Plate Boots",
+   "Boots",
+   "Shoes",
+   "Chain Boots"
+  ]
+ },
+ {
+  "key": "items.amulet_types",
+  "value": [
+   "Amulet"
+  ]
+ },
+ {
+  "key": "items.ring_types",
+  "value": [
+   "Ring"
+  ]
+ },
+ {
+  "key": "units.hostile_palette",
+  "value": 5
+ },
+ {
+  "key": "spawn.gray_species",
+  "value": [
+   "wolf",
+   "dino",
+   "squirrel",
+   "bee",
+   "bat",
+   "ghost",
+   "dragon",
+   "cannibal",
+   "troll",
+   "succubus"
+  ]
+ },
+ {
+  "key": "spawn.bandit_sets",
+  "value": {
+   "humans": [
+    "npc/human_bandit_m",
+    "npc/human_bandit_f"
+   ],
+   "ork": [
+    "npc/ork_bandit_m",
+    "npc/ork_bandit_f"
+   ],
+   "druid": [
+    "npc/druid_bandit_m",
+    "npc/druid_bandit_f"
+   ],
+   "necro": [
+    "npc/necro_bandit_m",
+    "npc/necro_bandit_f"
+   ]
+  }
+ },
+ {
+  "key": "units.loot_families",
+  "value": [
+   "beast",
+   "insect",
+   "humanoid",
+   "undead",
+   "monstrous"
+  ]
+ },
+ {
+  "key": "units.loot_by_species",
+  "value": {
+   "bat": "beast",
+   "squirrel": "beast",
+   "wolf": "beast",
+   "bee": "insect",
+   "ghost": "undead",
+   "cannibal": "humanoid",
+   "troll": "humanoid",
+   "dino": "monstrous",
+   "dragon": "monstrous",
+   "succubus": "monstrous"
+  }
+ },
+ {
+  "key": "races",
+  "value": [
+   {
+    "id": "human",
+    "label": "Человек",
+    "label_en": "Human",
+    "two_styles": true
+   },
+   {
+    "id": "necro",
+    "label": "Нежить",
+    "label_en": "Undead"
+   },
+   {
+    "id": "druid",
+    "label": "Друид",
+    "label_en": "Druid"
+   },
+   {
+    "id": "ork",
+    "label": "Орк",
+    "label_en": "Orc"
+   }
+  ]
+ },
+ {
+  "key": "map.house_folders",
+  "value": {
+   "humans": [
+    "house_s1",
+    "house_s2"
+   ],
+   "ork": [
+    "ork_house_a1",
+    "ork_house_a2",
+    "ork_house_b1",
+    "ork_house_b2"
+   ],
+   "druid": [
+    "druid_house_a1",
+    "druid_house_a2",
+    "druid_house_b1",
+    "druid_house_b2"
+   ],
+   "necro": [
+    "necro_house_a1",
+    "necro_house_a2",
+    "necro_house_b1",
+    "necro_house_b2"
+   ]
+  }
+ },
+ {
+  "key": "map.decor_folders",
+  "value": {
+   "humans": [
+    "barracks_s1",
+    "barracks_s2"
+   ],
+   "ork": [
+    "ork_decor_1",
+    "ork_decor_2"
+   ],
+   "druid": [
+    "druid_decor_1"
+   ],
+   "necro": [
+    "necro_decor_1"
+   ]
+  }
+ },
+ {
+  "key": "map.city_props",
+  "value": [
+   193,
+   194,
+   195,
+   196,
+   197,
+   198,
+   199
+  ]
+ },
+ {
+  "key": "inn.candidates",
+  "value": [
+   "merc/human_warrior/t0",
+   "merc/orc_warrior/t0",
+   "merc/druid_mage/t0",
+   "merc/undead_warrior/t0"
+  ]
+ },
+ {
+  "key": "inn.candidates.humans",
+  "value": [
+   "merc/human_warrior/t0",
+   "merc/human_archer/t0",
+   "merc/human_mage/t0",
+   "merc/human_mage/t1"
+  ]
+ },
+ {
+  "key": "inn.candidates.ork",
+  "value": [
+   "merc/orc_warrior/t0",
+   "merc/orc_archer/t0",
+   "merc/orc_mage/t0",
+   "merc/orc_warrior/t1",
+   "merc/orc_mage/t1"
+  ]
+ },
+ {
+  "key": "inn.candidates.druid",
+  "value": [
+   "merc/druid_warrior/t0",
+   "merc/druid_archer/t0",
+   "merc/druid_mage/t0",
+   "merc/druid_warrior/t1"
+  ]
+ },
+ {
+  "key": "inn.candidates.necro",
+  "value": [
+   "merc/undead_warrior/t0",
+   "merc/undead_archer/t0",
+   "merc/undead_mage/t0",
+   "merc/undead_warrior/t1",
+   "merc/undead_mage/t1"
+  ]
+ },
+ {
+  "key": "merc.spells",
+  "value": {
+   "humans": [
+    {
+     "spell": "Fire_Arrow",
+     "tier": 0
+    },
+    {
+     "spell": "Fire_Ball",
+     "tier": 2
+    },
+    {
+     "spell": "Prismatic_Spray",
+     "tier": 3
+    }
+   ],
+   "ork": [
+    {
+     "spell": "Fire_Arrow",
+     "tier": 0
+    },
+    {
+     "spell": "Stone_Curse",
+     "tier": 2
+    }
+   ],
+   "druid": [
+    {
+     "spell": "Lightning",
+     "tier": 0
+    },
+    {
+     "spell": "Blizzard",
+     "tier": 2
+    }
+   ],
+   "necro": [
+    {
+     "spell": "Ice_Missile",
+     "tier": 0
+    },
+    {
+     "spell": "Prismatic_Spray",
+     "tier": 2
+    }
+   ]
+  }
+ },
+ {
+  "key": "merc.magic",
+  "value": {
+   "ref_spell": "Fire_Arrow",
+   "range_ratio": 0.8,
+   "shield": "Shield",
+   "shield_alarm_radius": 320.0,
+   "shield_cooldown": 14.0
+  }
+ },
+ {
+  "key": "merc.heal",
+  "value": {
+   "percent": 0.08,
+   "cooldown": 2.5,
+   "range": 200.0
+  }
+ },
+ {
+  "key": "merc.ranged",
+  "value": {
+   "keep": 220.0,
+   "arrow_speed": 520.0
+  }
+ },
+ {
+  "key": "combat.weapon_vs_type",
+  "value": {
+   "sword": {
+    "human": 100,
+    "undead": 75,
+    "beast": 110,
+    "insect": 100,
+    "monster": 90
+   },
+   "axe": {
+    "human": 110,
+    "undead": 75,
+    "beast": 100,
+    "insect": 90,
+    "monster": 110
+   },
+   "club": {
+    "human": 75,
+    "undead": 125,
+    "beast": 90,
+    "insect": 110,
+    "monster": 80
+   },
+   "pike": {
+    "human": 90,
+    "undead": 90,
+    "beast": 90,
+    "insect": 80,
+    "monster": 125
+   },
+   "bow": {
+    "human": 100,
+    "undead": 90,
+    "beast": 110,
+    "insect": 100,
+    "monster": 90
+   }
+  }
+ },
+ {
+  "key": "combat.creature_types",
+  "value": {
+   "human": {
+    "ru": "люди",
+    "en": "humans"
+   },
+   "undead": {
+    "ru": "нежить",
+    "en": "undead"
+   },
+   "beast": {
+    "ru": "звери",
+    "en": "beasts"
+   },
+   "insect": {
+    "ru": "насекомые",
+    "en": "insects"
+   },
+   "monster": {
+    "ru": "чудовища",
+    "en": "monsters"
+   }
+  }
+ }
 ]

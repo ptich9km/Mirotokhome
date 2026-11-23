@@ -75,13 +75,22 @@ func _run() -> void:
 	print("  пул Серых в зоне mid: %d наборов" % pool.size())
 
 	var stray := 0
+	var bandit_sets := {}
+	for sets in MapGenerator.bandit_races().values():
+		for s in sets:
+			bandit_sets[s] = true
 	for n in npcs:
 		var d: Dictionary = n
+		var role := str(d.get("role", ""))
+		if role == "guard" or role == "citizen":
+			continue   # city population — its own families, not the Grey pool
 		var s := str(d.get("set", ""))
 		if s.is_empty():
 			continue
 		if s.begins_with("city_") or s.begins_with("ork_mage") or s.begins_with("rig/"):
 			continue
+		if bandit_sets.has(s):
+			continue   # bandits are a separate legal family (24.11)
 		if not pool.has(s):
 			stray += 1
 			print("  STRAY set `%s`" % s)
@@ -144,6 +153,8 @@ func _run() -> void:
 		if name5.begins_with("city_") or name5.begins_with("ork_mage") \
 				or name5.begins_with("rig/"):
 			continue
+		if bandit_sets.has(name5):
+			continue   # bandits from respawn are legal too
 		if not pool.has(name5):
 			outside += 1
 	_check(outside == 0,

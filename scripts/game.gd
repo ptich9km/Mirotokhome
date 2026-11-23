@@ -3272,6 +3272,16 @@ func _gray_respawn_tick(delta: float) -> void:
 	# of the pack but not count for it ("2 squirrels and a spirit", player 20.11).
 	if _raid_near(spot):
 		return
+	# Bandits (24.11): a share of the respawn slots goes to a bandit. One unit
+	# per slot; the race is rolled once, so an ambient "group" that grew from
+	# respawn still never mixes races on one spot.
+	if randi() % 100 < GameConfig.geti("spawn", "bandit_respawn_chance"):
+		var races: Dictionary = MapGenerator.bandit_races()
+		if not races.is_empty():
+			var names := races.keys()
+			var sets: Array = races[names[randi() % names.size()]]
+			make_gray(str(sets[randi() % sets.size()]), spot, self)
+			return
 	make_gray(set_name, spot, self)
 
 

@@ -5,7 +5,14 @@ extends SceneTree
 
 func _init() -> void:
 	var ok := true
-	for set_name in ["npc/townsman_m", "npc/townswoman_f"]:
+	for set_name in ["npc/townsman_m", "npc/townswoman_f",
+			"npc/ork_townsman_m", "npc/ork_townswoman_f",
+			"npc/druid_townsman_m", "npc/druid_townswoman_f",
+			"npc/necro_townsman_m", "npc/necro_townswoman_f",
+			"npc/human_bandit_m", "npc/human_bandit_f",
+			"npc/ork_bandit_m", "npc/ork_bandit_f",
+			"npc/druid_bandit_m", "npc/druid_bandit_f",
+			"npc/necro_bandit_m", "npc/necro_bandit_f"]:
 		if UnitDB.get_set(set_name).is_empty():
 			print("FAIL no db set ", set_name)
 			ok = false
