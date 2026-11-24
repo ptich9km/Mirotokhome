@@ -467,6 +467,44 @@ func _faction_for_race(race: String) -> Dictionary:
 	return new_faction(label, race)
 
 
+## Shift the SIM relation between two races (both directions of the matrix).
+## Returns the new value of a->b, or 0 when a race is unknown. Quest chains use
+## it for consequences the hero can watch on the relations tab.
+func add_sim_relation(race_a: String, race_b: String, amount: int) -> int:
+	if race_a == "" or race_b == "" or race_a == race_b or amount == 0:
+		return 0
+	var fa := _faction_for_race(race_a)
+	var fb := _faction_for_race(race_b)
+	if fa.is_empty() or fb.is_empty():
+		return 0
+	var key_ab := "%s:%s" % [str(fa.get("id", "")), str(fb.get("id", ""))]
+	var key_ba := "%s:%s" % [str(fb.get("id", "")), str(fa.get("id", ""))]
+	var now := clampi(int(relations.get(key_ab, 0)) + amount, -100, 100)
+	relations[key_ab] = now
+	relations[key_ba] = now
+	return now
+
+
+## Shift loyalty of every SIM city of a race in a sector (a map usually has one
+## city per race, so "the giver's town" is unambiguous). Returns the number of
+## touched cities.
+func add_city_loyalty(race: String, sector_id: String, amount: float) -> int:
+	if race == "" or amount == 0.0:
+		return 0
+	var touched := 0
+	for id in cities:
+		var c: Dictionary = cities[id]
+		var f: Dictionary = factions.get(str(c.get("faction_id", "")), {})
+		if str(f.get("race", "")) != race:
+			continue
+		if sector_id != "" and str(c.get("sector_id", "")) != sector_id:
+			continue
+		c["loyalty"] = clampf(float(c.get("loyalty", 60.0)) + amount, 0.0, 100.0)
+		cities[id] = c
+		touched += 1
+	return touched
+
+
 func _region_for_sector(sector_id: String, region_name: String) -> Dictionary:
 	for id in regions:
 		var r: Dictionary = regions[id]

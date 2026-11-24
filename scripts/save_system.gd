@@ -643,6 +643,9 @@ static func build_payload(player, world_dict: Dictionary, world_meta: Dictionary
 			# Captured outposts (package B): the key includes zone/sector/seed,
 			# so the dictionary is shared by all world maps, like Game.hotbar.
 			"outposts": Game.outposts_captured.duplicate(),
+			# Outpost owners (quest chain B): "ork" after the camp is reassigned.
+			# Same key scheme as the captures, so the dictionary travels with them.
+			"outposts_owner": Game.outposts_owner.duplicate(),
 			# Shop stock (09.11): limited regeneration bottles. The keys carry
 			# the map seed, so the whole dictionary travels like the hotbar.
 			"shop_stock": Game.shop_stock.duplicate(),
@@ -961,6 +964,12 @@ static func apply_payload(d: Dictionary, player, slot: String = "") -> void:
 		for key in cap:
 			if bool((cap as Dictionary)[key]):
 				Game.pending_outposts_captured[str(key)] = true
+	Game.pending_outposts_owner = {}
+	Game.outposts_owner.clear()
+	var own: Variant = map_d.get("outposts_owner", {})
+	if own is Dictionary:
+		for key in own:
+			Game.pending_outposts_owner[str(key)] = str((own as Dictionary)[key])
 	# Shop stock (09.11): without restoring it, loading a save would refill every
 	# shelf. An older save simply has none - the stock is created on first use.
 	Game.shop_stock.clear()

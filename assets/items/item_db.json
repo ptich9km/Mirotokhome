@@ -10844,5 +10844,25 @@
   "level": 1,
   "effects": [],
   "icon": "res://assets/ui/quest/items/quest_book.png"
+ },
+ {
+  "id": 1489,
+  "key": "Village Roll",
+  "name_ru": "Список имён деревни",
+  "name_en": "Village roll",
+  "quality": "Trophy",
+  "material": "None",
+  "type": "Trophy",
+  "price": 0,
+  "weight": 0.2,
+  "damage_min": 0,
+  "damage_max": 0,
+  "to_hit": 0,
+  "defence": 0,
+  "absorption": 0,
+  "magcap": 0,
+  "level": 1,
+  "effects": [],
+  "icon": "res://assets/ui/quest/items/quest_scroll.png"
  }
 ]

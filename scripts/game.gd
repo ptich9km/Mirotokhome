@@ -24,7 +24,7 @@ static func safe_dir(from: Vector2, to: Vector2, fallback: Vector2 = Vector2.ZER
 ##
 ## Extracted from UnitAnim.set_direction_vec because the convention is now read by
 ## TWO animation backends (sprite sheets and the 2D rig). Duplicating the formula would
-## mean that sooner or later the rig would face the wrong way — and direction in combat
+## mean that sooner or later the rig would face the wrong way вЂ” and direction in combat
 ## is game information, not decoration. Guard: tests/anim_contract_smoke.gd.
 static func unit_octant(dir_vec: Vector2) -> int:
 	if dir_vec.length_squared() < 0.001:
@@ -52,7 +52,7 @@ static var fog: FogOfWar = null         # fog of war of the hero map (19.10)
 static var pending_fog_rle: String = "" # saved fog mask, applied by FogOfWar
 static var pending_events: Array = []   # saved events, applied by EventSystem
 ## Saved quests (offers, active, history): QuestSystem applies them.
-## Empty — a new game; applied=true — the block was already read (do not apply twice).
+## Empty вЂ” a new game; applied=true вЂ” the block was already read (do not apply twice).
 static var pending_quests: Dictionary = {}
 static var pending_quests_applied: bool = false
 ## Faction outposts (package B, 28.10): what stands on the current map and which are already
@@ -60,6 +60,8 @@ static var pending_quests_applied: bool = false
 ## camp id ("op0") repeats on every map.
 static var outposts: Array = []
 static var outposts_captured: Dictionary = {}
+static var outposts_owner: Dictionary = {}
+static var pending_outposts_owner: Dictionary = {}
 static var pending_outposts_captured: Dictionary = {}
 ## Shop stock (09.11): "<seed>|<x>|<y>|<item>" -> bottles left today. The shop
 ## sells only the temporary regeneration potions and only a couple per city per
@@ -104,12 +106,12 @@ static func shop_stock_take(shop_id: String, item_key: String, limit: int, day: 
 static func shop_stock_key(shop_id: String, item_key: String) -> String:
 	return "%s|%s" % [shop_id, item_key]
 static var _hit_sfx_ms: int = 0          # throttling of the hit sound (single damage point)
-## Slot the running game came from ("" — new game). The slot folder holds the
+## Slot the running game came from ("" вЂ” new game). The slot folder holds the
 ## map files, so a zone change reuses its maps instead of regenerating them.
 static var loaded_slot: String = ""
 static var party: Array = []              # mercenaries (Mercenary) from the tavern
 ## Squad from a v2 save: data without nodes. game.gd creates the mercenaries when the map
-## is already built (a mercenary needs a walkable tile). Empty — nothing to restore.
+## is already built (a mercenary needs a walkable tile). Empty вЂ” nothing to restore.
 static var pending_party: Array = []
 static var mana_regen_accum: float = 0.0
 static var _trauma: float = 0.0
@@ -118,15 +120,15 @@ static var action_mode: String = "none"  # none, follow, attack, guard
 static var action_target: Node2D = null
 static var pending_scroll: Dictionary = {}   # scroll targeting: {"spell","item_key"}
 ## Context for the themed cursor (cursor_layer.gd):
-## "" — normal, "cast" — aiming (by pending_*), "buy" — shop,
-## "work" — workshop. Set in ui.gd open_shop/open_workshop.
+## "" вЂ” normal, "cast" вЂ” aiming (by pending_*), "buy" вЂ” shop,
+## "work" вЂ” workshop. Set in ui.gd open_shop/open_workshop.
 static var cursor_context: String = ""
 static var pending_spell: Dictionary = {}    # spell selection from the book: {"name"}
 static var hotbar: Dictionary = {}           # quick slot: slot 0..8 (keys 1..9) -> spell name
-## Mage auto-magic: settings in Esc → Settings (the "Magic" section).
+## Mage auto-magic: settings in Esc в†’ Settings (the "Magic" section).
 ## auto_buff_tier: base (haste+shield) | medium (+blessing and wards) | max (+invisibility).
 ## auto_targets:  self (me only) | party (me and the party) | party_neutral (me, party and neutrals).
-## auto_spell — manual healing preference (RMB on the book); if empty, the
+## auto_spell вЂ” manual healing preference (RMB on the book); if empty, the
 ## first learned healing spell is taken.
 static var auto_spell: String = ""
 static var auto_buff_tier: String = "base"
@@ -153,12 +155,12 @@ static var _perf_wall_usec: int = 0
 static var _perf_last_usec: int = 0
 
 
-## Start a block measurement. Returns a timestamp (0 — the profiler is off).
+## Start a block measurement. Returns a timestamp (0 вЂ” the profiler is off).
 static func perf_begin() -> int:
 	return Time.get_ticks_usec() if perf_enabled else 0
 
 
-## Close a block measurement: key — the block name in the table.
+## Close a block measurement: key вЂ” the block name in the table.
 static func perf_end(key: String, t0: int) -> void:
 	if not perf_enabled or t0 == 0:
 		return
@@ -237,11 +239,11 @@ static func shield_reduce(unit: Node2D, dmg: int) -> int:
 
 ## --- Shared combat math: stats -> chance/damage (for ANY unit) ---
 
-## Hit chance, % — a RELATIVE formula.
+## Hit chance, % вЂ” a RELATIVE formula.
 ##
-## It used to be `50 + attack − defense` (clamped 5..95). That is an absolute difference, and
+## It used to be `50 + attack в€’ defense` (clamped 5..95). That is an absolute difference, and
 ## it broke as soon as equipment entered combat: heavy armour gives
-## defence 14, a shield another 4, and an armoured hero held 50 + 8 − 23 = 35 %, while a goblin
+## defence 14, a shield another 4, and an armoured hero held 50 + 8 в€’ 23 = 35 %, while a goblin
 ## with attack 4 got 5 % (the lower clamp). All the armour in the world hit the floor, and
 ## "equipment stats do not work" looked like "it works, but you cannot feel it".
 ##
@@ -272,7 +274,7 @@ static func is_miss(attacker: Node2D, defender: Node2D) -> bool:
 		dfs = int(defender.call("get_defense"))
 	return randi() % 100 >= hit_chance(atk, dfs)
 
-## Unit attack (if the method exists — otherwise 0).
+## Unit attack (if the method exists вЂ” otherwise 0).
 static func unit_attack(u: Node2D) -> int:
 	return int(u.call("get_attack")) if u != null and u.has_method("get_attack") else 0
 
@@ -280,13 +282,13 @@ static func unit_attack(u: Node2D) -> int:
 static func unit_defense(u: Node2D) -> int:
 	return int(u.call("get_defense")) if u != null and u.has_method("get_defense") else 0
 
-## Absorption (material/armour): get_absorption() — present on the hero and enemies.
+## Absorption (material/armour): get_absorption() вЂ” present on the hero and enemies.
 static func unit_absorption(u: Node2D) -> int:
 	return int(u.call("get_absorption")) if u != null and u.has_method("get_absorption") else 0
 
 ## Weapon damage kind of a unit for the Allods weapon-kind resistance:
 ## sword | axe | club | pike | bow. "" means the blow bypasses the table
-## (bare hands, a staff — its normal hit is magic anyway, a ranged row that
+## (bare hands, a staff вЂ” its normal hit is magic anyway, a ranged row that
 ## the original would clear to slot zero).
 static func weapon_kind_of(u: Node2D) -> String:
 	if u == null or not is_instance_valid(u) or not ("weapon" in u):
@@ -312,7 +314,7 @@ static func creature_type_of(u: Node2D) -> String:
 			return UnitDB.creature_type_of(set_name)
 	return ""
 
-## Allods weapon-kind damage: `percent` is 125 / 100 / 75 …; the `+75` is the
+## Allods weapon-kind damage: `percent` is 125 / 100 / 75 вЂ¦; the `+75` is the
 ## source's 0.75 rounding before truncation.
 static func apply_weapon_percent(dmg: int, percent: int) -> int:
 	if percent == 100:
@@ -326,7 +328,7 @@ static func spell_power_value(skill: float, mind: float) -> float:
 
 ## Elemental resistance in PERCENT: what percentage of magic damage
 ## does not get through. That is how the original does it (main.txt: "shows the percentage of the
-## magical effects… which will not affect the character") and it does not break
+## magical effectsвЂ¦ which will not affect the character") and it does not break
 ## on large numbers, unlike flat subtraction.
 static func unit_protection(u: Node2D, sphere: String) -> int:
 	if u == null or sphere == "":
@@ -339,7 +341,7 @@ static func unit_protection(u: Node2D, sphere: String) -> int:
 ## --- Magic power: ONE stat for damage, healing, shield and vampirism ---
 ## The original formula (Allods II): SP = sphere skill + mind - 30.
 ## Clamping to zero is mandatory: with skill 5 and mind 9 it comes out at -16, and the original
-## breaks at such values (SP>255 — a byte overflow bug).
+## breaks at such values (SP>255 вЂ” a byte overflow bug).
 static func spell_power(caster: Node2D, sphere: String) -> float:
 	if caster == null or not is_instance_valid(caster):
 		return 0.0
@@ -357,9 +359,9 @@ static func spell_power(caster: Node2D, sphere: String) -> float:
 ## The base (`cooldown` in the database) is "reapplying the same spell". But for
 ## an experienced mage the same spell should be ready sooner: sphere skill and
 ## mind (the same SP formula as for damage) cut the cooldown down to 50 % at high
-## skill. The lower bound of 0.5 s — otherwise the maximum turns into spam.
+## skill. The lower bound of 0.5 s вЂ” otherwise the maximum turns into spam.
 ##
-## power_override — for SCROLLS: "knowledge" is taken from the spell power
+## power_override вЂ” for SCROLLS: "knowledge" is taken from the spell power
 ## embedded in the scroll (50 normal, 100 elven), not from the warrior's skill.
 ## That is, the cooldown is computed from the magic inside the scroll, not from "using
 ## an item" (the project has no per-item cooldown and does not need one).
@@ -379,20 +381,20 @@ static func spell_cooldown(caster: Node2D, spell_name: String,
 ## offset lives in GameConfig: [magic] sp_offset.
 ##
 ## In the original Allods II this is 30, and the constant is right FOR THE ORIGINAL
-## stats: a level 6 mage has mind ~84. Our stats are 7–10 times smaller
+## stats: a level 6 mage has mind ~84. Our stats are 7вЂ“10 times smaller
 ## (a starting mage has mind = 13, sphere skill = 5), and with an offset of 30 it came out
 ## to 5 + 13 - 30 = -12, that is SP zero for the whole early game: spells did not
 ## grow with level at all, and Fire_Ball (base 26) hit for exactly its base. A manual
 ## audit confirmed this.
 ## Offset 15 was chosen by the player: a starting mage has SP = 3, and as the
-## sphere skill goes 5 -> 15 we get SP = 13 (+13 % damage), by 30 — SP = 28. The shape
+## sphere skill goes 5 -> 15 we get SP = 13 (+13 % damage), by 30 вЂ” SP = 28. The shape
 ## of the original is kept, the scale is brought to our numbers.
 ## Spell damage taking the caster power and the spell multiplier into account.
 ## final = base * power_coef * (1 + spell_power/100)
 static func spell_damage(caster: Node2D, spell_name: String, sphere: String,
 		base_damage: int, power_override: float = -1.0) -> int:
 	var coef := SpellDB.power_coef_of(spell_name)
-	# A scroll carries its own power (50 — normal, 100 — elven). Before, this
+	# A scroll carries its own power (50 вЂ” normal, 100 вЂ” elven). Before, this
 	# number was not used at all: the scroll was cast with the hero's skill, and
 	# the elven one was not stronger than the normal one.
 	var power := power_override if power_override >= 0.0 else spell_power(caster, sphere)
@@ -401,7 +403,7 @@ static func spell_damage(caster: Node2D, spell_name: String, sphere: String,
 
 
 ## The SINGLE damage point: physical -> absorption; magic -> elemental defenses; then shield and HP.
-## Returns the damage actually dealt (0 — if everything was absorbed/missed).
+## Returns the damage actually dealt (0 вЂ” if everything was absorbed/missed).
 static func deal_damage(target: Node2D, dmg: int, kind: String, sphere: String, attacker: Node2D) -> int:
 	if not is_instance_valid(target) or dmg <= 0:
 		return 0
@@ -410,14 +412,14 @@ static func deal_damage(target: Node2D, dmg: int, kind: String, sphere: String, 
 	# for melee, magic, projectiles and AoE.
 	var final := int(round(float(dmg) * GameConfig.getf("combat", "damage_multiplier")))
 	if kind == "magic":
-		# Resistance — a percentage of the damage (as in the original)
+		# Resistance вЂ” a percentage of the damage (as in the original)
 		var prot := unit_protection(target, sphere)
 		final = maxi(0, int(round(float(dmg) * (1.0 - float(prot) / 100.0))))
 	else:
 		final = maxi(0, final - unit_absorption(target))
 		# Allods weapon-kind resistance: a physical blow is reduced (or
 		# boosted) by the target's creature type. Only a weapon with a known
-		# kind takes part — bare hands, a staff's weak hit and magic do not.
+		# kind takes part вЂ” bare hands, a staff's weak hit and magic do not.
 		# Source formula: trunc(damage * (100 - resistance) / 100 + 0.75),
 		# i.e. 125% vs undead for a club is resistance -25.
 		var wkind := weapon_kind_of(attacker)
@@ -432,7 +434,7 @@ static func deal_damage(target: Node2D, dmg: int, kind: String, sphere: String, 
 		DamageNumber.show_at(target.global_position, 0,
 			"resist" if kind == "magic" else "armor")
 		return 0
-	# Net co-op (21.11): on the client a monster is a visual proxy — the blow is
+	# Net co-op (21.11): on the client a monster is a visual proxy вЂ” the blow is
 	# forwarded to the host, which owns that monster's HP.
 	var net := NetGame.instance
 	if net != null and net.forward_damage(target, final, kind, sphere):
@@ -440,7 +442,7 @@ static func deal_damage(target: Node2D, dmg: int, kind: String, sphere: String, 
 	var dealt := 0
 	if target.has_method("take_damage"):
 		dealt = target.call("take_damage", final, attacker)
-	# take_damage returned 0 — a SHIELD inside the unit ate the damage. Showing the full
+	# take_damage returned 0 вЂ” a SHIELD inside the unit ate the damage. Showing the full
 	# number was an outright lie: the player saw "40" where not a single point of
 	# damage landed. Now we show that the hit arrived but the shield blocked it.
 	if not (dealt is int) or int(dealt) <= 0:
@@ -537,7 +539,7 @@ static func pvp_on() -> bool:
 ## the session is at war. Used by melee AoE, projectiles, chains and zones, so
 ## there is one answer to "what counts as a target".
 static func hostile_units() -> Array:
-	# At peace the answer is exactly the monster list — return it as is (no copy):
+	# At peace the answer is exactly the monster list вЂ” return it as is (no copy):
 	# auto-magic asks this every frame.
 	if not pvp_on():
 		return enemies
@@ -556,7 +558,7 @@ static func hostile_units() -> Array:
 
 
 ## Can this unit still be a target? A corpse cannot, and at peace the other
-## player cannot either — that is what "мир" means mechanically.
+## player cannot either вЂ” that is what "РјРёСЂ" means mechanically.
 static func is_attackable(u: Node2D) -> bool:
 	if u == null or not is_instance_valid(u):
 		return false
@@ -567,7 +569,7 @@ static func is_attackable(u: Node2D) -> bool:
 	return true
 
 
-## Physical core of a unit. Diablo 2 blocks only the CENTRE cell of a unit — the
+## Physical core of a unit. Diablo 2 blocks only the CENTRE cell of a unit вЂ” the
 ## sprites may overlap a neighbour's "wings". A 24 px body (radius 12) turned every
 ## 32 px corridor into a wall and let two figures wedge; the hero even carried a
 ## 30 px body from the scene. 20 px matches the figure width and lets a unit slip
@@ -580,17 +582,17 @@ static func configure_unit_body(unit: Node2D, radius: float = UNIT_CORE_RADIUS) 
 		return
 	var body := unit as CharacterBody2D
 	# Layer 1 = walls/buildings/combat units. Mask 1 = we sense layer 1.
-	# Peaceful NPCs (residents, the city mage) move to layer 2 after this call —
+	# Peaceful NPCs (residents, the city mage) move to layer 2 after this call вЂ”
 	# the hero walks through them, otherwise in a city 30+ NPCs "jam" into a crowd.
 	body.collision_layer = 1
 	body.collision_mask = 1
 	# We do NOT touch motion_mode: in top-down MOTION_MODE_FLOATING feels intuitive,
-	# but it was tested and rejected — on the dev map the hero got stuck in a pocket between
+	# but it was tested and rejected вЂ” on the dev map the hero got stuck in a pocket between
 	# two obstacles (fuzz_edge: 1 stuck case out of 62 instead of 0), because
 	# in GROUNDED the sliding surface is classified as "floor" and pushes
 	# the hero out of a narrow spot, while in FLOATING any collision is a blank wall.
 	# The real cause of "riding the rails" was not this but damping the velocity
-	# entirely — fixed with per-axis sliding in player/enemy.
+	# entirely вЂ” fixed with per-axis sliding in player/enemy.
 	var shape_node: CollisionShape2D = null
 	for child in body.get_children():
 		if child is CollisionShape2D:
@@ -610,15 +612,15 @@ static func configure_unit_body(unit: Node2D, radius: float = UNIT_CORE_RADIUS) 
 		(shape_node.shape as CircleShape2D).radius = radius
 
 ## Unit separation so they do not stick together. Before, every frame this
-## allocated an Array of ALL units and measured the distance to each one —
-## with 75 enemies that is O(n²) in physics. Now: an allocation-free buffer,
+## allocated an Array of ALL units and measured the distance to each one вЂ”
+## with 75 enemies that is O(nВІ) in physics. Now: an allocation-free buffer,
 ## an early exit, and peaceful NPCs (layer 2) do not push each other.
 const SEP_DIST := 24.0
 const SEP_DIST_SQ := SEP_DIST * SEP_DIST
 const SEP_SKIP_SQ := 40.0 * 40.0
 static var _sep_acc := Vector2.ZERO
-## P4: a spatial grid for separation — once per frame we build 64px buckets
-## and look only at neighbours. Without it NPC×2 gives O(n²) in physics again.
+## P4: a spatial grid for separation вЂ” once per frame we build 64px buckets
+## and look only at neighbours. Without it NPCГ—2 gives O(nВІ) in physics again.
 const SEP_GRID_CELL := 64.0
 static var _sep_grid: Dictionary = {}
 static var _sep_grid_frame: int = -1
@@ -711,7 +713,7 @@ static func movement_direction(unit: Node2D, desired: Vector2) -> Vector2:
 	return result.normalized()
 
 
-## Cells occupied by living units — for pathing AROUND bodies (Diablo 2 `PathTargetFree`).
+## Cells occupied by living units вЂ” for pathing AROUND bodies (Diablo 2 `PathTargetFree`).
 ## Peaceful NPCs (layer 2) and corpses are skipped: the hero walks through both.
 ## `exclude` drops the pathing unit itself and, for a chase, the clicked target.
 static func occupied_cells(exclude: Array = []) -> Dictionary:
@@ -733,7 +735,7 @@ static func occupied_cells(exclude: Array = []) -> Dictionary:
 	return out
 
 
-## One unit: if it is nearby — add its contribution to _sep_acc. Returns 0/1.
+## One unit: if it is nearby вЂ” add its contribution to _sep_acc. Returns 0/1.
 static func _sep_push(my_pos: Vector2, my_layer: int, other: Node) -> int:
 	if other == null or not is_instance_valid(other) or not (other is Node2D):
 		return 0
@@ -763,13 +765,13 @@ static func _sep_push(my_pos: Vector2, my_layer: int, other: Node) -> int:
 ## a building corner) the unit went strictly along X, even if Y was the "right" one. Beasts near
 ## trees twitched like a chess knight: a diagonal step turned into a step along one axis.
 ## A measurement on 03.10 showed that in free diagonal movement 179 frames
-## out of 179 were diagonal (angle 0.998) — that is, it was the SLIDING that broke,
+## out of 179 were diagonal (angle 0.998) вЂ” that is, it was the SLIDING that broke,
 ## not the walk itself.
 ##
 ## Returns a unit axis (or ZERO if neither way is possible).
 static func choose_slide(desired: Vector2, can_x: bool, can_y: bool) -> Vector2:
 	if can_x and can_y:
-		# Both are free — take the one that contributes the larger part of the movement.
+		# Both are free вЂ” take the one that contributes the larger part of the movement.
 		var wx := absf(desired.x)
 		var wy := absf(desired.y)
 		var total := wx + wy
@@ -838,7 +840,7 @@ static var load_position: Vector2 = Vector2.ZERO
 static var load_position_valid: bool = false
 
 ## Hero runtime state from a save (gold/inventory/equipped/HP/spells/...).
-## change_scene recreates Player, and _ready handed out the starter set —
+## change_scene recreates Player, and _ready handed out the starter set вЂ”
 ## gold and inventory were "lost" even though they sat in the file. An empty dictionary =
 ## a new game (starting gold/starter set).
 static var hero_save: Dictionary = {}
@@ -855,6 +857,8 @@ static func clear_hero_save() -> void:
 	outposts.clear()
 	outposts_captured.clear()
 	pending_outposts_captured.clear()
+	outposts_owner.clear()
+	pending_outposts_owner.clear()
 	shop_stock.clear()
 	shop_stock_day = -1
 
@@ -876,7 +880,7 @@ static func hero_portrait_path() -> String:
 ## the map editor (F9 "Back to game") or a save load. Takes priority over the seed.
 static var pending_map_path: String = ""
 ## Map seed of a new game. 0 = no map requested, AlmMap takes the fallback path from main.tscn
-## (deterministic dev mode and automated tests — a random map would get in their way).
+## (deterministic dev mode and automated tests вЂ” a random map would get in their way).
 static var map_seed: int = 0
 static var map_zone: String = "mid"   # start | mid | hard | faction (sector TIER)
 ## Co-op (21.11): the host's race hint, so both peers generate the same cities.
@@ -924,8 +928,8 @@ static func _world_bus_static() -> Node:
 	return scene.root.get_node_or_null("WorldBus")
 
 
-## Hero reputation with a faction (race) — for storefronts: tavern and shop (28.10).
-## An empty race (a map without cities) — no reputation, the storefront works as before.
+## Hero reputation with a faction (race) вЂ” for storefronts: tavern and shop (28.10).
+## An empty race (a map without cities) вЂ” no reputation, the storefront works as before.
 static func hero_reputation(race: String) -> int:
 	if race == "":
 		return 0
@@ -960,6 +964,39 @@ static func reload_outposts(map_node = null) -> void:
 		for key in pending_outposts_captured:
 			outposts_captured[str(key)] = true
 		pending_outposts_captured.clear()
+	if not pending_outposts_owner.is_empty():
+		for key in pending_outposts_owner:
+			outposts_owner[str(key)] = str(pending_outposts_owner[key])
+		pending_outposts_owner.clear()
+
+
+## New owner of an outpost (quest chain effect "outpost_owner"). The camp keeps
+## standing; only the faction label changes. The captured flag is set too, so
+## the old garrison never respawns.
+static func set_outpost_owner(oid: String, faction: String) -> bool:
+	var key := outpost_key(oid)
+	if key == "" or faction == "":
+		return false
+	outposts_owner[key] = faction
+	outposts_captured[key] = true
+	for o in outposts:
+		var rec: Dictionary = o
+		if str(rec.get("id", "")) == oid:
+			rec["faction"] = faction
+			rec["owner_day"] = int(world_day_static())
+	return true
+
+
+## Current owner override of an outpost ("" when the camp was never reassigned).
+static func outpost_owner_of(oid: String) -> String:
+	return str(outposts_owner.get(outpost_key(oid), ""))
+
+
+static func world_day_static() -> int:
+	var bus := _world_bus_static()
+	if bus == null or not ("state" in bus) or bus.state == null:
+		return 0
+	return int(bus.state.day)
 
 
 ## Whether an outpost of the current map is captured.
@@ -999,7 +1036,7 @@ static func on_outpost_guard_died(unit: Node2D) -> void:
 	var bus2 := _world_bus_static()
 	if bus2 != null and ("state" in bus2) and bus2.state != null:
 		bus2.state.log_entry("outpost", Loc.f("ui.outpost.log_captured", [name]))
-	# A capture grants blueprints of that faction's sets (package C+D): took the camp —
+	# A capture grants blueprints of that faction's sets (package C+D): took the camp вЂ”
 	# learned how their armour is forged. Shops (package F) will add a second source.
 	var scrolls := CraftDB.recipe_ids_of_faction(faction)
 	var given := 0
@@ -1086,12 +1123,12 @@ void fragment() {
 # --- 2D lighting and post-processing ---
 
 ## Environment dimming. Almost neutral.
-## The first version was 0.88 — and the player complained that "all objects, NPCs and
+## The first version was 0.88 вЂ” and the player complained that "all objects, NPCs and
 ## buildings went dark". The reason is that the relief has its own brightness from the sun
 ## baked into the vertex colours (`AlmMap._brightness`), while sprites do not have it and
-## live in midtones — where AgX drops brightness the hardest.
+## live in midtones вЂ” where AgX drops brightness the hardest.
 ## Spell light at 0.97 does not fade: it is short-lived and comes with energy
-## 1.5–2.2, so there is enough headroom.
+## 1.5вЂ“2.2, so there is enough headroom.
 const AMBIENT := Color(0.97, 0.98, 1.0, 1.0)
 
 func _setup_rendering() -> void:
@@ -1100,7 +1137,7 @@ func _setup_rendering() -> void:
 	_setup_post_pass()
 
 
-## CanvasModulate — the base brightness of the whole canvas. Without it additive
+## CanvasModulate вЂ” the base brightness of the whole canvas. Without it additive
 ## light sources cannot add anything: the canvas is already drawn at full
 ## brightness. It affects ONLY its own layer, so UI on its own CanvasLayer
 ## is untouched.
@@ -1117,7 +1154,7 @@ func _setup_ambient() -> void:
 ##
 ## background_mode MUST be BG_CANVAS (3). With the default value
 ## (BG_CLEAR_COLOR) Environment affects ONLY 3D, and in a purely 2D project that
-## means "it does nothing" — the most common waste of time when setting it up.
+## means "it does nothing" вЂ” the most common waste of time when setting it up.
 ##
 ## Channel colours > 1.0 in spell shaders give selective glow:
 ## before, 2D was RGBA8 and values were clipped to 1.0, that is, "brighter than white"
@@ -1136,12 +1173,12 @@ func _setup_environment() -> void:
 	# pixels in the frame, and at 1.0 nothing would glow.
 	env.glow_hdr_threshold = 0.92
 	# Glow level names contain "/", such properties cannot be accessed
-	# by assignment (only through set()) — direct access does not parse.
+	# by assignment (only through set()) вЂ” direct access does not parse.
 	env.set("glow_levels/4", 0.2)
 	env.set("glow_levels/5", 0.35)
 	env.set("glow_levels/6", 0.18)
 	# AgX is kept: it gives the "colourful" ground that was liked. But it also
-	# drops midtones, and sprites live exactly there — we compensate with
+	# drops midtones, and sprites live exactly there вЂ” we compensate with
 	# exposure and remove the extra shadow contrast.
 	env.tonemap_mode = Environment.TONE_MAPPER_AGX
 	env.tonemap_exposure = 1.25
@@ -1156,13 +1193,13 @@ func _setup_environment() -> void:
 
 
 ## Post pass: vignette + grain. In Godot 4 Environment there is NO vignette in any
-## version — it is always done with a custom shader.
+## version вЂ” it is always done with a custom shader.
 ##
 ## Placed as the FIRST child of the UI CanvasLayer: then the HUD is drawn on top and is not
 ## darkened, and the layer itself (layer 1) does not fall under glow.
 func _setup_post_pass() -> void:
 	# The UI node in main.tscn is NOT in the "ui" group (there is no groups = [...] line),
-	# so it cannot be found by group — we take the already stored `ui` reference.
+	# so it cannot be found by group вЂ” we take the already stored `ui` reference.
 	var ui_node: Node = ui
 	if ui_node == null:
 		ui_node = get_tree().get_first_node_in_group("ui")
@@ -1207,11 +1244,11 @@ func _ready():  # World and combat initialisation
 	# Since 21.10: the project physics interpolation (physics/common) forces
 	# Camera2D to switch to the physics process and print a WARNING if
 	# callback = IDLE. The camera already moves in _physics_process (lerp to
-	# the hero) — we set PHYSICS explicitly, the warning is not printed, there is no jitter.
+	# the hero) вЂ” we set PHYSICS explicitly, the warning is not printed, there is no jitter.
 	camera.process_callback = Camera2D.CAMERA2D_PROCESS_PHYSICS
 
 	# 2D lighting and post-processing. Without them effects are drawn "as is" and look
-	# like stickers: the VFX rule — an effect must emit light and light up the world.
+	# like stickers: the VFX rule вЂ” an effect must emit light and light up the world.
 	_setup_rendering()
 
 	# Reset targeting modes (static state survives a scene restart)
@@ -1221,7 +1258,7 @@ func _ready():  # World and combat initialisation
 	# We do NOT reset auto-cast: the player set it in the book and expects the mage to heal.
 
 	# Safety net: if main.tscn is launched directly (F6, debugging) without choosing
-	# a character at start — we go to the hero selection screen.
+	# a character at start вЂ” we go to the hero selection screen.
 	if Game.hero_stats.is_empty():
 		get_tree().call_deferred("change_scene_to_file", "res://scenes/character_select.tscn")
 		return
@@ -1246,13 +1283,13 @@ func _ready():  # World and combat initialisation
 	# enemies/npcs are static var, they SURVIVE a scene change: the nodes of the previous
 	# map are already freed by the engine at this point, but remain in the arrays.
 	# Before, only party was cleaned, and a new game hit
-	# `_sep_insert(unit: Node2D)`: argument 1 (previously freed) — a crash on a
+	# `_sep_insert(unit: Node2D)`: argument 1 (previously freed) вЂ” a crash on a
 	# typed parameter happens BEFORE entering the function body, so
 	# is_instance_valid inside _sep_insert does not help.
 	# This also fixes the tail in _alive_gray_count (it counted dead nodes).
 	Game.enemies.clear()
 	Game.npcs.clear()
-	# Map outposts — BEFORE the unit spawn: guards of captured camps do not appear.
+	# Map outposts вЂ” BEFORE the unit spawn: guards of captured camps do not appear.
 	Game.reload_outposts(alm_map)
 	_sep_grid.clear()
 	_sep_grid_frame = -1
@@ -1275,7 +1312,7 @@ func _ready():  # World and combat initialisation
 	var fog_node := FogOfWar.new()
 	fog_node.name = "FogOfWar"
 	add_child(fog_node)
-	# Co-op (21.11): map events spawn monsters, so only the host runs them — its
+	# Co-op (21.11): map events spawn monsters, so only the host runs them вЂ” its
 	# spawns reach the client as replicated proxies.
 	if not (NetSession.is_net_game() and not NetSession.instance.is_host()):
 		var events_node := EventSystem.new()
@@ -1350,7 +1387,7 @@ func _spawn_player_on_walkable():
 		player.global_position = spawn_pos
 		player.reset_physics_interpolation()
 		return
-	# 2) Fallback — a walkable tile from the centre
+	# 2) Fallback вЂ” a walkable tile from the centre
 	var cx := int(mw / 2.0)
 	var cy := int(mh / 2.0)
 	for r in range(0, 20):
@@ -1414,7 +1451,7 @@ func _clear_party_nodes() -> void:
 	Game.party.clear()
 
 ## Spawn NPCs/monsters from map data: the .alm units section (type_id) or
-## the .npcs.json sidecar (set). Hostility — UnitDB.is_hostile (monsters palette=5).
+## the .npcs.json sidecar (set). Hostility вЂ” UnitDB.is_hostile (monsters palette=5).
 ## --- City guards: posts and respawn -------------------------------------------
 ##
 ## Allods rule (player, 20.11): a raid may wipe the guards, but the town keeps
@@ -1569,7 +1606,7 @@ func _spawn_monster(set_name: String, pos: Vector2, rec: Dictionary) -> void:
 	e.home_position = pos
 	add_child(e)
 	enemies.append(e)
-	# Net co-op (21.11): a stable id from the map record — both peers compute
+	# Net co-op (21.11): a stable id from the map record вЂ” both peers compute
 	# the same string, so no id table has to travel over the wire.
 	if _net != null:
 		var cell := Vector2i(int(rec.get("x", 0)), int(rec.get("y", 0)))
@@ -1604,7 +1641,7 @@ func _spawn_npc(set_name: String, pos: Vector2, rec: Dictionary) -> void:
 	npcs.append(n)
 
 ## Look for a walkable cell near the spawn that has walkable neighbours
-## (at least 2 of 4) — so the character does not end up in a dead end. We return the centre
+## (at least 2 of 4) вЂ” so the character does not end up in a dead end. We return the centre
 ## of the cell in world coordinates or Vector2(-1,-1) if there is no room within radius 6.
 func _find_open_spot(start: Vector2i, ts: int) -> Vector2:
 	if _is_open_spot(start.x, start.y):
@@ -1701,8 +1738,8 @@ func _input(event):
 
 	# Hotkeys (as in the original): Ctrl+1..9 assigns to a number key either the
 	# selected magic or the consumable under the cursor; 1..9 (without Ctrl)
-	# applies the assignment: a spell — with targeting, a potion — right away,
-	# a scroll — with target selection by click.
+	# applies the assignment: a spell вЂ” with targeting, a potion вЂ” right away,
+	# a scroll вЂ” with target selection by click.
 	if event is InputEventKey and event.pressed and not event.echo:
 		var slot := _cast_slot_of(event)
 		if slot >= 0:
@@ -1804,7 +1841,7 @@ func handle_click(world_position: Vector2):
 		return
 	if Game.hero_dead:
 		return
-	# The hero is dead (falling/decomposing) — controls do not work
+	# The hero is dead (falling/decomposing) вЂ” controls do not work
 	if is_instance_valid(player) and player.state in ["dead", "decay"]:
 		return
 	print("Click at: ", world_position)
@@ -1815,7 +1852,7 @@ func handle_click(world_position: Vector2):
 	_pending_city_head = null
 
 	# A click on a building (functional or decorative): always to the door.
-	# Functional — on approach a menu + the hero is "inside"; decorative — approach only.
+	# Functional вЂ” on approach a menu + the hero is "inside"; decorative вЂ” approach only.
 	var cell := Vector2i(int(int(world_position.x) / 32.0), int(int(world_position.y) / 32.0))
 	if alm_map != null and alm_map.has_method("structure_at"):
 		var s: Dictionary = alm_map.call("structure_at", cell)
@@ -1863,15 +1900,15 @@ func handle_click(world_position: Vector2):
 			player.begin_path(alm_map.find_path(player.global_position, goal, blocked))
 
 ## The functional role of a building (StructureDB).
-## The logic moved to StructureDB.kind_of — it was duplicated by a copy in
+## The logic moved to StructureDB.kind_of вЂ” it was duplicated by a copy in
 ## tests/alice_buildings_smoke.gd, and a role change in the game and in the test drifted apart
 ## silently. Now the test calls the real code.
 func _structure_kind(type_id: int) -> String:
 	return StructureDB.kind_of(type_id)
 
 ## A click on a building: we approach the door (the southern edge of the footprint).
-## kind != "" — functional (shop/tavern/…): a menu on approach.
-## kind == "" — decorative: approach only, the hero stays on the map.
+## kind != "" вЂ” functional (shop/tavern/вЂ¦): a menu on approach.
+## kind == "" вЂ” decorative: approach only, the hero stays on the map.
 func _building_click(kind: String, s: Dictionary) -> void:
 	if ui == null or not is_instance_valid(player):
 		return
@@ -1895,7 +1932,7 @@ func _open_building_kind(kind: String, s: Dictionary = {}) -> void:
 		return
 	# Reputation (28.10): the tavern and the shop work with the hero's reputation with
 	# the faction of the CITY. The city race already lives in city_heads() (written by the generator),
-	# and the building looks for the nearest head — a building has no separate city_id.
+	# and the building looks for the nearest head вЂ” a building has no separate city_id.
 	var race := _city_race_at_world(_door_point(s)) if not s.is_empty() else ""
 	match kind:
 		"shop": ui.open_shop(race, s)
@@ -1905,7 +1942,7 @@ func _open_building_kind(kind: String, s: Dictionary = {}) -> void:
 		"workshop": ui.open_workshop()
 
 
-## The race of the city nearest to a world point ("" — the map has no heads/city).
+## The race of the city nearest to a world point ("" вЂ” the map has no heads/city).
 ## Needed by the tavern and shop panels: hero reputation is counted by faction.
 func _city_race_at_world(p: Vector2) -> String:
 	if alm_map == null or not alm_map.has_method("city_heads"):
@@ -1974,7 +2011,7 @@ func _archmage_at_position(click_pos: Vector2) -> Node2D:
 			return n
 	return null
 
-## A click on the mage: if close — the panel, otherwise we approach.
+## A click on the mage: if close вЂ” the panel, otherwise we approach.
 func _archmage_click(mage: Node2D) -> void:
 	if ui == null or not is_instance_valid(player) or not is_instance_valid(mage):
 		return
@@ -2007,8 +2044,8 @@ func _process_pending_archmage() -> void:
 
 
 ## Great mage context for the panel: the city and its race. The race comes from
-## city_heads() by the NPC city_id; a fallback — by the captain's unit set name
-## ("city_druid_mage/t3" -> druid). Empty — the panel falls back to the hero's race.
+## city_heads() by the NPC city_id; a fallback вЂ” by the captain's unit set name
+## ("city_druid_mage/t3" -> druid). Empty вЂ” the panel falls back to the hero's race.
 func _archmage_context(mage: Node) -> Dictionary:
 	var city_id := ""
 	if "city_id" in mage:
@@ -2035,7 +2072,7 @@ func _city_head_at_position(click_pos: Vector2) -> Node2D:
 	return null
 
 
-## A click on the head: if close — the quest panel, otherwise we approach (as with the mage).
+## A click on the head: if close вЂ” the quest panel, otherwise we approach (as with the mage).
 func _city_head_click(head: Node2D) -> void:
 	if ui == null or not is_instance_valid(player) or not is_instance_valid(head):
 		return
@@ -2086,7 +2123,7 @@ func _door_point(s: Dictionary) -> Vector2:
 					return p
 	return Vector2(x * 32.0 + fw * 16.0, (y + th) * 32.0)
 
-## When the hero reaches the door — we "enter": a menu (functional) or a stop.
+## When the hero reaches the door вЂ” we "enter": a menu (functional) or a stop.
 func _process_pending_building() -> void:
 	if _pending_s.is_empty() or not is_instance_valid(player):
 		return
@@ -2121,18 +2158,18 @@ func _hover_unit() -> Node2D:
 			return e
 	return null
 
-## The HEIGHT of a unit sprite above its base (px) — how high one has to
+## The HEIGHT of a unit sprite above its base (px) вЂ” how high one has to
 ## raise an effect so it ends up above the head and not inside the body.
 ##
 ## Taken from UnitAnim.visual_height(): that is the real frame height including
-## scale. Do not take _unit_metrics() — that is the FOOTPRINT (how many cells
+## scale. Do not take _unit_metrics() вЂ” that is the FOOTPRINT (how many cells
 ## the unit occupies): for a hero with tile_size 1 that is 32 px, while the sprite is taller, and
 ## an effect at that height ended up inside the character (player report).
 ##
 ## In all four unit types (player/enemy/npc/mercenary) the animation node
 ## is called "UnitAnim".
 ##
-## Returns the FIGURE height, not the frame height: our frames share one canvas (64×64),
+## Returns the FIGURE height, not the frame height: our frames share one canvas (64Г—64),
 ## while the figure inside occupies ~54 px, and an empty field remains above the head.
 ## Before, the canvas was returned here, and everything counted "from the height" (auras,
 ## the healing cross, the camera, the cast point) drifted up/down by ~10 px.
@@ -2143,7 +2180,7 @@ static func unit_visual_height(u: Node2D) -> float:
 	return 32.0
 
 
-## The figure rect in the unit's LOCAL coordinates: feet ≈ 0, the crown is a negative y.
+## The figure rect in the unit's LOCAL coordinates: feet в‰€ 0, the crown is a negative y.
 ## The source is the real opaque pixels of the current frame.
 static func unit_local_rect(u: Node2D) -> Rect2:
 	if not is_instance_valid(u):
@@ -2153,11 +2190,11 @@ static func unit_local_rect(u: Node2D) -> Rect2:
 		var r: Rect2 = anim.call("content_rect")
 		if r.size.x > 0.5 and r.size.y > 0.5:
 			return r
-	# Stub: 24×40 — the previous approximate figure.
+	# Stub: 24Г—40 вЂ” the previous approximate figure.
 	return Rect2(Vector2(-12, -40), Vector2(24, 40))
 
 
-## Cache of texture content rects. A 64×64 frame is scanned once.
+## Cache of texture content rects. A 64Г—64 frame is scanned once.
 static var _content_cache: Dictionary = {}
 
 
@@ -2203,7 +2240,7 @@ static func texture_content_rect(tex: Texture2D) -> Rect2:
 
 
 ## How many pixels of gap between BODIES are needed for a hit to reach.
-## Spear — 20, staff — 14, sword/axe — 10, mace — 8, fist/claws — 10.
+## Spear вЂ” 20, staff вЂ” 14, sword/axe вЂ” 10, mace вЂ” 8, fist/claws вЂ” 10.
 const REACH_BY_WEAPON := {
 	"club": 8.0, "axe": 10.0, "sword": 10.0, "pike": 20.0,
 	"staff": 14.0, "unarmed": 10.0, "bow": 10.0,
@@ -2212,7 +2249,7 @@ const REACH_DEFAULT := 10.0
 
 
 ## How far a fighter must step back before it breaks contact and closes in again.
-## 8 px meant "the hero backs off half a pace and the monster is already chasing" —
+## 8 px meant "the hero backs off half a pace and the monster is already chasing" вЂ”
 ## in game that reads as the monster being glued to the hero's back.
 const REACH_EXIT_PAD := 24.0
 
@@ -2229,7 +2266,7 @@ static func attack_exit_reach(u: Node2D) -> float:
 	return attack_reach(u) + REACH_EXIT_PAD
 
 ## Unit sprite size (w, h). static: computed only from anim_set, it does not read
-## its own state — called both from Game and from SpellAura.
+## its own state вЂ” called both from Game and from SpellAura.
 ##
 ## WARNING: this is the FOOTPRINT (how many cells the unit occupies), NOT the sprite height.
 ## For height (where to hang effects above the head) there is unit_visual_height().
@@ -2240,8 +2277,8 @@ static func _unit_metrics(u: Node2D) -> Array:
 	if set_name == "" and u is Player:
 		set_name = (u as Player).anim_set_name()
 	# Unit sprite size in pixels. Before, the "w"/"h" fields were read from units_db.json,
-	# but they are NOT there — the 128 stub kicked in, and the selection ring was 144 px wide
-	# regardless of the unit (for a gnome — a circle three times wider than the gnome).
+	# but they are NOT there вЂ” the 128 stub kicked in, and the selection ring was 144 px wide
+	# regardless of the unit (for a gnome вЂ” a circle three times wider than the gnome).
 	var w := 32
 	var h := 32
 	if set_name != "":
@@ -2251,7 +2288,7 @@ static func _unit_metrics(u: Node2D) -> Array:
 	return [w, h]
 
 ## The selection ring point: the centre of the unit body. The sprite is drawn up from the
-## "floor" point and rises with the relief — without accounting for it the ring "hangs in the void".
+## "floor" point and rises with the relief вЂ” without accounting for it the ring "hangs in the void".
 func _target_ring_pos(u: Node2D) -> Vector2:
 	var m := _unit_metrics(u)
 	var rise := 0.0
@@ -2296,8 +2333,8 @@ func get_enemy_at_position(click_pos: Vector2) -> Node2D:
 			return enemy
 	return null
 
-## Mage scroll: the click selected a target. An enemy — for damage/area/wall,
-## the hero or an ally (NPC/mercenary) — for healing/defense/buffs.
+## Mage scroll: the click selected a target. An enemy вЂ” for damage/area/wall,
+## the hero or an ally (NPC/mercenary) вЂ” for healing/defense/buffs.
 ## The item key under the cursor in the open inventory ("" = the panel is closed or
 ## the cursor is not over a cell). Needed to assign a consumable to a hotkey.
 func hovered_item_key() -> String:
@@ -2310,7 +2347,7 @@ func hovered_item_key() -> String:
 
 
 ## Using a consumable from a hotkey. A potion is drunk at once, a scroll enters
-## targeting — exactly like clicking it in the inventory.
+## targeting вЂ” exactly like clicking it in the inventory.
 func _use_hotbar_item(item_key: String) -> void:
 	if item_key == "":
 		return
@@ -2411,8 +2448,8 @@ func _flash_cast_error(msg: String) -> void:
 	if ui != null and ui.has_method("_flash_targeting_error"):
 		ui._flash_targeting_error(msg)
 
-## A spell from the book: the click selected a target. Attack/area/wall — at an enemy or
-## a point, healing/defense/buff — at the hero or an ally. Mana/charge are deducted
+## A spell from the book: the click selected a target. Attack/area/wall вЂ” at an enemy or
+## a point, healing/defense/buff вЂ” at the hero or an ally. Mana/charge are deducted
 ## only on a successful cast.
 func _resolve_spell_click(world_position: Vector2) -> void:
 	if is_paused:
@@ -2505,17 +2542,17 @@ func cancel_targeting() -> void:
 	if ui != null and ui.has_method("_cancel_targeting"):
 		ui._cancel_targeting()
 
-## A unit hit box in the world — by the REAL figure.
+## A unit hit box in the world вЂ” by the REAL figure.
 ##
 ## History: first the box was built from units_db `w/h` (128) + `sel_box`; there
-## `sel_box` is almost nowhere, and the 96×96 stub gave "the sword reaches 4–5
+## `sel_box` is almost nowhere, and the 96Г—96 stub gave "the sword reaches 4вЂ“5
 ## cells". Then a check "sel_box is default when w>=128" was added, but ALL
 ## our unit sets have w=h=64, the check did not fire, and units kept carrying
-## a 96×96 box — and a shifted one at that: `position + (-32,-64) + (16,16)` = from −16 to
+## a 96Г—96 box вЂ” and a shifted one at that: `position + (-32,-64) + (16,16)` = from в€’16 to
 ## +80 along X, that is 56 px to the right of the centre.
 ##
 ## Now: an explicit `sel_box` is taken only if it really lies inside the frame;
-## otherwise — the body rect by the idle pose (`UnitAnim.body_rect()`), not by the canvas and not
+## otherwise вЂ” the body rect by the idle pose (`UnitAnim.body_rect()`), not by the canvas and not
 ## by the attack frame (a sword/staff must not inflate the body).
 static func unit_hit_rect(u: Node2D) -> Rect2:
 	var t0 := perf_begin()
@@ -2603,7 +2640,7 @@ static func unit_hover_hit(u: Node2D, world_pos: Vector2, slack: float = 6.0) ->
 	var h := tex.get_height()
 	if sprite.flip_h:
 		px = w - 1 - px
-	# Outside the frame — the previous rect with a tolerance (play, shadows, wide tails).
+	# Outside the frame вЂ” the previous rect with a tolerance (play, shadows, wide tails).
 	if px < -int(slack) or py < -int(slack) or px >= w + int(slack) or py >= h + int(slack):
 		return unit_hit_rect(u).grow(slack).has_point(world_pos)
 	var img := tex.get_image()
@@ -2654,7 +2691,7 @@ static func units_range(a: Node2D, b: Node2D) -> float:
 		rb.position.y - (ra.position.y + ra.size.y)))
 	return sqrt(dx * dx + dy * dy)
 
-## Add camera trauma (screen shake). amount: 0.0–1.0.
+## Add camera trauma (screen shake). amount: 0.0вЂ“1.0.
 static func camera_trauma(amount: float) -> void:
 	_trauma = clampf(_trauma + amount, 0.0, 1.0)
 
@@ -2663,10 +2700,10 @@ func _physics_process(delta):
 	# lerp in _process "jerks" the picture relative to the physics-interpolated
 	# unit position (player report 07.10).
 	if is_instance_valid(player) and camera:
-		# We move the camera explicitly in the physics process — so it has to process its
+		# We move the camera explicitly in the physics process вЂ” so it has to process its
 		# position in the same tick too. process_callback = PHYSICS is set
 		# in _ready above/in the scene; enabling the project physics interpolation
-		# makes the engine "override" the camera to physics mode itself —
+		# makes the engine "override" the camera to physics mode itself вЂ”
 		# this is normal and prints a WARNING. We silence the warning on this node.
 		camera.position = camera.position.lerp(player.camera_focus(), 8.0 * delta)
 		if _trauma > 0.0:
@@ -2698,7 +2735,7 @@ func _process_impl(delta):
 	_guard_respawn_tick(delta)
 	if is_instance_valid(player) and camera:
 		_autosave_tick(delta)
-		# The camera is already in _physics_process — here only UI/regen/timers.
+		# The camera is already in _physics_process вЂ” here only UI/regen/timers.
 	if is_instance_valid(ui) and is_instance_valid(player):
 		ui.update_ui(player, delta)
 	
@@ -2771,7 +2808,7 @@ func _check_portal() -> void:
 	var cell := Vector2i(int(int(player.global_position.x) / float(TILE)), int(int(player.global_position.y) / float(TILE)))
 	var portal := _portal_at(cell)
 	if portal.is_empty():
-		# Stepped off the portal — it can be asked again.
+		# Stepped off the portal вЂ” it can be asked again.
 		_portal_armed = true
 		_portal_prompt_cell = Vector2i(-1, -1)
 		return
@@ -2931,7 +2968,7 @@ func _thread_generate_sector(seed_value: int, tier: String, sector: String, size
 		sector, size, ns, relief, job)
 
 
-## Transition by tier — a compatibility wrapper (tests, old calls).
+## Transition by tier вЂ” a compatibility wrapper (tests, old calls).
 func travel_to_zone(zone: String) -> void:
 	var wm := Game._world_map()
 	if wm.has(zone):
@@ -3039,7 +3076,7 @@ func _ensure_world_state() -> void:
 		var start_owner := MapGenerator.city_race_for_hero(Game.hero_race)
 		bus.state.init_world(Game.world_seed, start_owner)
 	# Four factions are mandatory (28.10): the undead and the druids must have
-	# a great mage. Old saves come with two — we add them here without touching the world.
+	# a great mage. Old saves come with two вЂ” we add them here without touching the world.
 	if bus.state.has_method("ensure_race_factions"):
 		bus.state.ensure_race_factions()
 	# The calendar starts over: entering the game and moving to another sector must not
@@ -3110,9 +3147,9 @@ func _zone_map_path(zone: String, seed_value: int) -> String:
 
 
 ## Recreate the Map node and move the hero and the party onto it.
-## from_slot — the map came from this slot's folder (a game load): then the entry
+## from_slot вЂ” the map came from this slot's folder (a game load): then the entry
 ## point is the hero position from the save, not the spawn of a new map.
-## map_seed_value — the seed of the NEW map (a transition between sectors): it must
+## map_seed_value вЂ” the seed of the NEW map (a transition between sectors): it must
 ## be applied BEFORE spawning the outpost guards, otherwise the capture key is computed from
 ## the previous map's seed.
 func _swap_map(new_path: String, zone: String, from_slot: bool = false,
@@ -3143,7 +3180,7 @@ func _swap_map(new_path: String, zone: String, from_slot: bool = false,
 	if is_instance_valid(ui) and ui.has_method("rebind_map"):
 		ui.rebind_map()
 	if from_slot and load_position_valid:
-		# The position from the save already sits in Game — here only a flag is needed:
+		# The position from the save already sits in Game вЂ” here only a flag is needed:
 		# if it is not found during the loading frame, the hero stands at spawn
 		# (the previous behaviour).
 		pass
@@ -3213,7 +3250,7 @@ func _clear_world_units() -> void:
 	# Loot bags lie as separate nodes next to the units.
 	for child in get_children():
 		# Loot bags were renamed to LootDrop (03.10), but the group kept its
-		# old name — the cleanup on zone transitions is tied to it.
+		# old name вЂ” the cleanup on zone transitions is tied to it.
 		if child.is_in_group("loot_bag") or child.name.begins_with("LootDrop"):
 			child.queue_free()
 	if is_instance_valid(player):
@@ -3221,7 +3258,7 @@ func _clear_world_units() -> void:
 
 ## --- Greys respawn (03.10) --------------------------------------------------
 ##
-## Measurement: there was NO respawn at all. Killed everyone in the zone — the zone is empty forever,
+## Measurement: there was NO respawn at all. Killed everyone in the zone вЂ” the zone is empty forever,
 ## and "the map is boring" only got more boring over time. Now we keep a
 ## limit: if the living count is below the target, every N seconds one beast appears
 ## far from the hero.
@@ -3327,7 +3364,7 @@ static func make_gray(set_name: String, spot: Vector2, parent: Node,
 	Game.enemies.append(beast)
 	# The map is what turns an Enemy.died into the quest's progress: a beast
 	# spawned here without watch_enemy() died silently and the counters stayed at
-	# zero (player, 20.11: "перебил кучу волков, а не засчиталось ни одного").
+	# zero (player, 20.11: "РїРµСЂРµР±РёР» РєСѓС‡Сѓ РІРѕР»РєРѕРІ, Р° РЅРµ Р·Р°СЃС‡РёС‚Р°Р»РѕСЃСЊ РЅРё РѕРґРЅРѕРіРѕ").
 	if parent.is_inside_tree():
 		var map := parent.get_tree().get_first_node_in_group("alm_map")
 		if map != null and map.has_method("watch_enemy"):
@@ -3435,7 +3472,7 @@ func _on_hero_died() -> void:
 	_open_game_over()
 
 ## Load-only save menu under a black screen. No Save/Delete, no Esc close,
-## only «Загрузить» and «В главное меню» (player decision 04.11).
+## only В«Р—Р°РіСЂСѓР·РёС‚СЊВ» and В«Р’ РіР»Р°РІРЅРѕРµ РјРµРЅСЋВ» (player decision 04.11).
 func _open_game_over() -> void:
 	if _save_menu != null and is_instance_valid(_save_menu):
 		return
@@ -3468,13 +3505,13 @@ func _close_game_over() -> void:
 ## Open the save menu (Esc). A repeated call is ignored.
 ##
 ## While the menu is open the world is paused (player report 22.10: "opened the save
-## menu, saved — and the character keeps running"). The pause is set and
+## menu, saved вЂ” and the character keeps running"). The pause is set and
 ## removed here, not in SaveMenu: the menu can be closed with Esc, "To the main menu"
 ## or by terminating the process, and in every path the removal must be in one place.
 func open_save_menu() -> void:
 	if _save_menu != null and is_instance_valid(_save_menu):
 		return
-	# Co-op (21.11): no slots, no pause — but the menu must still open so the
+	# Co-op (21.11): no slots, no pause вЂ” but the menu must still open so the
 	# player can quit to menu or adjust settings. The world keeps running.
 	if NetSession.is_net_game():
 		_open_coop_menu()
@@ -3539,10 +3576,10 @@ func _open_coop_menu() -> void:
 	settings_btn.grab_focus()
 
 
-## The world is paused while the save menu is open. The hero is dead — the pause is held
+## The world is paused while the save menu is open. The hero is dead вЂ” the pause is held
 ## by the death screen (_on_hero_died), and it must not be lifted the usual way.
 func _set_menu_pause(on: bool) -> void:
-	# Co-op (21.11): panels never freeze the world — the other player is still
+	# Co-op (21.11): panels never freeze the world вЂ” the other player is still
 	# playing, and walking into a menu must not stop their game.
 	if NetSession.is_net_game():
 		return
@@ -3628,7 +3665,7 @@ func _delete_slot(slot: String) -> void:
 func _quit_to_menu() -> void:
 	# Co-op (21.11/22.11): the character is stored on this machine, the world is
 	# not. Leaving ends the session (a peer cannot play alone against a host that
-	# already went to the menu) and the single-player autosave is NOT touched —
+	# already went to the menu) and the single-player autosave is NOT touched вЂ”
 	# a co-op hero must not overwrite the solo slot.
 	var net := NetSession.active()
 	if net != null:
@@ -3647,7 +3684,7 @@ func _quit_to_menu() -> void:
 	_save_to_slot(SaveSystem.AUTOSAVE_SLOT)
 	_close_game_over()
 	# The pause must be removed: otherwise the main menu opens in a stopped
-	# tree — with no background animation and no reaction to input. The save menu sets
+	# tree вЂ” with no background animation and no reaction to input. The save menu sets
 	# the pause when opening (22.10), and "To the main menu" does not emit closed.
 	_menu_release_pause()
 	is_paused = false
@@ -3658,7 +3695,7 @@ func _quit_to_menu() -> void:
 
 ## Full exit from the process (the "Quit game" button in the Esc menu).
 func _quit_app() -> void:
-	# Same order as «В главное меню»: save (skipped while dead), release the
+	# Same order as В«Р’ РіР»Р°РІРЅРѕРµ РјРµРЅСЋВ»: save (skipped while dead), release the
 	# death screen, then let the process go.
 	_save_to_slot(SaveSystem.AUTOSAVE_SLOT)
 	_close_game_over()
@@ -3669,7 +3706,7 @@ func _quit_app() -> void:
 
 ## The scene gives way to the menu or the process is closing: an autosave on node removal
 ## is no longer needed. Without this flag the main menu received TWO autosave
-## writes in a row — it writes one itself when loading a slot (`main_menu.gd:_on_load_slot`)
+## writes in a row вЂ” it writes one itself when loading a slot (`main_menu.gd:_on_load_slot`)
 ## and it rebuilds the hero only when starting a new game: the second write
 ## overwrote what the menu had just written with the old scene state.
 func _set_leaving_scene(on: bool) -> void:
@@ -3714,12 +3751,12 @@ func _restart_scene(slot: String) -> void:
 
 ## Refresh the HUD after loading a slot of another character. The panels (inventory,
 ## shop etc.) are created anew on every open and read Game.*,
-## but the ones open at load time would show a hero of another class —
+## but the ones open at load time would show a hero of another class вЂ”
 ## we close them (the save menu already pauses the game anyway).
 func _refresh_ui_after_hero_swap() -> void:
 	if is_instance_valid(player):
 		Game.hero = player
-	# ui — an @onready-typed reference to the UI node.
+	# ui вЂ” an @onready-typed reference to the UI node.
 	if not is_instance_valid(ui):
 		return
 	ui.close_all_panels()
@@ -3730,7 +3767,7 @@ func _refresh_ui_after_hero_swap() -> void:
 	ui.refresh_inventory()
 
 
-## The world (SIM state) from the slot → WorldBus. The simulator holds a reference to the
+## The world (SIM state) from the slot в†’ WorldBus. The simulator holds a reference to the
 ## OLD WorldState, otherwise after loading it would keep ticking the
 ## previous world instead of the loaded one.
 func _restore_world_from_slot(slot: String) -> void:

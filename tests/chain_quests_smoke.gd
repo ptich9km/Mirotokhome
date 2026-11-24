@@ -245,8 +245,10 @@ func _test_offer(qs: QuestSystem) -> void:
 	var head := qs.head_offers(CITY)
 	_check(head.size() == offers.size() + 1,
 		"the head shows the story beside the rotation (%d + 1)" % offers.size())
-	_check(not qs.chain_offer(CITY2).is_empty() == false,
-		"a head of another race does not offer the humans' line")
+	var other := qs.chain_offer(CITY2)
+	_check(str(other.get("chain_id", "")) != CHAIN,
+		"a head of another race does not offer the humans' line (offers: %s)"
+		% str(other.get("chain_id", "")))
 	# The zone gate: the same line must not appear in a deep zone.
 	Game.map_zone = "hard"
 	_check(qs.chain_offer(CITY).is_empty(), "the line is gated to start/mid zones")

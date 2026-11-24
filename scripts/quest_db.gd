@@ -52,17 +52,22 @@ const SPECIES_FORM := {
 	"kill_species": {"title": "acc", "text": "nom"},
 	"urgent_hunt": {"title": "acc", "text": "nom"},
 	"chain_cas_a1": {"title": "acc", "text": "nom"},
+	"chain_sac_b1": {"title": "acc", "text": "nom"},
+	"chain_sac_b5": {"title": "acc", "text": "nom"},
+	"chain_qig_d5": {"title": "acc", "text": "nom"},
 }
 
 ## Chain stages (engine + chain A, 20.11). A stage is an ordinary template that
 ## additionally names its chain, its stage, the step number, a FIXED difficulty
 ## (the zone must not reprice a stage of a story line) and what happens when it
 ## is turned in. Stages never enter the rotation: pick_template skips them.
-const EFFECT_OPS := ["hero_rep", "archmage_power", "item", "flag", "feed"]
+const EFFECT_OPS := ["hero_rep", "archmage_power", "item", "flag", "feed",
+	"sim_relation", "city_loyalty", "outpost_owner"]
 
 ## Conditions a stage (or a chain) may put on being offered. Unknown keys are a
 ## load error: a typo must not silently make a gate always pass.
-const REQUIRES_KEYS := ["zone", "cities_min", "day_min", "hero_rep"]
+const REQUIRES_KEYS := ["zone", "cities_min", "day_min", "hero_rep",
+	"outposts_min"]
 
 static var _templates: Array[Dictionary] = []
 static var _chains: Array[Dictionary] = []
@@ -229,7 +234,18 @@ static func _effect_valid(raw: Variant, id: String) -> bool:
 			% [id, op, ", ".join(EFFECT_OPS)])
 		return false
 	match op:
-		"hero_rep", "archmage_power":
+		"hero_rep":
+			var race := str(e.get("race", ""))
+			if not MapGenerator.CITY_POPULATION.has(race):
+				push_error("QuestDB: %s - effect %s: unknown race '%s'" % [id, op, race])
+				return false
+			# A negative shift is the PRICE of a choice (chain B tags), not a
+			# negative reward: it must be visible in the stage text.
+			var amount: Variant = e.get("amount", 0)
+			if not (amount is float or amount is int) or float(amount) == 0.0:
+				push_error("QuestDB: %s - effect %s: amount must be non-zero" % [id, op])
+				return false
+		"archmage_power":
 			var race := str(e.get("race", ""))
 			if not MapGenerator.CITY_POPULATION.has(race):
 				push_error("QuestDB: %s - effect %s: unknown race '%s'" % [id, op, race])
@@ -237,6 +253,32 @@ static func _effect_valid(raw: Variant, id: String) -> bool:
 			var amount: Variant = e.get("amount", 0)
 			if not (amount is float or amount is int) or float(amount) <= 0.0:
 				push_error("QuestDB: %s - effect %s: amount must be positive" % [id, op])
+				return false
+		"sim_relation":
+			for side in ["a", "b"]:
+				var r := str(e.get(side, ""))
+				if not MapGenerator.CITY_POPULATION.has(r):
+					push_error("QuestDB: %s - effect sim_relation: unknown race '%s'"
+						% [id, r])
+					return false
+			var amount: Variant = e.get("amount", 0)
+			if not (amount is float or amount is int) or float(amount) == 0.0:
+				push_error("QuestDB: %s - effect sim_relation: amount must be non-zero" % id)
+				return false
+		"city_loyalty":
+			var race := str(e.get("race", ""))
+			if not MapGenerator.CITY_POPULATION.has(race):
+				push_error("QuestDB: %s - effect city_loyalty: unknown race '%s'" % [id, race])
+				return false
+			var amount: Variant = e.get("amount", 0)
+			if not (amount is float or amount is int) or float(amount) <= 0.0:
+				push_error("QuestDB: %s - effect city_loyalty: amount must be positive" % id)
+				return false
+		"outpost_owner":
+			var faction := str(e.get("faction", ""))
+			if not MapGenerator.CITY_POPULATION.has(faction):
+				push_error("QuestDB: %s - effect outpost_owner: unknown faction '%s'"
+					% [id, faction])
 				return false
 		"item":
 			var key := str(e.get("key", ""))
@@ -302,6 +344,12 @@ static func _validate(raw: Variant) -> Dictionary:
 		if key == "" or not Loc.has_key(key):
 			push_error("QuestDB: %s - unknown %s '%s'" % [id, field, key])
 			return {}
+	# Optional line for a hero of another race: same placeholder contract as the
+	# main text, otherwise the card would print a raw %s at a foreign hero.
+	var foreign_key := str(d.get("text_key_foreign", ""))
+	if foreign_key != "" and not Loc.has_key(foreign_key):
+		push_error("QuestDB: %s - unknown text_key_foreign '%s'" % [id, foreign_key])
+		return {}
 	# populate fixes the ORDER of substitutions and its keys also fix the
 	# PLACEHOLDER KIND: a number goes in as %d, a text as %s (a number the words
 	# around it need as a word - count_word - goes in as %s too). It fills the
@@ -316,6 +364,12 @@ static func _validate(raw: Variant) -> Dictionary:
 		push_error("QuestDB: %s - text placeholders do not match populate %s"
 			% [id, order])
 		return {}
+	if foreign_key != "":
+		var foreign_text := _text_for_locale(foreign_key)
+		if not placeholders_fit(foreign_text, order):
+			push_error("QuestDB: %s - foreign text placeholders do not match populate %s"
+				% [id, order])
+			return {}
 	if not placeholders_fit(title_src, order, true):
 		push_error("QuestDB: %s - the title needs one text placeholder and a text populate key"
 			% id)

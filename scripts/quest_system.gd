@@ -535,7 +535,16 @@ func _title_for(q: Dictionary, tpl: Dictionary) -> String:
 
 
 func _text_for(q: Dictionary, tpl: Dictionary) -> String:
-	return _populate_for(str(tpl.get("text_key", "")), q, "text")
+	var key := str(tpl.get("text_key", ""))
+	# A hero of another race hears a different line (a chain stage may carry
+	# text_key_foreign); the main text is the fallback for a missing foreign key.
+	# hero_race is singular ("human"), city_race plural ("humans"): compare
+	# through the same mapping the generator uses.
+	if str(tpl.get("text_key_foreign", "")) != "" \
+			and str(q.get("city_race", "")) != "" \
+			and str(q.get("city_race", "")) != MapGenerator.city_race_for_hero(Game.hero_race):
+		key = str(tpl.get("text_key_foreign", ""))
+	return _populate_for(key, q, "text")
 
 
 ## The key in the first language version whose placeholders fit `populate`
@@ -816,6 +825,9 @@ func _requires_ok(raw: Variant) -> bool:
 	if req.has("cities_min"):
 		if _city_count() < int(req["cities_min"]):
 			return false
+	if req.has("outposts_min"):
+		if Game.outposts.size() < int(req["outposts_min"]):
+			return false
 	if req.has("day_min"):
 		if _day() < int(req["day_min"]):
 			return false
@@ -875,7 +887,12 @@ func _advance_chain(chain_id: String, stage_id: String) -> void:
 			"started_day": _day(), "done_day": 0}
 	st["stage"] = stage_id
 	st["state"] = "active"
-	if _next_stage(chain_id, st) == "":
+	# "done" only when the graph has no next stage at all. A stage that exists
+	# but is gated by its conditions (chain B waits for a map with outposts,
+	# 25.11) must keep the chain ACTIVE: chain_offer re-checks the conditions
+	# on every call, and the line resumes on the map where they pass.
+	var last_tpl := QuestDB.stage(chain_id, stage_id)
+	if (last_tpl.get("next", []) as Array).is_empty():
 		st["state"] = "done"
 		st["done_day"] = _day()
 	chains[chain_id] = st
@@ -916,6 +933,29 @@ func _apply_effects(q: Dictionary) -> void:
 				chains[chain_id] = entry
 			"feed":
 				WORLD_FEED.post("world", Loc.t(str(e.get("key", ""))))
+			"sim_relation":
+				st = _state()
+				if st != null:
+					st.add_sim_relation(str(e.get("a", "")),
+						str(e.get("b", "")), int(e.get("amount", 0)))
+			"city_loyalty":
+				st = _state()
+				if st != null:
+					st.add_city_loyalty(str(e.get("race", "")), Game.map_sector,
+						float(e.get("amount", 0.0)))
+			"outpost_owner":
+				# MVP: the first camp on the map that does not belong to the new
+				# owner yet (a map of this zone has exactly one abandoned camp).
+				var want_faction := str(e.get("faction", ""))
+				for raw_o in Game.outposts:
+					var rec: Dictionary = raw_o
+					var oid := str(rec.get("id", ""))
+					if oid == "":
+						continue
+					if str(rec.get("faction", "")) != want_faction \
+							and Game.outpost_owner_of(oid) != want_faction:
+						Game.set_outpost_owner(oid, want_faction)
+						break
 
 
 ## Test/UI helper: what the chain remembers about itself.
