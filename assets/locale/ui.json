@@ -1590,5 +1590,14 @@
   "ui.quest.chain.quiet_it_grows.d4b.text": {"ru": "Тот, кто вытоптал посадку, ещё жив - %s. Катя не просила убивать. Она просила, чтобы он больше не приходил.", "en": "The one who trampled the planting is still alive - %s. Katya did not ask for a killing. She asked that he never come again."},
   "ui.quest.chain.quiet_it_grows.d5.title": {"ru": "Одна ночь у посадки", "en": "One night by the planting"},
   "ui.quest.chain.quiet_it_grows.d5.text": {"ru": "Теперь за посадкой придут все - %s, %s. Постой рядом одну ночь. Больше не прошу.", "en": "Now everyone will come for the planting - %s, %s. Stand by it for one night. I will ask no more."},
-  "ui.quest.chain.quiet_it_grows.feed": {"ru": "Катя: „Вот здесь уже растёт. Не наступай.“", "en": "Katya: \"It already grows here. Do not step on it.\""}
+  "ui.quest.chain.quiet_it_grows.feed": {"ru": "Катя: „Вот здесь уже растёт. Не наступай.“", "en": "Katya: \"It already grows here. Do not step on it.\""},
+  "ui.teleport.title": {"ru": "Мастер телепортации", "en": "Teleport Master"},
+  "ui.teleport.gold": {"ru": "Золото: %d", "en": "Gold: %d"},
+  "ui.teleport.here": {"ru": "Вы здесь", "en": "You are here"},
+  "ui.teleport.go": {"ru": "Телепорт", "en": "Teleport"},
+  "ui.teleport.cost": {"ru": "Цена: %d зм", "en": "Cost: %d gp"},
+  "ui.teleport.no_gold": {"ru": "не хватает золота", "en": "not enough gold"},
+  "ui.teleport.locked_rep": {"ru": "Недоступен: репутация низкая", "en": "Unavailable: reputation too low"},
+  "ui.teleport.empty": {"ru": "Вы ещё не открыли ни одного мастера телепортации — идите в город.", "en": "No teleport master discovered yet — visit a city."},
+  "ui.teleport.discovered": {"ru": "Открыт мастер телепортации: %s", "en": "Teleport master discovered: %s"}
 }

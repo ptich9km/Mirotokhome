@@ -112,12 +112,18 @@ func _check_guard_respawn() -> void:
 	var after_kill := _guards_of_city(city)
 	_check(after_kill == before - 1, "выбывший больше не считается (%d -> %d)"
 		% [before, after_kill])
-	# One period is enough for one replacement.
+	# One period is enough for one replacement. The assertion tolerates combat:
+	# while the hero stands in the town the Greys may kill another guard, and
+	# the tick honestly refills the WHOLE deficit up to the post count - so the
+	# check is "at least back to the pre-kill level", not strict equality
+	# (the strict form flaked on seed 9001: a guard died during the measurement
+	# and the tick restored 7 -> 9, which is correct behaviour).
 	var game: Node = current_scene
 	game.call("_guard_respawn_tick",
 		float(GameConfig.getf("npc", "guard_respawn_seconds")) + 0.1)
 	var after := _guards_of_city(city)
-	_check(after == before, "пост восстановлен (%d -> %d)" % [after_kill, after])
+	_check(after >= before, "пост восстановлен (%d -> %d, было до выбытия %d)"
+		% [after_kill, after, before])
 	var near_post := false
 	for n in Game.npcs:
 		if not is_instance_valid(n):

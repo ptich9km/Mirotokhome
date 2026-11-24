@@ -1819,6 +1819,7 @@ var _school: SchoolPanel = null
 var _inn: InnPanel = null
 var _archmage: ArchmagePanel = null
 var _quests: QuestPanel = null
+var _teleport: TeleportPanel = null
 var _world_map = null
 var _workshop: WorkshopPanel = null
 var _inventory_panel: InventoryPanel = null
@@ -1901,7 +1902,7 @@ func _on_panel_closed() -> void:
 ## an open paper-doll would show the class/inventory of the previous character).
 func close_all_panels() -> void:
 	var panels: Array = [_shop, _alchemy, _school, _inn, _workshop,
-		_inventory_panel, _archmage, _quests, _world_map]
+		_inventory_panel, _archmage, _quests, _world_map, _teleport]
 	for p in panels:
 		if not is_instance_valid(p):
 			continue
@@ -1910,7 +1911,7 @@ func close_all_panels() -> void:
 
 ## Is any interior panel open (clicks must not move the hero on the map).
 func is_editor_open() -> bool:
-	return DevConsole.console_is_open() or is_instance_valid(_shop) or is_instance_valid(_alchemy) or is_instance_valid(_school) or is_instance_valid(_inn) or is_instance_valid(_workshop) or is_instance_valid(_inventory_panel) or is_instance_valid(_archmage) or is_instance_valid(_quests) or is_instance_valid(_world_map)
+	return DevConsole.console_is_open() or is_instance_valid(_shop) or is_instance_valid(_alchemy) or is_instance_valid(_school) or is_instance_valid(_inn) or is_instance_valid(_workshop) or is_instance_valid(_inventory_panel) or is_instance_valid(_archmage) or is_instance_valid(_quests) or is_instance_valid(_world_map) or is_instance_valid(_teleport)
 
 ## Is the cursor over any interface element (panel/button/book/inventory)?
 ## A click on the UI must not read as movement/attack on the map.
@@ -2029,6 +2030,22 @@ func open_inventory_panel() -> void:
 	_inventory_panel.closed.connect(_on_panel_closed)
 	_inventory_panel.inventory_changed.connect(_on_inventory_changed)
 	add_child(_inventory_panel)
+
+
+## Teleport master (25.11): fast travel between visited cities. Unlike the
+## interior panels the hero stays visible — the master stands on the street.
+func open_teleport(current_city_id: String = "") -> void:
+	if _teleport != null and is_instance_valid(_teleport):
+		return
+	_teleport = TeleportPanel.new()
+	_teleport.setup(player, current_city_id)
+	_teleport.closed.connect(_on_teleport_closed)
+	add_child(_teleport)
+
+
+func _on_teleport_closed() -> void:
+	Game.cursor_context = ""
+	_teleport = null
 
 
 ## City head quests (22.10): offers, accepted tasks, turn-in, cancel.

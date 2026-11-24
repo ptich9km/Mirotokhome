@@ -650,6 +650,10 @@ static func build_payload(player, world_dict: Dictionary, world_meta: Dictionary
 			# the map seed, so the whole dictionary travels like the hotbar.
 			"shop_stock": Game.shop_stock.duplicate(),
 			"shop_stock_day": int(Game.shop_stock_day),
+			# Teleport network (25.11): visited cities with their masters.
+			# The key carries zone/sector/seed, so the whole dictionary is
+			# shared by all world maps, like the outpost captures.
+			"visited_cities": Game.visited_cities.duplicate(true),
 		},
 		"hero": hero,
 		"world": world_dict,
@@ -978,6 +982,15 @@ static func apply_payload(d: Dictionary, player, slot: String = "") -> void:
 		for key in stock:
 			Game.shop_stock[str(key)] = int((stock as Dictionary)[key])
 	Game.shop_stock_day = int(map_d.get("shop_stock_day", -1))
+	# Teleport network (25.11): an older save simply has no records — the hero
+	# rediscovers the masters by walking into the cities.
+	Game.visited_cities.clear()
+	var visited: Variant = map_d.get("visited_cities", {})
+	if visited is Dictionary:
+		for key in (visited as Dictionary):
+			var rec: Variant = (visited as Dictionary)[key]
+			if rec is Dictionary:
+				Game.visited_cities[str(key)] = (rec as Dictionary).duplicate()
 	Game.pending_events = (d.get("events", []) as Array).duplicate(true)
 	_check_mods(d.get("mods", []))
 	# Older saves (before 22.10) kept an empty ARRAY here, meaning "no quests".

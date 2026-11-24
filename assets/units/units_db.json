@@ -6476,5 +6476,64 @@
    "earth": 10,
    "astral": 10
   }
+ },
+ "city_teleport_master/t0": {
+  "desc": "Мастер телепортации, нейтральный служитель",
+  "name_ru": "Мастер телепортации",
+  "folder": "city_teleport_master/t0",
+  "prefix": "sprites",
+  "frames": 8,
+  "dirs": 8,
+  "move": 1,
+  "move_begin": 0,
+  "attack": 0,
+  "dying": 0,
+  "decay": 0,
+  "cast": 0,
+  "idle": 0,
+  "idle_phases": 0,
+  "move_f": [
+   0
+  ],
+  "move_t": [
+   2
+  ],
+  "attack_f": [],
+  "attack_t": [],
+  "die_f": [],
+  "dying_t": [],
+  "w": 52,
+  "h": 64,
+  "cx": 26,
+  "cy": 62,
+  "tile": null,
+  "projectile": -1,
+  "palette": 0,
+  "ids": [],
+  "picture": null,
+  "blocks": 1,
+  "expected_frames": 8,
+  "sel_box": [
+   6,
+   3,
+   44,
+   61
+  ],
+  "attack_delay": 4,
+  "info_picture": null,
+  "sound": [],
+  "resist": {
+   "fire": 0,
+   "water": 0,
+   "air": 0,
+   "earth": 0,
+   "astral": 0
+  },
+  "tile_size": 1,
+  "z": 0,
+  "flip": 0,
+  "bone": 0,
+  "shoot_delay": 8,
+  "shoot_offset": []
  }
 }

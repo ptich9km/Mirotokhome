@@ -184,13 +184,17 @@ func _run() -> void:
 	# После перехода в новую зону наборы Серых — настоящие `monsters/*`
 	# (арт 17.10). Сторож ловит возврат удалённых старых наборов и мусор.
 	var stray_sets := 0
+	# The npc/ namespace joined the whitelist on 25.11: it holds the townsfolk
+	# (23.11) and the road bandits (24.11) - all registered in units_db, so the
+	# guard still catches the removed legacy sets (ork_mage_a52, hero/*).
 	if parsed is Dictionary:
 		for rec2 in (parsed as Dictionary).get("npcs", []):
 			var s2 := str((rec2 as Dictionary).get("set", ""))
 			if s2.is_empty():
 				continue
 			if not (s2.begins_with("city_") or s2.begins_with("ork_mage")
-					or s2.begins_with("rig/") or s2.begins_with("monsters/")):
+					or s2.begins_with("rig/") or s2.begins_with("monsters/")
+					or s2.begins_with("npc/")):
 				stray_sets += 1
 				print("  STRAY set `%s`" % s2)
 	_check(stray_sets == 0,

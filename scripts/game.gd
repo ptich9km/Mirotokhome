@@ -69,6 +69,19 @@ static var pending_outposts_captured: Dictionary = {}
 ## closing and reopening the panel is not a free refill.
 static var shop_stock: Dictionary = {}
 static var shop_stock_day: int = -1
+## Teleport network (25.11): cities whose teleport master the hero has visited.
+## Key: "zone|sector|seed|city_id" (the outpost key scheme), value:
+## {name, race, sector, tier, seed, world_seed, cell:[x,y]}. The whole
+## dictionary is shared by all world maps and travels in the save payload.
+static var visited_cities: Dictionary = {}
+## Reputation floor for teleporting INTO a city: below it the destination is
+## hostile and the master refuses to send the hero there (player decision 25.11).
+const TELEPORT_REP_MIN := -15
+## Gold price: base + per-sector step (Manhattan distance on the 4x3 grid);
+## a hop inside the current sector costs TELEPORT_COST_SAME.
+const TELEPORT_COST_BASE := 10
+const TELEPORT_COST_STEP := 8
+const TELEPORT_COST_SAME := 5
 ## The shop shelf limit per item per city per day (player's decision 09.11).
 const SHOP_STOCK_LIMITS := {
 	"Potion Health Regeneration": 2,
@@ -790,6 +803,8 @@ var _pending_s: Dictionary = {}           # the structure target of a pending en
 var _pending_herb: HerbNode = null
 var _pending_archmage: Node2D = null      # the captain mage we are approaching
 var _pending_city_head: Node2D = null     # the city head we are approaching
+var _pending_teleport_master: Node2D = null  # the teleport master we are approaching
+var _discover_accum := 0.0                # teleport-network discovery tick
 var _save_menu: CanvasLayer = null
 ## Net co-op orchestrator; null in single-player (21.11).
 var _net: NetGame = null
@@ -861,6 +876,7 @@ static func clear_hero_save() -> void:
 	pending_outposts_owner.clear()
 	shop_stock.clear()
 	shop_stock_day = -1
+	visited_cities.clear()
 
 ## Portrait path: an explicit hero_portrait or built from character_id (with legacy mapping).
 static func hero_portrait_path() -> String:
@@ -937,6 +953,48 @@ static func hero_reputation(race: String) -> int:
 	if bus == null or not ("state" in bus) or bus.state == null:
 		return 0
 	return int(bus.state.hero_rep(race))
+
+
+# --- Teleport network (25.11) ------------------------------------------------
+
+## Stable key of a city in the teleport network (the outpost key scheme).
+static func city_visit_key(zone: String, sector: String, seed_value: int, city_id: String) -> String:
+	return "%s|%s|%d|%s" % [zone, sector, seed_value, city_id]
+
+
+## Gold price of a hop between two sectors: Manhattan distance on the 4x3 grid.
+static func teleport_cost_between(from_sector: String, to_sector: String) -> int:
+	if from_sector == to_sector:
+		return TELEPORT_COST_SAME
+	var wm = load("res://scripts/world/world_map.gd")
+	var a: Dictionary = wm.sector(from_sector)
+	var b: Dictionary = wm.sector(to_sector)
+	if a.is_empty() or b.is_empty():
+		return TELEPORT_COST_BASE
+	var dist: int = absi(int(a.get("col", 0)) - int(b.get("col", 0))) \
+		+ absi(int(a.get("row", 0)) - int(b.get("row", 0)))
+	return TELEPORT_COST_BASE + TELEPORT_COST_STEP * maxi(1, dist)
+
+
+## Why a visited city cannot be a destination: "" (ok) | "here" | "rep".
+static func teleport_gate(rec: Dictionary, current_key: String = "") -> String:
+	var key := city_visit_key(str(rec.get("tier", "")), str(rec.get("sector", "")),
+		int(rec.get("seed", 0)), str(rec.get("city_id", "")))
+	if key == current_key:
+		return "here"
+	if hero_reputation(str(rec.get("race", ""))) < TELEPORT_REP_MIN:
+		return "rep"
+	return ""
+
+
+## Remember a city whose master the hero has reached. Idempotent: a repeat
+## visit only refreshes the record (the name may get a race ordinal later).
+static func discover_city_record(rec: Dictionary) -> bool:
+	var key := city_visit_key(str(rec.get("tier", "")), str(rec.get("sector", "")),
+		int(rec.get("seed", 0)), str(rec.get("city_id", "")))
+	var fresh := not visited_cities.has(key)
+	visited_cities[key] = rec.duplicate()
+	return fresh
 
 
 # --- Faction outposts (forging rework package B) ---------------------------
@@ -1568,8 +1626,49 @@ func _spawn_map_units(done: Callable = Callable()) -> void:
 	print("Map: %d units spawned" % spawned)
 	_on_spawn_batch(recs.size(), recs.size())
 	_collect_guard_records(recs)
+	_spawn_teleport_masters()
 	if done.is_valid():
 		done.call()
+
+
+## Teleport masters (25.11): one per city, spawned at runtime next to the city
+## centre — no generator change, so existing maps and saves get them too.
+## One neutral set for every race: the master is a service NPC, not a faction
+## member (art: import/teleport_master_8dir.png -> extract_teleport_master.py).
+func _spawn_teleport_masters() -> void:
+	if alm_map == null or not alm_map.has_method("get_cities"):
+		return
+	# Co-op (21.11): one shared world on the host, a teleport of one player into
+	# another sector is impossible there — the network is single-player only.
+	if NetSession.is_net_game():
+		return
+	var ts := int(alm_map.get("tile_size"))
+	for city in alm_map.call("get_cities"):
+		var cid := str(city.get("id", ""))
+		if cid == "":
+			continue
+		var already := false
+		for n in npcs:
+			if is_instance_valid(n) and bool(n.get("is_teleport_master")) \
+					and str(n.get("city_id")) == cid:
+				already = true
+				break
+		if already:
+			continue
+		var cell := Vector2i(int(city.get("x", 0)), int(city.get("y", 0)))
+		var pos := _find_open_spot(cell, ts)
+		if pos.x < 0.0:
+			continue
+		var race := str(city.get("race", ""))
+		var set_name := "city_teleport_master/t0"
+		if not UnitDB.has(set_name):
+			set_name = "city_%s_mage/t2" % race
+			if not UnitDB.has(set_name):
+				set_name = "city_human_mage/t2"
+		_spawn_npc(set_name, pos, {
+			"role": "citizen", "teleport_master": true, "city_id": cid,
+			"hp_max": 60,
+		})
 
 
 func _on_spawn_batch(spawned: int, total: int) -> void:
@@ -1625,6 +1724,7 @@ func _spawn_npc(set_name: String, pos: Vector2, rec: Dictionary) -> void:
 	n.is_patrol = bool(rec.get("patrol", false))
 	n.is_archmage = bool(rec.get("archmage", false))
 	n.is_city_head = bool(rec.get("head", false)) or role == "head"
+	n.is_teleport_master = bool(rec.get("teleport_master", false))
 	n.city_id = str(rec.get("city_id", ""))
 	var post: Array = rec.get("post", [])
 	if post.size() >= 2:
@@ -1874,6 +1974,11 @@ func handle_click(world_position: Vector2):
 	if head != null:
 		_city_head_click(head)
 		return
+	# A click on the teleport master: we approach / open the teleport panel.
+	var master = _teleport_master_at_position(world_position)
+	if master != null:
+		_teleport_master_click(master)
+		return
 
 	var enemy = get_enemy_at_position(world_position)
 	if enemy:
@@ -2101,6 +2206,136 @@ func _process_pending_city_head() -> void:
 		var cid := str(_pending_city_head.get("city_id"))
 		_pending_city_head = null
 		ui.open_quests(cid)
+
+
+## The teleport master under the cursor.
+func _teleport_master_at_position(click_pos: Vector2) -> Node2D:
+	for n in npcs:
+		if not is_instance_valid(n):
+			continue
+		if not ("is_teleport_master" in n) or not bool(n.is_teleport_master):
+			continue
+		if unit_hover_hit(n, click_pos, 8.0):
+			return n
+	return null
+
+
+## A click on the master: if close — the teleport panel, otherwise we approach.
+func _teleport_master_click(master: Node2D) -> void:
+	if ui == null or not is_instance_valid(player) or not is_instance_valid(master):
+		return
+	_pending_building = ""
+	_pending_s = {}
+	_pending_herb = null
+	_pending_archmage = null
+	_pending_city_head = null
+	player.attack_target = null
+	if player.global_position.distance_to(master.global_position) <= 90.0:
+		ui.open_teleport(str(master.get("city_id")))
+		return
+	_pending_teleport_master = master
+	player_target = master.global_position
+	player.state = "move"
+	if alm_map != null and alm_map.has_method("find_path"):
+		player.begin_path(alm_map.find_path(player.global_position, master.global_position))
+
+
+func _process_pending_teleport_master() -> void:
+	if _pending_teleport_master == null:
+		return
+	if not is_instance_valid(_pending_teleport_master) or ui == null:
+		_pending_teleport_master = null
+		return
+	if player.global_position.distance_to(_pending_teleport_master.global_position) <= 90.0:
+		var master := _pending_teleport_master
+		_pending_teleport_master = null
+		ui.open_teleport(str(master.get("city_id")))
+
+
+## Teleport network discovery: twice a second check whether the hero stands
+## near a city centre; a first visit records the city (and posts a feed line).
+func _discover_tick(delta: float) -> void:
+	_discover_accum += delta
+	if _discover_accum < 0.5:
+		return
+	_discover_accum = 0.0
+	if alm_map == null or not alm_map.has_method("get_cities") \
+			or not is_instance_valid(player):
+		return
+	var ts := int(alm_map.get("tile_size"))
+	var hero_cell := Vector2i(int(player.global_position.x / float(ts)),
+		int(player.global_position.y / float(ts)))
+	var ordinal := {}
+	for city in alm_map.call("get_cities"):
+		var race := str(city.get("race", ""))
+		var n := int(ordinal.get(race, 0)) + 1
+		ordinal[race] = n
+		var cid := str(city.get("id", ""))
+		var key := Game.city_visit_key(Game.map_zone, Game.map_sector,
+			Game.map_seed, cid)
+		if Game.visited_cities.has(key):
+			continue
+		var center := Vector2i(int(city.get("x", 0)), int(city.get("y", 0)))
+		if maxi(absi(hero_cell.x - center.x), absi(hero_cell.y - center.y)) > 8:
+			continue
+		var lore = load("res://scripts/lore.gd")
+		var base := Loc.t("ui.sim.city_default")
+		if lore != null:
+			base = str(lore.faction_city(race))
+		var cname := str(base) if n == 1 else "%s %d" % [str(base), n]
+		var fresh := Game.discover_city_record({
+			"city_id": cid, "name": cname, "race": race,
+			"sector": Game.map_sector, "tier": Game.map_zone,
+			"seed": Game.map_seed, "world_seed": Game.world_seed,
+			"cell": [center.x, center.y],
+		})
+		if fresh:
+			var wf = load("res://scripts/world/world_feed.gd")
+			wf.post("world", Loc.f("ui.teleport.discovered", [cname]))
+
+
+## Teleport to a visited city (panel button). Validates, charges gold, then
+## either walks the hero to the local master (same sector) or travels through
+## the loading screen and lands the hero next to the destination master.
+## Returns "" on success, otherwise a reason key: "here" | "rep" | "gold".
+func teleport_to_city(key: String) -> String:
+	var rec: Dictionary = Game.visited_cities.get(key, {})
+	if rec.is_empty() or not is_instance_valid(player):
+		return "here"
+	var current := Game.city_visit_key(Game.map_zone, Game.map_sector,
+		Game.map_seed, str(rec.get("city_id", ""))) \
+		if str(rec.get("sector", "")) == Game.map_sector else ""
+	var gate := Game.teleport_gate(rec, current)
+	if gate != "":
+		return gate
+	var cost := Game.teleport_cost_between(Game.map_sector, str(rec.get("sector", "")))
+	if int(player.gold) < cost:
+		return "gold"
+	player.gold -= cost
+	if is_instance_valid(ui) and ui.has_method("refresh_inventory"):
+		ui.refresh_inventory()
+	_teleport_travel(rec)
+	return ""
+
+
+## The movement half of teleport_to_city (async, fire-and-forget from the panel).
+func _teleport_travel(rec: Dictionary) -> void:
+	var sector := str(rec.get("sector", ""))
+	if sector != "" and sector != Game.map_sector:
+		await travel_to_sector(sector)
+	# Land next to the destination master; fall back to the recorded city cell.
+	var cid := str(rec.get("city_id", ""))
+	for n in npcs:
+		if is_instance_valid(n) and bool(n.get("is_teleport_master")) \
+				and str(n.get("city_id")) == cid:
+			player.global_position = n.global_position + Vector2(0, 40)
+			player.reset_physics_interpolation()
+			return
+	var cell: Array = rec.get("cell", [])
+	if cell.size() >= 2:
+		player.global_position = Vector2(int(cell[0]) * 32.0 + 16.0,
+			int(cell[1]) * 32.0 + 48.0)
+		player.reset_physics_interpolation()
 
 
 ## The entrance point (door): a walkable cell under the southern edge of the building body.
@@ -2755,6 +2990,8 @@ func _process_impl(delta):
 	_process_pending_herb()
 	_process_pending_archmage()
 	_process_pending_city_head()
+	_process_pending_teleport_master()
+	_discover_tick(delta)
 	Game.tick_shields(delta)
 	StatusEffects.tick(delta)
 	_check_portal()

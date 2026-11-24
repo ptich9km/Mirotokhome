@@ -19,6 +19,8 @@ class_name Npc
 ## QuestMarker «!»/«?». city_id — id записи _cities генератора ("c0t0").
 @export var is_city_head: bool = false
 @export var city_id: String = ""
+## Teleport master (25.11): a static city NPC, click opens the teleport panel.
+@export var is_teleport_master: bool = false
 
 ## Event membership (11.11): the tag lets EventSystem find this NPC as a foe.
 ## A role "victim" NPC is the traveller of the rescue encounter.

@@ -1398,15 +1398,29 @@ static func city_id_of(city_index: int) -> String:
 
 ## Race by set name: "city_human_mage/t1" -> "humans", "city_ork_warrior/t0"
 ## -> "ork", "city_druid_mage/t2" -> "druid", "city_human_head/t0" -> "humans".
-## The sets are named by the root without the trailing "s" (human, not humans) and
-## with a role suffix (_mage/_warrior/_head), so the comparison goes by the root
-## rather than by concatenation. Empty if the set is not ours.
+## Since 23.11 the city population also uses the npc/ namespace:
+## "npc/townsman_m" -> "humans", "npc/ork_townsman_m" -> "ork",
+## "npc/human_bandit_f" -> "humans". The sets are named by the root without
+## the trailing "s" (human, not humans) and with a role suffix
+## (_mage/_warrior/_head/_townsman/_bandit), so the comparison goes by the
+## root rather than by concatenation. Empty if the set is not ours.
 static func race_of_set(set_name: String) -> String:
-	if not set_name.begins_with("city_"):
+	var seg: String
+	if set_name.begins_with("city_"):
+		seg = set_name.trim_prefix("city_").get_slice("/", 0)
+		for suffix in ["_head", "_mage", "_warrior"]:
+			seg = seg.trim_suffix(suffix)
+	elif set_name.begins_with("npc/"):
+		seg = set_name.trim_prefix("npc/").get_slice("/", 0)
+		# Raced sets carry the root before the role ("ork_townsman_m",
+		# "human_bandit_f"). The four bare townsman/townswoman sets are humans.
+		for race in CITY_RACES:
+			var root: String = str(race).trim_suffix("s")
+			if seg.begins_with(root + "_"):
+				return str(race)
+		seg = "human"
+	else:
 		return ""
-	var seg := set_name.trim_prefix("city_").get_slice("/", 0)
-	for suffix in ["_head", "_mage", "_warrior"]:
-		seg = seg.trim_suffix(suffix)
 	# Segment = race id from world.json. IMPORTANT: for orcs this is "ork", not
 	# "orc" — on 10.10 ["orc", "ork"] stood here, and because of that the city orc mage
 	# returned "" (the faction label "Passer-by", the city race test failed).
