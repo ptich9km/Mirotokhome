@@ -24,6 +24,14 @@ const FOOD_PER_POP := 0.15
 const LOYALTY_PER_HUNGER := 0.1
 ## Loyalty regained on a day without hunger.
 const LOYALTY_RECOVERY := 0.5
+## Frontier tension appears once every N days between factions sharing a sector.
+const FRONTIER_CLASH_EVERY := 3
+## Relation value used for that temporary tension (a real war is still a choice).
+const FRONTIER_RELATION := -5
+
+## Relations changed by TickFrontier, restored on the next tick so a short
+## frontier clash does not turn into a permanent war between all factions.
+var _frontier_relations: Dictionary = {}
 
 
 func _init(state_) -> void:
@@ -151,18 +159,105 @@ func _archmage_stance(power: float) -> String:
 
 # --- 3. Армии ------------------------------------------------------------------
 func TickArmies() -> void:
+	TickFrontier()
 	var killed: Array[String] = []
 	for aid: String in state.armies:
 		var a: Dictionary = state.armies[aid]
 		var fid: String = a.get("faction_id", "")
 		if fid == "" or not state.armies.has(aid):
 			continue
-		# Ищем ближайшего врага по отношению < 0.
+		# Find the nearest hostile army; frontier tension lasts for one tick only.
 		var eid := _find_enemy(aid, a, killed)
 		if eid == "":
 			continue
 		a["enemy_id"] = eid
 		_fight(aid, a)
+
+
+## Short, deterministic tension between factions whose garrisons share a sector.
+## Without it a live map has four neutral factions, so no SIM battle ever happens
+## and the world map would only show static colours. Headless fixtures have no
+## sectors and are untouched by this rule.
+func TickFrontier() -> void:
+	for key in _frontier_relations:
+		state.relations[str(key)] = int(_frontier_relations[key])
+	_frontier_relations.clear()
+	if state.sectors.is_empty() or state.day <= 0 \
+			or state.day % FRONTIER_CLASH_EVERY != 0:
+		return
+	var by_sector: Dictionary = {}
+	for aid in state.armies:
+		var a: Dictionary = state.armies[aid]
+		var sid := str(a.get("sector_id", ""))
+		var fid := str(a.get("faction_id", ""))
+		if sid == "" or fid == "":
+			continue
+		if not by_sector.has(sid):
+			by_sector[sid] = {}
+		(by_sector[sid] as Dictionary)[fid] = true
+	var lore = load("res://scripts/lore.gd")
+	for sid in by_sector:
+		var ids: Array = (by_sector[sid] as Dictionary).keys()
+		for i in ids.size():
+			for j in range(i + 1, ids.size()):
+				var a_id := str(ids[i])
+				var b_id := str(ids[j])
+				var ab := "%s:%s" % [a_id, b_id]
+				var ba := "%s:%s" % [b_id, a_id]
+				if int(state.relations.get(ab, 0)) >= 0:
+					_frontier_relations[ab] = int(state.relations.get(ab, 0))
+					_frontier_relations[ba] = int(state.relations.get(ba, 0))
+					state.relations[ab] = FRONTIER_RELATION
+					state.relations[ba] = FRONTIER_RELATION
+					_log("battle", Loc.f("ui.sim.frontier_clash", [
+						str(sid).to_upper(), _faction_name(a_id), _faction_name(b_id)]))
+
+
+func _faction_name(fid: String) -> String:
+	var f: Dictionary = state.factions.get(fid, {})
+	var race := str(f.get("race", fid))
+	var lore = load("res://scripts/lore.gd")
+	if lore != null and race != "":
+		return str(lore.faction_label(race))
+	return str(f.get("name", fid))
+
+
+## The hero killed soldiers of a faction on the current map: its local garrison
+## loses power. This is the only bridge from tactical combat back into the SIM.
+func damage_army(faction: String, sector_id: String, amount: int) -> bool:
+	var target_faction := faction
+	var lore = load("res://scripts/lore.gd")
+	if lore != null:
+		target_faction = str(lore.hero_race_to_faction(faction))
+	var fid := ""
+	for key in state.factions:
+		var f: Dictionary = state.factions[key]
+		if str(f.get("id", "")) == target_faction or str(f.get("race", "")) == target_faction:
+			fid = str(f.get("id", ""))
+			break
+	if fid == "":
+		return false
+	var aid := ""
+	for key in state.armies:
+		var a: Dictionary = state.armies[key]
+		if str(a.get("faction_id", "")) != fid:
+			continue
+		if sector_id != "" and str(a.get("sector_id", "")) != sector_id:
+			continue
+		aid = str(key)
+		break
+	if aid == "":
+		return false
+	var army: Dictionary = state.armies[aid]
+	var old_power := maxi(1, int(army.get("power", 0)))
+	army["power"] = maxi(0, old_power - maxi(1, amount))
+	var name := _faction_name(fid)
+	if int(army["power"]) <= 0:
+		state.armies.erase(aid)
+		_log("battle", Loc.f("ui.sim.army_destroyed_by_hero", [name]))
+	else:
+		_log("battle", Loc.f("ui.sim.army_hit_by_hero", [name, army["power"]]))
+	return true
 
 
 func _find_enemy(aid: String, a: Dictionary, killed: Array) -> String:

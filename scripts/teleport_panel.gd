@@ -23,6 +23,7 @@ const ROW_BORDER := Color(0.32, 0.24, 0.52, 1.0)
 
 var player: Player
 var _current_city_id := ""
+var _sector_filter := ""
 var _root: Control
 var _list: VBoxContainer
 var _gold_label: Label
@@ -31,9 +32,18 @@ var _previous_focus: Control
 var _closed := false
 
 
-func setup(p: Player, current_city_id: String = "") -> void:
+func setup(p: Player, current_city_id: String = "", sector_filter: String = "") -> void:
 	player = p
 	_current_city_id = current_city_id
+	_sector_filter = sector_filter
+
+
+## World-map travel opens this panel with a sector filter: only cities already
+## recorded in that sector are offered. No filter means the master's full list.
+static func city_in_sector(rec: Dictionary, sector_id: String) -> bool:
+	if sector_id == "":
+		return true
+	return str(rec.get("sector", "")) == sector_id
 
 
 func _ready() -> void:
@@ -163,16 +173,21 @@ func _refresh() -> void:
 	if Game.map_sector != "":
 		current_key = "%s|%s|%d|%s" % [Game.map_zone, Game.map_sector,
 			Game.map_seed, _current_city_id]
-	if Game.visited_cities.is_empty():
-		_hint.text = Loc.t("ui.teleport.empty")
+	var shown := 0
+	var index := 0
+	for key in Game.visited_cities.keys():
+		var rec: Dictionary = Game.visited_cities[key]
+		if not city_in_sector(rec, _sector_filter):
+			continue
+		_list.add_child(_make_row(str(key), rec, current_key, index))
+		shown += 1
+		index += 1
+	if shown == 0:
+		_hint.text = Loc.t("ui.teleport.no_city_here") if _sector_filter != "" \
+			else Loc.t("ui.teleport.empty")
 		_hint.visible = true
 		return
 	_hint.visible = false
-	var index := 0
-	for key in Game.visited_cities.keys():
-		_list.add_child(_make_row(str(key), Game.visited_cities[key],
-			current_key, index))
-		index += 1
 
 
 func _card_style(bg: Color, border: Color, radius: int, pad: int) -> StyleBoxFlat:

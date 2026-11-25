@@ -82,6 +82,9 @@ const TELEPORT_REP_MIN := -15
 const TELEPORT_COST_BASE := 10
 const TELEPORT_COST_STEP := 8
 const TELEPORT_COST_SAME := 5
+## A city NPC sprite is about 52 px wide on a 32 px tile, so two of them need
+## at least 2.5 tiles of clearance to read as two separate people.
+const TELEPORT_MASTER_CLEARANCE := 2.5
 ## The shop shelf limit per item per city per day (player's decision 09.11).
 const SHOP_STOCK_LIMITS := {
 	"Potion Health Regeneration": 2,
@@ -1631,10 +1634,11 @@ func _spawn_map_units(done: Callable = Callable()) -> void:
 		done.call()
 
 
-## Teleport masters (25.11): one per city, spawned at runtime next to the city
-## centre — no generator change, so existing maps and saves get them too.
-## One neutral set for every race: the master is a service NPC, not a faction
-## member (art: import/teleport_master_8dir.png -> extract_teleport_master.py).
+## Teleport masters (25.11): one per city, spawned at runtime near the city
+## centre but clear of the quest giver and the other residents — no generator
+## change, so existing maps and saves get them too. One neutral set for every
+## race: the master is a service NPC, not a faction member (art:
+## import/teleport_master_8dir.png -> extract_teleport_master.py).
 func _spawn_teleport_masters() -> void:
 	if alm_map == null or not alm_map.has_method("get_cities"):
 		return
@@ -1656,7 +1660,7 @@ func _spawn_teleport_masters() -> void:
 		if already:
 			continue
 		var cell := Vector2i(int(city.get("x", 0)), int(city.get("y", 0)))
-		var pos := _find_open_spot(cell, ts)
+		var pos := _teleport_master_spot(cell, ts)
 		if pos.x < 0.0:
 			continue
 		var race := str(city.get("race", ""))
@@ -1669,6 +1673,43 @@ func _spawn_teleport_masters() -> void:
 			"role": "citizen", "teleport_master": true, "city_id": cid,
 			"hp_max": 60,
 		})
+
+
+## Pick a walkable cell near the city centre that is far enough from every
+## resident already spawned there. The quest giver (head) stands one cell from
+## the square, so spawning the master at the centre made the two sprites overlap.
+## Offsets are ordered, not random: the same map always puts the master in the
+## same place. If every candidate is crowded, use the roomiest one available.
+func _teleport_master_spot(center: Vector2i, ts: int) -> Vector2:
+	var offsets: Array[Vector2i] = [
+		Vector2i(0, -2), Vector2i(-2, 0), Vector2i(2, -2), Vector2i(-2, -2),
+		Vector2i(2, 2), Vector2i(-2, 2), Vector2i(0, 2), Vector2i(2, 0),
+		Vector2i(0, -3), Vector2i(3, 0), Vector2i(-3, 0), Vector2i(0, 3),
+		Vector2i(3, -3), Vector2i(-3, -3), Vector2i(3, 3), Vector2i(-3, 3),
+		Vector2i(0, -4), Vector2i(4, 0), Vector2i(-4, 0), Vector2i(0, 4),
+	]
+	var clearance := float(ts) * TELEPORT_MASTER_CLEARANCE
+	var fallback := Vector2(-1.0, -1.0)
+	var fallback_clearance := -1.0
+	for off in offsets:
+		var pos := _find_open_spot(center + off, ts)
+		if pos.x < 0.0:
+			continue
+		var nearest := _teleport_nearest_npc_distance(pos)
+		if nearest >= clearance:
+			return pos
+		if nearest > fallback_clearance:
+			fallback = pos
+			fallback_clearance = nearest
+	return fallback
+
+
+func _teleport_nearest_npc_distance(pos: Vector2) -> float:
+	var nearest := 1.0e9
+	for n in npcs:
+		if is_instance_valid(n):
+			nearest = minf(nearest, pos.distance_to(n.global_position))
+	return nearest
 
 
 func _on_spawn_batch(spawned: int, total: int) -> void:

@@ -89,6 +89,14 @@ func advance(days: int) -> void:
 		sim.tick()
 
 
+## Hero killed faction soldiers on the current map. The SIM keeps its own army
+## records, so the tactical fight has to report the loss explicitly.
+func damage_army(faction: String, sector_id: String, amount: int) -> bool:
+	if state == null or sim == null or faction == "" or amount <= 0:
+		return false
+	return bool(sim.call("damage_army", faction, sector_id, amount))
+
+
 ## Календарь ЖИВОЙ игры (28.10). Зовёт game.gd из _process и только когда мир
 ## не на паузе: тактическая пауза и меню сохранений не должны двигать дни,
 ## иначе ротация квестов идёт, пока игрок читает меню.

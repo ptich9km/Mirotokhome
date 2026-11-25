@@ -14,6 +14,17 @@ var _ran := false
 var _done := false
 
 
+## Minimal map stub for the spawn-spacing check: all cells are walkable, so the
+## test measures only the NPC clearance rule and not terrain generation.
+class FakeMap extends Node2D:
+	var tile_size := 32
+	var map_width := 24
+	var map_height := 24
+
+	func is_walkable_world(_p: Vector2) -> bool:
+		return true
+
+
 func _check(ok: bool, what: String) -> void:
 	_checks += 1
 	if not ok:
@@ -172,6 +183,34 @@ func _run() -> void:
 			if not FileAccess.file_exists("res://assets/units/city_teleport_master/t0/sprites-%03d.png" % i):
 				frames_ok = false
 		_check(frames_ok, "все 8 кадров на диске")
+
+	# 8. Spawn spacing: the master must not sit on top of the quest giver.
+	#    The head stands one cell from the square, the captain another; a 52 px
+	#    sprite on a 32 px tile needs room, otherwise the two read as one person.
+	var saved_npcs: Array = Game.npcs.duplicate()
+	var fake_map := FakeMap.new()
+	var probe := Game.new()
+	probe.alm_map = fake_map
+	var center := Vector2i(10, 10)
+	var head := Node2D.new()
+	head.global_position = Vector2(center.x * 32 + 16, (center.y + 1) * 32 + 16)
+	var captain := Node2D.new()
+	captain.global_position = Vector2((center.x + 1) * 32 + 16, center.y * 32 + 16)
+	Game.npcs = [head, captain]
+	var spot := probe._teleport_master_spot(center, 32)
+	var clearance := 32.0 * Game.TELEPORT_MASTER_CLEARANCE
+	_check(spot.x >= 0.0 and spot.distance_to(head.global_position) >= clearance \
+			and spot.distance_to(captain.global_position) >= clearance,
+		"мастер не слипается с квестодателем и капитаном (≥ %.0f px)" % clearance)
+	_check(spot.distance_to(Vector2(center.x * 32 + 16, center.y * 32 + 16)) <= 4.0 * 32.0,
+		"мастер остаётся в пределах города (≤ 4 клеток от центра)")
+	_check(spot.is_equal_approx(probe._teleport_master_spot(center, 32)),
+		"точка мастера детерминирована")
+	Game.npcs = saved_npcs
+	probe.free()
+	head.free()
+	captain.free()
+	fake_map.free()
 
 	_finish()
 

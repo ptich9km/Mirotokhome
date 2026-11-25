@@ -28,6 +28,8 @@ var state: String = "idle"
 var assault_to: Vector2 = Vector2.INF
 ## How close counts as "reached the town", in pixels.
 const ASSAULT_ARRIVE := 48.0
+## Power removed from the faction's SIM army when one of its soldiers dies.
+const SIM_ARMY_DAMAGE_PER_KILL := 1
 var attack_target: Node2D = null
 var attack_cooldown: float = 0.0
 var _impact_timer := -1.0            # countdown to the hit frame (swing); <0 = no hit in flight
@@ -520,6 +522,10 @@ func take_damage(dmg: int, attacker) -> int:
 		# Remove from the enemy list: the hero stops choosing the corpse as a target
 		Game.enemies.erase(self)
 		EventSystem.note_freed()
+		if faction != "" and (not NetSession.is_net_game() or NetSession.instance.is_host()):
+			var bus := get_node_or_null("/root/WorldBus")
+			if bus != null and bus.has_method("damage_army"):
+				bus.call("damage_army", faction, Game.map_sector, SIM_ARMY_DAMAGE_PER_KILL)
 		_drop_loot()
 		# Outpost: the death of the guards may clear the camp (package B).
 		if outpost_id != "":

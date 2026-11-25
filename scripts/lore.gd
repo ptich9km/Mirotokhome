@@ -21,16 +21,32 @@ const RACE_TO_FACTION := {
 	"ork": "ork",
 }
 
-## Человекочитаемое имя фракции для витрин (таверна/магазин). Это подпись
-## интерфейса, а не лор: канон имён живёт в assets/lore/world.json.
-## Имя берётся из ui.json по ключу `ui.faction.<race>`, чтобы вкладка «Отношения»
-## не оставалась русской в EN-режиме.
+## Readable faction name for shop windows (tavern/shop). This is UI text, not
+## lore: the canon lives in assets/lore/world.json. The value comes from ui.json
+## by `ui.faction.<race>` so the Relations tab is not left Russian in EN mode.
 const FACTION_KEY := {
 	"humans": "ui.faction.humans",
 	"ork": "ui.faction.ork",
 	"necro": "ui.faction.necro",
 	"druid": "ui.faction.druid",
 }
+
+## Presentation palette of the four world factions. Kept next to faction_label:
+## the world map needs one stable colour per faction, independent of saves.
+const FACTION_COLOR := {
+	"humans": Color(0.34, 0.61, 0.94),
+	"ork": Color(0.93, 0.36, 0.23),
+	"necro": Color(0.68, 0.38, 0.86),
+	"druid": Color(0.43, 0.76, 0.40),
+}
+const FACTION_COLOR_FALLBACK := Color(0.58, 0.58, 0.62)
+
+
+static func faction_color(faction: String) -> Color:
+	if faction == "":
+		return FACTION_COLOR_FALLBACK
+	var key := hero_race_to_faction(faction)
+	return FACTION_COLOR.get(key, FACTION_COLOR_FALLBACK)
 
 
 static func faction_label(race: String) -> String:

@@ -1599,5 +1599,13 @@
   "ui.teleport.no_gold": {"ru": "не хватает золота", "en": "not enough gold"},
   "ui.teleport.locked_rep": {"ru": "Недоступен: репутация низкая", "en": "Unavailable: reputation too low"},
   "ui.teleport.empty": {"ru": "Вы ещё не открыли ни одного мастера телепортации — идите в город.", "en": "No teleport master discovered yet — visit a city."},
-  "ui.teleport.discovered": {"ru": "Открыт мастер телепортации: %s", "en": "Teleport master discovered: %s"}
+  "ui.teleport.discovered": {"ru": "Открыт мастер телепортации: %s", "en": "Teleport master discovered: %s"},
+  "ui.world_map.contested_mark": {"ru": "!", "en": "!"},
+  "ui.world_map.clash_mark": {"ru": "X", "en": "X"},
+  "ui.world_map.clash": {"ru": "Стычка: %s", "en": "Clash: %s"},
+  "ui.world_map.travel": {"ru": "Перейти к городу сектора", "en": "Travel to a city in this sector"},
+  "ui.teleport.no_city_here": {"ru": "В этом секторе ещё нет известного города", "en": "No known city in this sector yet"},
+  "ui.sim.frontier_clash": {"ru": "На границе %s: %s и %s сошлись", "en": "On the %s frontier: %s and %s clashed"},
+  "ui.sim.army_hit_by_hero": {"ru": "Герой ослабил отряд %s (сила %s)", "en": "The hero weakened the %s detachment (power %s)"},
+  "ui.sim.army_destroyed_by_hero": {"ru": "Герой разгромил отряд %s", "en": "The hero destroyed the %s detachment"}
 }

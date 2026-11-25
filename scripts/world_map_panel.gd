@@ -1,19 +1,25 @@
 extends CanvasLayer
-## Карта мира 4x3 (23.10).
+## World map 4x3 (23.10, SIM overlay 26.11).
 ##
-## Показывает 12 секторов, владельца, тир сложности и аванпосты. Переход —
-## только порталами на локальной карте; здесь fast travel нет.
+## Shows 12 sectors with their faction owner, difficulty tier and outposts.
+## Territory colour comes from WorldBus.state; contested and clashing sectors
+## get a non-colour mark plus a pulsing alert. Clicking a sector asks the UI to
+## open the teleport panel filtered to that sector, so the player can go help.
 ##
 ## Look: UiTheme roles and UiKit variations only. Mouse, keyboard, gamepad:
 ## a 4-column grid with UiKit.wire_grid_focus, initial focus on the current
 ## sector, Esc closes.
 
 signal closed
+signal travel_requested(sector_id: String)
 
 const PANEL_WIDTH := 1120
 const PANEL_HEIGHT := 520
 const COLUMNS := 4
 const CELL_SIZE := Vector2(252, 120)
+const TERRITORY_ALPHA := 0.11
+const STRIPE_WIDTH := 5.0
+const ALERT_PERIOD := 0.55
 
 var _root: MarginContainer
 var _panel: PanelContainer
@@ -31,11 +37,19 @@ func setup() -> void:
 func _ready() -> void:
 	_previous_focus = UiKit.save_focus(self)
 	UiKit.animate_in(_root)
+	var bus := get_node_or_null("/root/WorldBus")
+	if bus != null and bus.has_signal("day_changed") \
+			and not bus.day_changed.is_connected(_on_day_changed):
+		bus.day_changed.connect(_on_day_changed)
 	_refresh()
 	if _cells.has(Game.map_sector) and is_instance_valid(_cells[Game.map_sector]):
 		_cells[Game.map_sector].call_deferred("grab_focus")
 	elif not _buttons.is_empty():
 		_buttons[0].call_deferred("grab_focus")
+
+
+func _on_day_changed(_day: int) -> void:
+	_refresh()
 
 
 func _input(event: InputEvent) -> void:
@@ -45,6 +59,10 @@ func _input(event: InputEvent) -> void:
 
 
 func close() -> void:
+	var bus := get_node_or_null("/root/WorldBus")
+	if bus != null and bus.has_signal("day_changed") \
+			and bus.day_changed.is_connected(_on_day_changed):
+		bus.day_changed.disconnect(_on_day_changed)
 	UiKit.restore_focus(_previous_focus)
 	closed.emit()
 	queue_free()
@@ -172,7 +190,7 @@ func _sector_rows() -> Array:
 			rec["id"] = str(id)
 			out.append(rec)
 		return out
-	# Нет состояния мира (dev-карта): показываем сетку как неисследованную.
+	# No world state (dev map): show the grid as unexplored.
 	var fallback: Array = []
 	var map_script = load("res://scripts/world/world_map.gd")
 	for id in map_script.ids():
@@ -185,6 +203,59 @@ func _sector_rows() -> Array:
 	return fallback
 
 
+## Faction armies currently facing each other in this sector. Only live pairs
+## count: a stale enemy_id after an army was erased must not draw a false clash.
+static func clash_info(state, sector_id: String) -> Dictionary:
+	var out: Dictionary = {}
+	if state == null or not ("armies" in state):
+		return out
+	for aid in state.armies:
+		var a: Dictionary = state.armies[aid]
+		if str(a.get("sector_id", "")) != sector_id:
+			continue
+		var enemy_id := str(a.get("enemy_id", ""))
+		if enemy_id == "" or not state.armies.has(enemy_id):
+			continue
+		var fid := str(a.get("faction_id", ""))
+		if fid == "":
+			continue
+		out[fid] = int(out.get(fid, 0)) + 1
+	return out
+
+
+## A sector is contested when it has no capital owner, when a local outpost
+## belongs to another faction, or while two SIM armies face each other there.
+static func is_contested(state, sector_id: String) -> bool:
+	if not clash_info(state, sector_id).is_empty():
+		return true
+	if state == null or not ("sectors" in state):
+		return false
+	var rec: Dictionary = state.sector_state(sector_id)
+	var owner := str(rec.get("owner", ""))
+	if owner == "":
+		return true
+	if sector_id != Game.map_sector:
+		return false
+	for raw in Game.outposts:
+		var op: Dictionary = raw
+		var op_owner := Game.outpost_owner_of(str(op.get("id", "")))
+		if op_owner == "":
+			op_owner = str(op.get("faction", ""))
+		if op_owner != "" and op_owner != owner:
+			return true
+	return false
+
+
+## Dark tint plus a bright stripe: the stripe carries the faction identity even
+## when the tint is hard to see. Unknown/contested sectors use a neutral colour.
+static func territory_color(state, sector_id: String) -> Color:
+	if state == null or not ("sectors" in state):
+		return Lore.faction_color("")
+	var rec: Dictionary = state.sector_state(sector_id)
+	var owner := str(rec.get("owner", ""))
+	return Lore.faction_color(owner)
+
+
 func _make_cell(id: String, rec: Dictionary) -> Button:
 	var discovered := int(rec.get("discovered", 0))
 	var current := id == Game.map_sector
@@ -194,6 +265,62 @@ func _make_cell(id: String, rec: Dictionary) -> Button:
 	button.custom_minimum_size = CELL_SIZE
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	button.tooltip_text = _tooltip(id, rec, discovered)
+	if not current:
+		button.pressed.connect(_on_cell_pressed.bind(id))
+
+	var bus = get_node_or_null("/root/WorldBus")
+	var world_state = bus.state if bus != null and "state" in bus else null
+	var color := territory_color(world_state, id)
+	color.a = TERRITORY_ALPHA
+	var tint := ColorRect.new()
+	tint.name = "TerritoryTint"
+	tint.color = color
+	tint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tint.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.add_child(tint)
+
+	var stripe := ColorRect.new()
+	stripe.name = "TerritoryStripe"
+	stripe.color = Color(color.r, color.g, color.b, 0.9)
+	stripe.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stripe.anchor_right = 0.0
+	stripe.anchor_bottom = 1.0
+	stripe.offset_left = 0.0
+	stripe.offset_right = STRIPE_WIDTH
+	stripe.offset_top = 0.0
+	stripe.offset_bottom = 0.0
+	button.add_child(stripe)
+
+	var contested := is_contested(world_state, id) and discovered > 0
+	if contested:
+		var alert := ColorRect.new()
+		alert.name = "ContestedAlert"
+		alert.color = Color(1.0, 0.62, 0.24, 1.0)
+		alert.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		alert.set_anchors_preset(Control.PRESET_FULL_RECT)
+		alert.modulate.a = 0.12
+		button.add_child(alert)
+		var pulse := alert.create_tween().set_loops()
+		pulse.tween_property(alert, "modulate:a", 0.42, ALERT_PERIOD)
+		pulse.tween_property(alert, "modulate:a", 0.12, ALERT_PERIOD)
+
+	var mark_text := ""
+	if not clash_info(world_state, id).is_empty():
+		mark_text = Loc.t("ui.world_map.clash_mark")
+	elif contested:
+		mark_text = Loc.t("ui.world_map.contested_mark")
+	if mark_text != "":
+		var mark := Label.new()
+		mark.name = "StateMark"
+		mark.text = mark_text
+		mark.theme_type_variation = &"WorldMeta"
+		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mark.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		mark.offset_left = -32.0
+		mark.offset_right = -UiTheme.SPACE_2
+		mark.offset_top = UiTheme.SPACE_1
+		mark.offset_bottom = 20.0
+		button.add_child(mark)
 
 	var box_margin := MarginContainer.new()
 	box_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -234,6 +361,11 @@ func _make_cell(id: String, rec: Dictionary) -> Button:
 	return button
 
 
+func _on_cell_pressed(id: String) -> void:
+	travel_requested.emit(id)
+	close()
+
+
 func _sector_name(id: String, discovered: int) -> String:
 	if discovered < 1:
 		return Loc.t("ui.world_map.unknown")
@@ -258,6 +390,11 @@ func _sector_meta(rec: Dictionary, discovered: int) -> String:
 		parts.append(Loc.t("ui.world_map.faction." + owner))
 	var outposts: Array = rec.get("outposts", []) as Array
 	parts.append(Loc.f("ui.world_map.outposts", [outposts.size()]))
+	var bus = get_node_or_null("/root/WorldBus")
+	var world_state = bus.state if bus != null and "state" in bus else null
+	var fights := clash_info(world_state, str(rec.get("id", "")))
+	if not fights.is_empty():
+		parts.append(Loc.f("ui.world_map.clash", [fights.size()]))
 	if discovered < 2:
 		parts.append(Loc.t("ui.world_map.scouted"))
 	return " · ".join(parts)
@@ -265,6 +402,8 @@ func _sector_meta(rec: Dictionary, discovered: int) -> String:
 
 func _tooltip(id: String, rec: Dictionary, discovered: int) -> String:
 	var lines: Array = [_sector_name(id, discovered), _sector_meta(rec, discovered)]
+	if id != Game.map_sector and discovered > 0:
+		lines.append(Loc.t("ui.world_map.travel"))
 	var wm = load("res://scripts/world/world_map.gd")
 	var ns: Array = wm.neighbors(id)
 	if not ns.is_empty():

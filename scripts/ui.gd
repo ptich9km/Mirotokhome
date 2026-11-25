@@ -1297,6 +1297,11 @@ func _lore_faction_label(race: String) -> String:
 
 
 func _faction_of_set(set_name: String) -> String:
+	# Locals: the rescue traveller and other peaceful NPC sets. This check comes
+	# before race_of_set: that helper now parses `npc/<race>_...` (15.11), and a
+	# civilian would otherwise be labelled as the city faction, not "Locals".
+	if set_name.begins_with("npc/"):
+		return Loc.t("ui.faction_name.civilian")
 	# City sets city_* — the city race (09.10). The label must come from
 	# lore world.json, otherwise the tooltip said "Passer-by".
 	var city_race := MapGenerator.race_of_set(set_name)
@@ -1309,10 +1314,6 @@ func _faction_of_set(set_name: String) -> String:
 		return Loc.t("ui.faction_name.ork")
 	if set_name.begins_with("rig/"):
 		return Loc.t("ui.faction_name.hero")
-	# Locals: the rescue traveller and other peaceful NPC sets. Without this
-	# branch the card said "Faction: Grey" over a civilian (player report 20.11).
-	if set_name.begins_with("npc/"):
-		return Loc.t("ui.faction_name.civilian")
 	# A mercenary set carries its race: merc/human_warrior/t0, merc/undead_mage/t1.
 	if set_name.begins_with("merc/"):
 		var token := set_name.get_slice("/", 1).get_slice("_", 0)
@@ -2034,11 +2035,12 @@ func open_inventory_panel() -> void:
 
 ## Teleport master (25.11): fast travel between visited cities. Unlike the
 ## interior panels the hero stays visible — the master stands on the street.
-func open_teleport(current_city_id: String = "") -> void:
+## A sector filter comes from the world map when the player goes to help a fight.
+func open_teleport(current_city_id: String = "", sector_filter: String = "") -> void:
 	if _teleport != null and is_instance_valid(_teleport):
 		return
 	_teleport = TeleportPanel.new()
-	_teleport.setup(player, current_city_id)
+	_teleport.setup(player, current_city_id, sector_filter)
 	_teleport.closed.connect(_on_teleport_closed)
 	add_child(_teleport)
 
@@ -2046,6 +2048,11 @@ func open_teleport(current_city_id: String = "") -> void:
 func _on_teleport_closed() -> void:
 	Game.cursor_context = ""
 	_teleport = null
+
+
+func _on_world_map_travel(sector_id: String) -> void:
+	_world_map = null
+	open_teleport("", sector_id)
 
 
 ## City head quests (22.10): offers, accepted tasks, turn-in, cancel.
@@ -2066,7 +2073,7 @@ func open_quests(city_id: String = "") -> void:
 
 
 ## World map 4x3 (23.10). Hotkey M, pressing again closes it.
-## Travel only through portals: there is no fast travel here.
+## A sector click opens the teleport panel filtered to that sector (26.11).
 func open_world_map() -> void:
 	if _world_map != null and is_instance_valid(_world_map):
 		_world_map.close()
@@ -2078,6 +2085,7 @@ func open_world_map() -> void:
 	_world_map = wm_script.new()
 	_world_map.setup()
 	_world_map.closed.connect(_on_panel_closed)
+	_world_map.travel_requested.connect(_on_world_map_travel)
 	add_child(_world_map)
 
 func _update_gold(amount: int) -> void:
